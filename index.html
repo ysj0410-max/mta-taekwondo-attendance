@@ -430,14 +430,29 @@
   .att-filters .input{height:34px; flex:0 1 190px; min-width:140px; padding:0 11px; font-size:12px; border-radius:10px}
   .pchip{border:1px solid #e3e8f2; background:#f8fafd; color:#5b6b85; font-weight:800; font-size:11.5px; padding:7px 12px; border-radius:999px; cursor:pointer}
   .pchip.active{background:var(--navy); border-color:var(--navy); color:#fff}
-  .belt-head, .belt-row{display:grid; grid-template-columns:20px 106px minmax(56px,1fr) 54px 26px 26px 26px; gap:5px; align-items:center}
+  .belt-head, .belt-row{display:grid; grid-template-columns:20px 172px minmax(56px,1fr) 54px 26px 26px 26px; gap:5px; align-items:center}
   .belt-head{font-size:9.5px; font-weight:800; color:var(--muted); padding:0 1px 7px; text-align:center}
   .belt-head span:nth-child(3){text-align:left}
   .belt-row{padding:6px 0; border-top:1px solid #f1f4f9}
   .belt-order{font-size:12px; font-weight:800; color:#98a2b3; text-align:center}
   .belt-colors{display:flex; flex-direction:column; gap:3px; min-width:0}
   .belt-color-set{display:flex; gap:2px; align-items:center}
-  .belt-color{width:32px; height:28px; padding:1px; border:1px solid #dde3ee; border-radius:8px; background:#fff; cursor:pointer; flex:0 0 auto}
+  /* 색 칸: 지금 고른 색을 색 원 + 기본색 글자로 보여 주고, 누르면 9색 판이 펼쳐진다 */
+  .belt-color{display:inline-flex; align-items:center; gap:3px; width:55px; height:28px; padding:0 5px; border:1px solid #dde3ee; border-radius:8px; background:#fff; cursor:pointer; flex:0 0 auto; font-family:inherit; overflow:hidden}
+  .belt-color:hover{border-color:#c6d5ef; background:#f7faff}
+  .belt-color i{width:16px; height:16px; border-radius:50%; display:block; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+  .belt-color b{font-size:9.5px; font-weight:800; color:#5b6b85; letter-spacing:-.3px; white-space:nowrap}
+  .belt-color.custom{border-style:dashed}
+  .belt-color.custom b{color:#b0574a}
+  .belt-color.open{border-color:var(--mint); background:#f1fdf8; box-shadow:0 0 0 2px rgba(49,196,141,.16)}
+  .belt-palette{grid-column:1 / -1; display:grid; grid-template-columns:repeat(9,minmax(0,1fr)); gap:3px; margin:5px 0 1px; padding:6px; background:#f6f9fe; border:1px solid #e3eaf6; border-radius:11px}
+  .belt-pick{display:flex; flex-direction:column; align-items:center; gap:3px; padding:5px 1px 3px; border:1px solid transparent; border-radius:9px; background:transparent; cursor:pointer; font-family:inherit; min-width:0}
+  .belt-pick:hover{background:#fff; border-color:#d7e2f3}
+  .belt-pick i{width:21px; height:21px; border-radius:50%; display:block; box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+  .belt-pick b{font-size:9px; font-weight:800; color:#5b6b85; letter-spacing:-.3px}
+  .belt-pick.on{background:#fff; border-color:var(--navy); box-shadow:0 2px 7px rgba(13,27,62,.10)}
+  .belt-pick.on b{color:var(--navy)}
+  .belt-pick.near i{box-shadow:0 0 0 2px #fff, 0 0 0 3px #f59f3c}
   .belt-preview{display:flex; height:8px; border-radius:3px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(0,0,0,.10); background:#eef1f6}
   .belt-preview i{flex:1 1 0; display:block}
   .belt-row .input{height:34px; font-size:12px; padding:0 6px}
@@ -912,8 +927,12 @@
     .pick-grid{grid-template-columns:repeat(2,1fr); max-height:52vh}
     .banner-card{width:min(560px,92vw); padding:24px 20px 22px}
     .banner-name{font-size:26px}
-    .belt-head, .belt-row{grid-template-columns:16px 96px minmax(44px,1fr) 40px 22px 22px 22px; gap:3px}
-    .belt-color{width:30px; height:26px}
+    .belt-head, .belt-row{grid-template-columns:16px 108px minmax(40px,1fr) 38px 22px 22px 22px; gap:3px}
+    .belt-color{width:34px; height:26px; padding:0 2px; justify-content:center}
+    .belt-color b{display:none}
+    .belt-palette{gap:2px; padding:5px 4px}
+    .belt-pick{padding:4px 0 3px}
+    .belt-pick i{width:18px; height:18px}
     .belt-row .input{height:32px; font-size:11.5px}
     /* 표는 칸을 눌러 담지 말고 표 안에서 옆으로 넘겨 봄 */
     #view-admin .tablewrap > table.tb{min-width:540px}
@@ -1502,7 +1521,8 @@
                     <button class="btn btn-sm btn-danger" id="btn-belt-reset">기본값</button>
                   </div>
                   <div class="help">
-                    위에서 아래로 갈수록 높은 띠예요. 띠마다 <b>색 3개</b>를 고를 수 있어요. 세 칸을 같은 색으로 두면 단색 띠, 다르게 고르면 <b>3색(줄무늬) 띠</b>로 명단·승급심사·키오스크에 함께 보입니다.<br>
+                    위에서 아래로 갈수록 높은 띠예요. 띠마다 <b>색 3개</b>를 고를 수 있고, 색 칸을 누르면 <b>흰·노·초·파·보·주·밤·빨·검 9가지 기본색</b>이 바로 펼쳐져 한 번에 골라집니다. 세 칸을 같은 색으로 두면 단색 띠, 다르게 고르면 <b>3색(줄무늬) 띠</b>로 명단·승급심사·원비·키오스크에 함께 보입니다.<br>
+                    예전에 고른 9색 밖의 색은 <b>기타</b>로 그대로 남아 있고(누르면 가장 가까운 기본색이 표시됩니다), 새 색을 고르면 기본색으로 바뀝니다.<br>
                     이름·색·급수를 바꾸거나 띠를 추가·삭제하고 ▲▼로 순서를 바꾼 뒤 <b>띠 체계 저장</b>을 눌러 주세요. 최고 띠가 아닌 재원생은 <b>누적 출석과 관계없이 모두 승급심사 대상</b>으로 올라옵니다.
                   </div>
                 </div>
@@ -2065,10 +2085,25 @@
   var BELT_ORDER = ['흰띠', '노란띠', '주황띠', '초록띠', '파란띠', '보라띠', '갈색띠', '빨간띠', '품띠', '검정띠'];
 
   var BELT_COLORS = {
-    '흰띠': '#e8e8e8', '노란띠': '#f7d344', '주황띠': '#f59f3c', '초록띠': '#3fb56a',
-    '파란띠': '#3a7bd5', '보라띠': '#8a5cd6', '갈색띠': '#8b5a2b', '빨간띠': '#e23b3b',
-    '품띠': '#c9a227', '검정띠': '#1f2430'
+    '흰띠': '#ffffff', '노란띠': '#f7d344', '주황띠': '#fd7e14', '초록띠': '#2f9e44',
+    '파란띠': '#1c7ed6', '보라띠': '#7950f2', '갈색띠': '#6f4518', '빨간띠': '#e03131',
+    '품띠': '#e03131', '검정띠': '#111111'
   };
+
+  /* 9가지 태권도 기본 띠 색 — 띠 편집기 색 선택은 언제나 이 9색에서 고른다 (순서 그대로) */
+  var BELT_BASE_COLORS = [
+    { label: '흰', hex: '#ffffff' },
+    { label: '노', hex: '#f7d344' },
+    { label: '초', hex: '#2f9e44' },
+    { label: '파', hex: '#1c7ed6' },
+    { label: '보', hex: '#7950f2' },
+    { label: '주', hex: '#fd7e14' },
+    { label: '밤', hex: '#6f4518' },
+    { label: '빨', hex: '#e03131' },
+    { label: '검', hex: '#111111' }
+  ];
+  /* 기본값에서만 3색을 쓰는 띠 (품띠 = 빨강·검정·빨강) */
+  var BELT_DEFAULT_TRIPLE = { '품띠': ['#e03131', '#111111', '#e03131'] };
 
   var BELT_GRADES = {
     '흰띠': '무급', '노란띠': '10급', '주황띠': '9급', '초록띠': '8급', '파란띠': '7급',
@@ -2223,7 +2258,36 @@
     };
   }
 
-  /* 띠 색상: 한 띠당 3색(colors) — 구버전 단일 color 도 같은 3색으로 호환 */
+  /* 띠 색상: 한 띠당 3색(colors) — 구버전 단일 color 도 같은 3색으로 호환
+     저장값은 그대로 두고(9색 밖의 예전 색도 보존) 고를 때만 9가지 기본색을 쓴다. */
+  function beltBaseColor(hex) {
+    var h = String(hex || '').toLowerCase();
+    for (var i = 0; i < BELT_BASE_COLORS.length; i++) {
+      if (BELT_BASE_COLORS[i].hex === h) { return BELT_BASE_COLORS[i]; }
+    }
+    return null;
+  }
+  function hexRGB(hex) {
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ''));
+    if (!m) { return null; }
+    return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+  }
+  /* 9색 밖의 색은 사람 눈에 가장 가까운 기본색을 찾아 준다(강조 표시용) */
+  function beltNearestBase(hex) {
+    var rgb = hexRGB(hex);
+    if (!rgb) { return BELT_BASE_COLORS[0]; }
+    var best = BELT_BASE_COLORS[0], bestD = Infinity;
+    for (var i = 0; i < BELT_BASE_COLORS.length; i++) {
+      var b = hexRGB(BELT_BASE_COLORS[i].hex);
+      var d = Math.pow(rgb[0] - b[0], 2) * 2 + Math.pow(rgb[1] - b[1], 2) * 4 + Math.pow(rgb[2] - b[2], 2) * 3;
+      if (d < bestD) { bestD = d; best = BELT_BASE_COLORS[i]; }
+    }
+    return best;
+  }
+  function beltColorLabel(hex) {
+    var b = beltBaseColor(hex);
+    return b ? b.label : '기타';
+  }
   function normalizeBeltColors(raw) {
     var arr = (raw && Array.isArray(raw.colors)) ? raw.colors : null;
     var one = (raw && typeof raw.color === 'string') ? String(raw.color) : '';
@@ -2235,7 +2299,7 @@
       }
     }
     if (!base && hex.test(one)) { base = one; }
-    if (!base) { base = '#9aa4b5'; }
+    if (!base) { base = '#ffffff'; }
     var out = [];
     for (var i = 0; i < 3; i++) {
       var c = arr ? String(arr[i] || '') : (i === 0 ? one : '');
@@ -2246,8 +2310,9 @@
 
   function defaultBelts() {
     return BELT_ORDER.map(function (name) {
-      var c = BELT_COLORS[name] || '#9aa4b5';
-      return { name: name, colors: [c, c, c], grade: BELT_GRADES[name] || '' };
+      var c = BELT_COLORS[name] || BELT_BASE_COLORS[0].hex;
+      var triple = BELT_DEFAULT_TRIPLE[name];
+      return { name: name, colors: triple ? triple.slice() : [c, c, c], grade: BELT_GRADES[name] || '' };
     });
   }
 
@@ -2282,6 +2347,7 @@
     cameraStream: null,
     faces: {},
     beltDraft: null,
+    beltPicker: null,
     promoSelected: {},
     promoFilter: 'all',
     adminTab: 'overview',
@@ -5426,6 +5492,21 @@
     }
     return app.beltDraft;
   }
+  /* 9색 판 — 색 칸을 누르면 그 칸 아래(행 전체 폭)에 펼쳐진다 */
+  function beltPaletteHtml(i, ci, cur) {
+    var curBase = beltBaseColor(cur);
+    var near = curBase ? null : beltNearestBase(cur);
+    return '<div class="belt-palette" role="group" aria-label="띠 색상 ' + (ci + 1) + ' 기본색 9가지">' +
+      BELT_BASE_COLORS.map(function (b) {
+        var on = String(cur || '').toLowerCase() === b.hex;
+        return '<button type="button" class="belt-pick' + (on ? ' on' : '') + (near && near.hex === b.hex ? ' near' : '') + '"' +
+          ' data-bcolor="' + b.hex + '" data-bi="' + i + '" data-ci="' + ci + '"' +
+          ' aria-pressed="' + (on ? 'true' : 'false') + '"' +
+          ' title="' + b.label + ' ' + b.hex + '">' +
+          '<i style="background:' + b.hex + '"></i><b>' + b.label + '</b></button>';
+      }).join('') +
+      '</div>';
+  }
   function renderBeltEditor(force) {
     var wrap = el('belt-rows');
     if (!wrap) { return; }
@@ -5435,14 +5516,22 @@
       wrap.innerHTML = '<div class="belt-empty">띠를 하나 이상 남겨 주세요.</div>';
       return;
     }
+    var open = app.beltPicker;
     wrap.innerHTML = list.map(function (b, i) {
       var cs = normalizeBeltColors(b);
+      var isOpen = !!(open && open.i === i);
       return '<div class="belt-row" data-bi="' + i + '">' +
         '<span class="belt-order">' + (i + 1) + '</span>' +
         '<span class="belt-colors">' +
         '<span class="belt-color-set">' +
         [0, 1, 2].map(function (ci) {
-          return '<input type="color" class="belt-color" data-bf="colors" data-ci="' + ci + '" value="' + esc(cs[ci]) + '" aria-label="띠 색상 ' + (ci + 1) + '">';
+          var base = beltBaseColor(cs[ci]);
+          var on = isOpen && open.ci === ci;
+          return '<button type="button" class="belt-color' + (base ? '' : ' custom') + (on ? ' open' : '') + '"' +
+            ' data-bpick="' + ci + '" data-bi="' + i + '" aria-expanded="' + (on ? 'true' : 'false') + '"' +
+            ' aria-label="띠 색상 ' + (ci + 1) + ' — ' + (base ? base.label : '기타') + ' (기본색 9가지 중에서 고르기)"' +
+            ' title="색 ' + (ci + 1) + ' · ' + (base ? base.label + ' ' : '기타 ') + esc(cs[ci]) + '">' +
+            '<i style="background:' + esc(cs[ci]) + '"></i><b>' + (base ? base.label : '기타') + '</b></button>';
         }).join('') +
         '</span>' +
         '<span class="belt-preview" aria-hidden="true">' + cs.map(function (c) { return '<i style="background:' + esc(c) + '"></i>'; }).join('') + '</span>' +
@@ -5452,8 +5541,26 @@
         '<button class="btn" data-bup="' + i + '" title="위로 이동">▲</button>' +
         '<button class="btn" data-bdown="' + i + '" title="아래로 이동">▼</button>' +
         '<button class="btn btn-danger" data-bdel="' + i + '" title="띠 삭제">✕</button>' +
+        (isOpen ? beltPaletteHtml(i, open.ci, cs[open.ci]) : '') +
         '</div>';
     }).join('');
+  }
+  /* 색 칸 터치 → 그 칸의 9색 판 열기/닫기 */
+  function toggleBeltPicker(i, ci) {
+    var cur = app.beltPicker;
+    if (cur && cur.i === i && cur.ci === ci) { app.beltPicker = null; }
+    else { app.beltPicker = { i: i, ci: ci }; }
+    renderBeltEditor(true);
+  }
+  /* 9색 중 하나 터치 → 그 칸 색으로 바로 저장(드래프트) */
+  function chooseBeltColor(i, ci, hex) {
+    var b = beltDraft()[i];
+    if (!b || !(ci >= 0 && ci < 3)) { return; }
+    var cs = normalizeBeltColors(b);
+    cs[ci] = String(hex || '').toLowerCase();
+    b.colors = normalizeBeltColors({ colors: cs });
+    app.beltPicker = null;
+    renderBeltEditor(true);
   }
   function onBeltInput(e) {
     var input = (e.target && e.target.closest) ? e.target.closest('[data-bf]') : null;
@@ -5464,17 +5571,6 @@
     var b = beltDraft()[i];
     if (!b) { return; }
     var f = input.getAttribute('data-bf');
-    if (f === 'colors') {
-      var ci = Number(input.getAttribute('data-ci'));
-      var cs = normalizeBeltColors(b);
-      if (ci >= 0 && ci < 3) { cs[ci] = input.value; }
-      b.colors = normalizeBeltColors({ colors: cs });
-      var prev = row.querySelector ? row.querySelector('.belt-preview') : null;
-      if (prev) {
-        prev.innerHTML = b.colors.map(function (c) { return '<i style="background:' + esc(c) + '"></i>'; }).join('');
-      }
-      return;
-    }
     if (f === 'name' || f === 'grade') { b[f] = input.value; }
   }
   function moveBelt(i, dir) {
@@ -5482,13 +5578,15 @@
     var j = i + dir;
     if (j < 0 || j >= list.length) { return; }
     var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+    app.beltPicker = null;
     renderBeltEditor(true);
   }
   function addBelt() {
     var list = beltDraft();
-    list.push({ name: '새 띠 ' + (list.length + 1), colors: ['#9aa4b5', '#9aa4b5', '#9aa4b5'], grade: '' });
+    list.push({ name: '새 띠 ' + (list.length + 1), colors: ['#ffffff', '#ffffff', '#ffffff'], grade: '' });
+    app.beltPicker = null;
     renderBeltEditor(true);
-    toast('띠를 추가했어요. 이름·색상·급수를 정한 뒤 저장해 주세요.');
+    toast('띠를 추가했어요. 기본색을 고르고 이름·급수를 정한 뒤 저장해 주세요.');
   }
   function removeBelt(i) {
     var list = beltDraft();
@@ -5509,6 +5607,7 @@
       if (!ok) { return; }
       var cur = beltDraft();
       cur.splice(i, 1);
+      app.beltPicker = null;
       renderBeltEditor(true);
     });
   }
@@ -5530,6 +5629,7 @@
     app.settings.belts = list;
     saveSettings();
     app.beltDraft = null;
+    app.beltPicker = null;
     renderAll();
     toast('띠 체계를 저장했어요. 승급 순서와 띠 색에 바로 반영됩니다.');
   }
@@ -5544,6 +5644,7 @@
     }).then(function (ok) {
       if (!ok) { return; }
       app.beltDraft = defaultBelts();
+      app.beltPicker = null;
       renderBeltEditor(true);
       toast('기본값을 불러왔어요. [띠 체계 저장]을 눌러 적용하세요.');
     });
@@ -10321,12 +10422,37 @@
     // 띠 체계 편집기
     el('belt-rows').addEventListener('input', onBeltInput);
     el('belt-rows').addEventListener('click', function (e) {
+      var pick = e.target.closest('[data-bpick]');
+      if (pick) {
+        toggleBeltPicker(Number(pick.getAttribute('data-bi')), Number(pick.getAttribute('data-bpick')));
+        return;
+      }
+      var col = e.target.closest('[data-bcolor]');
+      if (col) {
+        chooseBeltColor(Number(col.getAttribute('data-bi')), Number(col.getAttribute('data-ci')),
+          String(col.getAttribute('data-bcolor')));
+        return;
+      }
       var up = e.target.closest('[data-bup]');
       if (up) { moveBelt(Number(up.getAttribute('data-bup')), -1); return; }
       var dn = e.target.closest('[data-bdown]');
       if (dn) { moveBelt(Number(dn.getAttribute('data-bdown')), 1); return; }
       var dl = e.target.closest('[data-bdel]');
       if (dl) { removeBelt(Number(dl.getAttribute('data-bdel'))); }
+    });
+    // 펼친 9색 판은 바깥을 누르면 접는다
+    // (색을 고르면 편집기가 다시 그려져 누른 요소가 문서에서 떨어져 나오므로,
+    //  이벤트가 지나간 경로(composedPath)로 "띠 편집기 안쪽 클릭"을 판단한다)
+    document.addEventListener('click', function (e) {
+      if (!app.beltPicker) { return; }
+      var path = (e.composedPath && e.composedPath()) || [];
+      for (var i = 0; i < path.length; i++) {
+        if (path[i] && path[i].id === 'belt-rows') { return; }
+      }
+      var t = e.target;
+      if (t && t.closest && t.closest('#belt-rows')) { return; }
+      app.beltPicker = null;
+      renderBeltEditor(true);
     });
     el('btn-belt-add').addEventListener('click', addBelt);
     el('btn-belt-save').addEventListener('click', saveBeltSystem);
@@ -11210,7 +11336,17 @@
       defaults: defaultBelts,
       belts: belts,
       beltColors: beltColors,
-      beltSwatch: beltSwatchHtml
+      beltSwatch: beltSwatchHtml,
+      baseColors: function () {
+        return BELT_BASE_COLORS.map(function (b) { return { label: b.label, hex: b.hex }; });
+      },
+      baseOf: beltBaseColor,
+      nearest: beltNearestBase,
+      colorLabel: beltColorLabel,
+      picker: function () { return app.beltPicker; },
+      pickSlot: toggleBeltPicker,
+      chooseColor: chooseBeltColor,
+      editor: renderBeltEditor
     },
     monthly: {
       render: renderMonthly,
