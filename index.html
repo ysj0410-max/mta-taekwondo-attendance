@@ -994,6 +994,30 @@
               </div>
             </div>
 
+            <div class="panel" id="admin-drive-panel">
+              <div class="panel-head"><h3>☁️ 구글 드라이브 자동 백업 · 동기화</h3><div class="spacer"></div><span class="chip wait" id="drive-state">미연동</span></div>
+              <div class="panel-body">
+                <div class="field">
+                  <label>Apps Script 웹 앱 URL</label>
+                  <input class="input" id="drive-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="form-actions" style="flex-wrap:wrap">
+                  <button class="btn btn-primary" id="btn-drive-save">URL 저장</button>
+                  <button class="btn" id="btn-drive-backup">☁️ 지금 드라이브에 백업</button>
+                  <button class="btn" id="btn-drive-restore">📥 드라이브에서 불러오기</button>
+                  <button class="btn" id="btn-drive-auto" aria-pressed="false">매일 자동 백업: 꺼짐</button>
+                  <button class="btn" id="btn-drive-guide">📋 Apps Script 코드 보기/복사</button>
+                </div>
+                <div class="tiny-note" id="drive-last" style="margin-top:8px">마지막 드라이브 백업: 아직 없음</div>
+                <div class="help" style="margin-top:10px">
+                  관장님 구글 드라이브 안의 <b>「경희대MTA태권도 백업」</b> 폴더에 관원 명단 · 얼굴 · 출석 이력 · 원비를 <b>mta-taekwondo-backup-latest.json</b>으로 저장하고, 날짜별 사본도 함께 남깁니다.
+                  태블릿을 바꾸거나 브라우저 저장소를 지워도 <b>📥 드라이브에서 불러오기</b>로 그대로 이어 쓸 수 있어요(새 도장폰·PC에서 이어쓰기).
+                  처음 한 번만 <b>📋 Apps Script 코드 보기/복사</b>의 <b>4단계</b>(약 2분)를 따라 웹 앱 주소를 만들면 됩니다.
+                  웹 앱 주소는 관장님 드라이브에만 연결되는 긴 비밀 주소라, 화면을 다른 사람과 공유하거나 주소를 메신저에 그대로 붙여넣지 마세요.
+                </div>
+              </div>
+            </div>
+
             <div class="panel" id="admin-account-panel">
               <div class="panel-head"><h3>🔐 관리자 계정 (ID · 비밀번호)</h3><div class="spacer"></div><span class="tiny-note" id="adm-state">-</span></div>
               <div class="panel-body">
@@ -1536,7 +1560,8 @@
     visibility: { beltSystem: true, promotion: true, gukgiwon: false },
     face: { threshold: 0.48, cooldown: 20, auto: true },
     sms: { webhookUrl: '', method: 'query', autoSend: true, testPhone: '' },
-    tuition: { defaultFee: 150000, dueDay: 5, bankAccount: '' }
+    tuition: { defaultFee: 150000, dueDay: 5, bankAccount: '' },
+    drive: { webhookUrl: '', autoBackup: false, lastBackupAt: '' }
   };
 
   var app = {
@@ -1747,6 +1772,14 @@
     app.settings.tuition.dueDay = (isNaN(tday) || tday < 1 || tday > 31) ? DEFAULT_SETTINGS.tuition.dueDay : tday;
     app.settings.tuition.bankAccount = String(app.settings.tuition.bankAccount || '').trim().slice(0, 80);
 
+    // 구글 드라이브 백업 설정 (Apps Script 웹 앱 URL · 매일 자동 백업 · 마지막 백업 시각)
+    var rawDrive = (settings && settings.drive && typeof settings.drive === 'object' && !Array.isArray(settings.drive)) ? settings.drive : {};
+    app.settings.drive = {
+      webhookUrl: String(rawDrive.webhookUrl || '').trim().slice(0, 500),
+      autoBackup: rawDrive.autoBackup === true,
+      lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(String(rawDrive.lastBackupAt || '')) ? String(rawDrive.lastBackupAt) : ''
+    };
+
     app.faces = loadFaces();
     app.tuition = loadTuition();
 
@@ -1778,13 +1811,13 @@
 
     app.muted = readJSON(LS.muted, false) === true;
   }
-  function saveStudents() { writeJSON(LS.students, app.students); }
+  function saveStudents() { writeJSON(LS.students, app.students); driveTouchData(); }
   function saveSettings() { writeJSON(LS.settings, app.settings); }
-  function saveRecords() { writeJSON(LS.records, app.records); }
+  function saveRecords() { writeJSON(LS.records, app.records); driveTouchData(); }
   function saveLogs() { writeJSON(LS.logs, app.logs.slice(0, 200)); }
-  function saveAttendance() { writeJSON(LS.attendance, app.attendance); }
+  function saveAttendance() { writeJSON(LS.attendance, app.attendance); driveTouchData(); }
   function saveFaces() { writeJSON(LS.faces, app.faces); }
-  function saveTuition() { writeJSON(LS.tuition, app.tuition); }
+  function saveTuition() { writeJSON(LS.tuition, app.tuition); driveTouchData(); }
   function saveBulkTemplates() { writeJSON(LS.smsTemplates, app.smsTemplates || []); }
 
   /* =========================================================
@@ -6484,7 +6517,10 @@
         updatedAt: app.admin.updatedAt || ''
       } : null,
       logs: app.logs,
-      settings: app.settings
+      settings: app.settings,
+      driveWebhookUrl: driveConf().webhookUrl,
+      driveAutoBackup: driveConf().autoBackup === true,
+      lastDriveBackupAt: driveConf().lastBackupAt || ''
     };
   }
 
@@ -6567,7 +6603,24 @@
       });
     }
     if (data.logs) { writeJSON(LS.logs, data.logs); }
-    if (data.settings) { writeJSON(LS.settings, data.settings); }
+    if (data.settings) {
+      var inSettings = Object.assign({}, data.settings);
+      var prevSettings = readJSON(LS.settings, {}) || {};
+      var prevDrive = (prevSettings.drive && typeof prevSettings.drive === 'object' && !Array.isArray(prevSettings.drive)) ? prevSettings.drive : {};
+      var inDrive = (inSettings.drive && typeof inSettings.drive === 'object' && !Array.isArray(inSettings.drive)) ? inSettings.drive : {};
+      var inUrl = String(inDrive.webhookUrl || data.driveWebhookUrl || '').trim();
+      var inLast = String(inDrive.lastBackupAt || data.lastDriveBackupAt || '');
+      var inAuto = (inDrive.autoBackup != null)
+        ? inDrive.autoBackup === true
+        : (data.driveAutoBackup != null ? data.driveAutoBackup === true : prevDrive.autoBackup === true);
+      inSettings.drive = {
+        // 복원 파일에 드라이브 주소가 없으면 이 기기의 연동 주소를 지우지 않습니다.
+        webhookUrl: inUrl || String(prevDrive.webhookUrl || '').trim(),
+        autoBackup: inAuto,
+        lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(inLast) ? inLast : String(prevDrive.lastBackupAt || '')
+      };
+      writeJSON(LS.settings, inSettings);
+    }
 
     loadState();
     app._renderedDay = todayKey();
@@ -6590,9 +6643,41 @@
     renderBulkSms(true);
     renderPaused(true);
     renderAdminAccountState();
+    fillDriveForm();
     renderPin();
     refreshAiHint();
     toast('백업을 복원했어요 · 관원 ' + app.students.length + '명 · 얼굴 ' + faceCount() + '명');
+  }
+
+  function backupSummaryHtml(data) {
+    var faces = (data.faces && typeof data.faces === 'object') ? Object.keys(data.faces).length : 0;
+    var days = (data.attendance && typeof data.attendance === 'object') ? Object.keys(data.attendance).length : 0;
+    var tMonths = (data.tuition && typeof data.tuition === 'object') ? Object.keys(data.tuition).length : 0;
+    var tplCount = Array.isArray(data.smsTemplates) ? data.smsTemplates.length : 0;
+    var hasAdmin = !!(data.admin && data.admin.hash);
+    return '<div class="help" style="margin-top:0">' +
+      '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b>' +
+      (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') + ' · 띠 체계·문자·원비 설정 포함<br>' +
+      (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
+      '</div>';
+  }
+
+  /* 확인 모달 → 복원. 복원했으면 true */
+  function confirmRestoreBackup(data, opts) {
+    opts = opts || {};
+    return openModal({
+      title: opts.title || '백업 파일로 복원할까요?',
+      sub: opts.sub || '지금 이 브라우저의 데이터가 백업 파일 내용으로 바뀝니다.',
+      body: backupSummaryHtml(data) + (opts.note || ''),
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '복원', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return false; }
+      applyBackup(data);
+      return true;
+    });
   }
 
   function restoreBackupFile(file) {
@@ -6608,30 +6693,388 @@
       }
       var check = validateBackup(data);
       if (!check.ok) { toast(check.reason); return; }
-      var faces = (data.faces && typeof data.faces === 'object') ? Object.keys(data.faces).length : 0;
-      var days = (data.attendance && typeof data.attendance === 'object') ? Object.keys(data.attendance).length : 0;
-      var tMonths = (data.tuition && typeof data.tuition === 'object') ? Object.keys(data.tuition).length : 0;
-      var tplCount = Array.isArray(data.smsTemplates) ? data.smsTemplates.length : 0;
-      var hasAdmin = !!(data.admin && data.admin.hash);
-      openModal({
-        title: '백업 파일로 복원할까요?',
-        sub: '지금 이 브라우저의 데이터가 백업 파일 내용으로 바뀝니다.',
-        body: '<div class="help" style="margin-top:0">' +
-          '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b>' +
-          (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') + ' · 띠 체계·문자·원비 설정 포함<br>' +
-          (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
-          '</div>',
-        actions: [
-          { label: '취소', value: false, kind: 'btn-ghost' },
-          { label: '복원', value: true, kind: 'btn-primary' }
-        ]
-      }).then(function (ok) {
-        if (!ok) { return; }
-        applyBackup(data);
-      });
+      confirmRestoreBackup(data);
     };
     reader.onerror = function () { toast('백업 파일을 읽지 못했어요.'); };
     reader.readAsText(file, 'utf-8');
+  }
+
+  /* =========================================================
+     12-C. 구글 드라이브 자동 백업 · 기기 간 동기화 (Apps Script 웹 앱)
+     ========================================================= */
+  var DRIVE_FOLDER_ID = '1QzMPKIgcdQ7MoYamS5ziDBzUB7IcD03f';
+  var DRIVE_FOLDER_NAME = '경희대MTA태권도 백업';
+  var driveTimer = null;
+  var driveInFlight = false;
+  var driveDirty = false;
+
+  function driveConf() {
+    if (!app.settings.drive) { app.settings.drive = Object.assign({}, DEFAULT_SETTINGS.drive); }
+    return app.settings.drive;
+  }
+  function driveConfigured() { return /^https:\/\/.+/i.test(String(driveConf().webhookUrl || '').trim()); }
+  function driveAutoOn() { return driveConfigured() && driveConf().autoBackup === true; }
+  function driveEndpoint(action) {
+    var base = String(driveConf().webhookUrl || '').trim();
+    if (!base) { return ''; }
+    var sep = base.indexOf('?') === -1 ? '?' : '&';
+    return base + sep + 'action=' + encodeURIComponent(action);
+  }
+  function driveFmtAt(iso) {
+    if (!iso) { return '아직 없음'; }
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) { return '아직 없음'; }
+    return fmtDateKorean(d) + ' ' + fmtKoreanTime(d);
+  }
+
+  function renderDriveState() {
+    var c = driveConf();
+    var chip = el('drive-state');
+    if (chip) {
+      if (!driveConfigured()) { chip.textContent = '미연동'; chip.className = 'chip wait'; }
+      else if (driveInFlight) { chip.textContent = '백업 중…'; chip.className = 'chip wait'; }
+      else if (c.autoBackup) { chip.textContent = '연동됨 · 매일 자동'; chip.className = 'chip ok'; }
+      else { chip.textContent = '연동됨'; chip.className = 'chip ok'; }
+    }
+    var last = el('drive-last');
+    if (last) { last.textContent = '마지막 드라이브 백업: ' + driveFmtAt(c.lastBackupAt); }
+    var btn = el('btn-drive-auto');
+    if (btn) {
+      btn.textContent = '매일 자동 백업: ' + (c.autoBackup ? '켜짐' : '꺼짐');
+      btn.setAttribute('aria-pressed', c.autoBackup ? 'true' : 'false');
+      btn.classList.toggle('btn-mint', c.autoBackup === true);
+    }
+  }
+  function fillDriveForm() {
+    if (el('drive-url')) { el('drive-url').value = driveConf().webhookUrl || ''; }
+    renderDriveState();
+  }
+
+  /* 주소칸을 읽어 설정에 저장 (형식이 틀리면 false) */
+  function saveDriveSettings(silent) {
+    var box = el('drive-url');
+    var raw = box ? String(box.value || '').trim() : String(driveConf().webhookUrl || '').trim();
+    if (raw && !/^https:\/\/.+/i.test(raw)) {
+      toast('웹 앱 URL은 https://script.google.com/…/exec 형식이어야 해요.');
+      return false;
+    }
+    driveConf().webhookUrl = raw.slice(0, 500);
+    saveSettings();
+    renderDriveState();
+    if (!silent) {
+      toast(raw ? '드라이브 웹 앱 주소를 저장했어요' : '드라이브 주소를 비웠어요 · 자동 백업도 멈춥니다');
+    }
+    return true;
+  }
+
+  function driveBackupPayload() {
+    var conf = driveConf();
+    var data = buildBackup();
+    data.driveWebhookUrl = conf.webhookUrl;
+    data.driveAutoBackup = conf.autoBackup === true;
+    data.lastDriveBackupAt = conf.lastBackupAt || '';
+    return {
+      action: 'backup',
+      dojo: app.settings.dojoName,
+      exportedAt: data.exportedAt,
+      fileName: 'mta-taekwondo-backup-latest.json',
+      data: data
+    };
+  }
+
+  function driveReadJson(res) {
+    return res.text().then(function (txt) {
+      var s = String(txt == null ? '' : txt).replace(/^\uFEFF/, '').trim();
+      if (!s) { return {}; }
+      if (s.charAt(0) === '<') {
+        throw new Error('웹 앱이 HTML을 돌려줬어요 · 배포 액세스를 「모든 사용자」로 다시 확인하세요');
+      }
+      try { return JSON.parse(s); } catch (e) { throw new Error('웹 앱 응답을 해석할 수 없어요 (JSON 아님)'); }
+    });
+  }
+
+  /* 현재 데이터를 드라이브에 백업 (manual=false면 자동 백업) */
+  function driveBackupNow(manual) {
+    if (!driveConfigured()) {
+      if (manual) { toast('먼저 Apps Script 웹 앱 URL을 저장해 주세요.'); }
+      return Promise.resolve({ ok: false, reason: 'not-configured' });
+    }
+    if (driveInFlight) {
+      if (manual) { toast('드라이브 작업이 이미 진행 중이에요.'); }
+      return Promise.resolve({ ok: false, reason: 'busy' });
+    }
+    driveInFlight = true;
+    renderDriveState();
+    var payload = driveBackupPayload();
+    return fetchTimeout(driveEndpoint('backup'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      mode: 'cors',
+      cache: 'no-store'
+    }, 25000).then(function (res) {
+      return driveReadJson(res).then(function (j) {
+        if (res && res.ok === false) { throw new Error('웹 앱이 HTTP ' + res.status + ' 로 거절했어요'); }
+        if (j && j.ok === false) { throw new Error(j.error || '웹 앱이 백업을 저장하지 못했어요'); }
+        var at = new Date().toISOString();
+        driveConf().lastBackupAt = at;
+        driveDirty = false;
+        saveSettings();
+        if (manual) { toast('☁️ 드라이브에 백업했어요 · 관원 ' + app.students.length + '명'); }
+        return { ok: true, at: at, fileId: (j && (j.fileId || j.id)) || '' };
+      });
+    }).then(function (r) {
+      driveInFlight = false;
+      renderDriveState();
+      return r;
+    }, function (err) {
+      driveInFlight = false;
+      renderDriveState();
+      var msg = errText(err);
+      if (manual) { toast('드라이브 백업 실패: ' + msg); }
+      return { ok: false, reason: msg };
+    });
+  }
+
+  function driveFetchLatest() {
+    var url = driveEndpoint('latest');
+    if (!url) { return Promise.reject(new Error('먼저 Apps Script 웹 앱 URL을 저장해 주세요.')); }
+    var sep = url.indexOf('?') === -1 ? '?' : '&';
+    return fetchTimeout(url + sep + 't=' + Date.now(), { method: 'GET', mode: 'cors', cache: 'no-store' }, 25000)
+      .then(function (res) {
+        return driveReadJson(res).then(function (j) {
+          if (res && res.ok === false) { throw new Error('웹 앱이 HTTP ' + res.status + ' 로 응답했어요'); }
+          return j || {};
+        });
+      });
+  }
+
+  /* 드라이브 최신 백업을 받아 확인 모달 후 복원 */
+  function driveRestoreFromDrive() {
+    if (!driveConfigured()) {
+      toast('먼저 Apps Script 웹 앱 URL을 저장해 주세요.');
+      return Promise.resolve(false);
+    }
+    if (driveInFlight) { toast('드라이브 작업이 이미 진행 중이에요.'); return Promise.resolve(false); }
+    driveInFlight = true;
+    renderDriveState();
+    return driveFetchLatest().then(function (j) {
+      driveInFlight = false;
+      renderDriveState();
+      if (!j || j.ok === false) { throw new Error((j && j.error) || '드라이브에 저장된 백업이 없어요'); }
+      var data = j.data || j.backup;
+      if (!data || typeof data !== 'object') { throw new Error('응답에 백업 데이터가 없어요'); }
+      var check = validateBackup(data);
+      if (!check.ok) { throw new Error(check.reason); }
+      var at = j.modifiedTime || data.exportedAt || '';
+      return confirmRestoreBackup(data, {
+        title: '드라이브 백업으로 복원할까요?',
+        sub: '이 기기의 데이터가 구글 드라이브 최신 백업 내용으로 바뀝니다.',
+        note: '<div class="tiny-note" style="margin-top:8px">드라이브 저장 시각: ' +
+          esc(at ? String(at).slice(0, 16).replace('T', ' ') : '정보 없음') +
+          (j.fileId ? ' · 파일 ' + esc(String(j.fileId).slice(0, 12)) + '…' : '') + '</div>'
+      });
+    }).then(function (done) {
+      if (done) { toast('드라이브 백업으로 복원했어요 · 관원 ' + app.students.length + '명'); }
+      return !!done;
+    }, function (err) {
+      driveInFlight = false;
+      renderDriveState();
+      toast('드라이브에서 불러오지 못했어요: ' + errText(err));
+      return false;
+    });
+  }
+
+  /* 출석·원비·명단이 바뀌면 2분 뒤(묶어서) 자동 백업 */
+  function driveTouchData() {
+    if (!driveAutoOn() || driveInFlight) { return; }
+    driveDirty = true;
+    if (driveTimer) { clearTimeout(driveTimer); }
+    driveTimer = setTimeout(function () {
+      driveTimer = null;
+      if (!driveDirty || !driveAutoOn()) { return; }
+      driveBackupNow(false);
+    }, 120000);
+  }
+
+  /* 앱을 열었을 때: 오늘 백업이 아직 없으면 20초 뒤 한 번 */
+  function driveAutoBoot() {
+    if (!driveAutoOn()) { return; }
+    var last = driveConf().lastBackupAt;
+    var lastDay = '';
+    if (last) {
+      var d = new Date(last);
+      if (!isNaN(d.getTime())) { lastDay = todayKey(d); }
+    }
+    if (lastDay === todayKey()) { return; }
+    if (driveTimer) { clearTimeout(driveTimer); }
+    driveTimer = setTimeout(function () {
+      driveTimer = null;
+      driveBackupNow(false);
+    }, 20000);
+  }
+
+  function copyPlainText(text) {
+    var s = String(text == null ? '' : text);
+    try {
+      if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(s).then(function () {}, function () {});
+        return true;
+      }
+    } catch (e) {}
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = s;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      if (typeof ta.select === 'function') { ta.select(); }
+      var ok = false;
+      try { ok = !!(document.execCommand && document.execCommand('copy')); } catch (e2) { ok = false; }
+      document.body.removeChild(ta);
+      return !!ok;
+    } catch (e3) { return false; }
+  }
+
+  /* script.google.com에 붙여넣을 완성된 Code.gs */
+  function appsScriptCode() {
+    var L = [
+      '/**',
+      ' * 경희대MTA태권도 · 구글 드라이브 자동 백업 (Google Apps Script)',
+      ' * 이 코드를 script.google.com 새 프로젝트에 붙여넣고 웹 앱으로 배포하면',
+      ' * 아래 백업 폴더에 mta-taekwondo-backup-latest.json 과 날짜별 사본이 쌓입니다.',
+      ' */',
+      '',
+      '// 이번에 앱을 위해 새로 만든 전용 폴더 (기존 드라이브 파일은 건드리지 않습니다)',
+      'var FOLDER_ID = \'' + DRIVE_FOLDER_ID + '\';',
+      'var FOLDER_NAME = \'' + DRIVE_FOLDER_NAME + '\';',
+      'var LATEST_NAME = \'mta-taekwondo-backup-latest.json\';',
+      'var DAILY_PREFIX = \'mta-taekwondo-backup-\';',
+      'var TOKEN = \'\'; // 선택: 앱의 주소 뒤에 &token=... 을 붙여 쓰려면 같은 값을 여기에 넣으세요',
+      '',
+      'function backupFolder_() {',
+      '  if (FOLDER_ID) { return DriveApp.getFolderById(FOLDER_ID); }',
+      '  var it = DriveApp.getFoldersByName(FOLDER_NAME);',
+      '  if (it.hasNext()) { return it.next(); }',
+      '  return DriveApp.createFolder(FOLDER_NAME);',
+      '}',
+      '',
+      'function findFile_(folder, name) {',
+      '  var it = folder.getFilesByName(name);',
+      '  return it.hasNext() ? it.next() : null;',
+      '}',
+      '',
+      'function upsertFile_(folder, name, text) {',
+      '  var file = findFile_(folder, name);',
+      '  if (file) { file.setContent(text); return file; }',
+      '  return folder.createFile(name, text, MimeType.PLAIN_TEXT);',
+      '}',
+      '',
+      'function json_(obj) {',
+      '  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);',
+      '}',
+      '',
+      'function tokenOk_(e) {',
+      '  if (!TOKEN) { return true; }',
+      '  var t = (e && e.parameter && e.parameter.token) || \'\';',
+      '  return String(t) === TOKEN;',
+      '}',
+      '',
+      'function doPost(e) {',
+      '  try {',
+      '    var body = JSON.parse((e && e.postData && e.postData.contents) || \'{}\');',
+      '    if (!tokenOk_(e) && !tokenOk_({ parameter: body })) {',
+      '      return json_({ ok: false, error: \'토큰이 맞지 않습니다.\' });',
+      '    }',
+      '    var data = body.data || body.backup || body;',
+      '    if (!data || !data.students || !data.students.length) {',
+      '      return json_({ ok: false, error: \'관원 명단이 없는 백업은 저장하지 않습니다.\' });',
+      '    }',
+      '    var folder = backupFolder_();',
+      '    var text = JSON.stringify(data, null, 2);',
+      '    var latest = upsertFile_(folder, LATEST_NAME, text);',
+      '    var stamp = Utilities.formatDate(new Date(), \'Asia/Seoul\', \'yyyy-MM-dd-HHmm\');',
+      '    var dailyName = DAILY_PREFIX + stamp + \'.json\';',
+      '    upsertFile_(folder, dailyName, text);',
+      '    return json_({',
+      '      ok: true,',
+      '      fileId: latest.getId(),',
+      '      url: latest.getUrl(),',
+      '      savedAt: new Date().toISOString(),',
+      '      daily: dailyName,',
+      '      students: data.students.length',
+      '    });',
+      '  } catch (err) {',
+      '    return json_({ ok: false, error: String((err && err.message) || err) });',
+      '  }',
+      '}',
+      '',
+      'function doGet(e) {',
+      '  try {',
+      '    if (!tokenOk_(e)) { return json_({ ok: false, error: \'토큰이 맞지 않습니다.\' }); }',
+      '    var action = (e && e.parameter && e.parameter.action) || \'latest\';',
+      '    var folder = backupFolder_();',
+      '    if (action === \'list\') {',
+      '      var files = folder.getFiles();',
+      '      var out = [];',
+      '      while (files.hasNext() && out.length < 60) {',
+      '        var f = files.next();',
+      '        if (f.getName().indexOf(DAILY_PREFIX) === 0) {',
+      '          out.push({ name: f.getName(), updated: f.getLastUpdated().toISOString() });',
+      '        }',
+      '      }',
+      '      return json_({ ok: true, files: out });',
+      '    }',
+      '    var latest = findFile_(folder, LATEST_NAME);',
+      '    if (!latest) { return json_({ ok: false, error: \'아직 백업이 없습니다. 먼저 「지금 드라이브에 백업」을 눌러 주세요.\' }); }',
+      '    var data = JSON.parse(latest.getBlob().getDataAsString(\'utf-8\'));',
+      '    return json_({',
+      '      ok: true,',
+      '      fileId: latest.getId(),',
+      '      modifiedTime: latest.getLastUpdated().toISOString(),',
+      '      data: data',
+      '    });',
+      '  } catch (err) {',
+      '    return json_({ ok: false, error: String((err && err.message) || err) });',
+      '  }',
+      '}',
+      '',
+      '// 설정 확인용: 편집기에서 이 함수를 한 번 실행해 보세요.',
+      'function testBackupFolder() {',
+      '  var f = backupFolder_();',
+      '  Logger.log(f.getName() + \' · \' + f.getId() + \' · \' + f.getUrl());',
+      '}'
+    ];
+    return L.join('\n');
+  }
+
+  function openDriveGuide() {
+    var code = appsScriptCode();
+    var steps =
+      '<div class="help" style="margin-top:0">' +
+      '<b>4단계 · 약 2분</b><br>' +
+      '<b>1)</b> <b>script.google.com</b> → <b>새 프로젝트</b>를 엽니다.<br>' +
+      '<b>2)</b> <b>📋 코드 복사</b>를 누르고, 편집기의 내용을 모두 지운 뒤 붙여넣고 <b>💾 저장</b>합니다.<br>' +
+      '<b>3)</b> 오른쪽 위 <b>배포 → 새 배포</b> → 유형 <b>웹 앱</b> · 실행 <b>나</b> · 액세스 <b>모든 사용자</b> → <b>배포</b> 후 <b>웹 앱 URL 복사</b>.<br>' +
+      '<b>4)</b> 이 화면의 <b>Apps Script 웹 앱 URL</b> 칸에 붙여넣고 <b>URL 저장</b> → <b>☁️ 지금 드라이브에 백업</b>을 눌러 확인합니다.<br>' +
+      '저장 위치는 관장님 드라이브의 <b>' + esc(DRIVE_FOLDER_NAME) + '</b> 폴더(' + esc(DRIVE_FOLDER_ID) + ')이며, 다른 드라이브 파일은 건드리지 않습니다.' +
+      '</div>' +
+      '<pre style="max-height:220px;overflow:auto;background:#0f172a;color:#e2e8f0;padding:10px;border-radius:8px;font-size:11px;line-height:1.45;white-space:pre;margin-top:10px">' + esc(code) + '</pre>';
+    openModal({
+      title: '📋 Apps Script 코드 (2분 설정)',
+      sub: '이 코드 하나로 관장님 드라이브에만 백업 폴더가 만들어집니다',
+      body: steps,
+      actions: [
+        { label: '📋 코드 복사', value: 'copy', kind: 'btn-primary' },
+        { label: '닫기', value: null, kind: 'btn-ghost' }
+      ],
+      onAction: function (v) {
+        if (v === 'copy') {
+          var ok = copyPlainText(code);
+          toast(ok ? 'Apps Script 코드를 복사했어요 · script.google.com에 붙여넣으세요' : '복사가 막혔어요 · 코드를 길게 눌러 직접 선택해 주세요');
+        }
+      }
+    });
   }
 
   /* =========================================================
@@ -7285,6 +7728,45 @@
       });
     }
 
+    // 구글 드라이브 백업 · 기기 간 동기화
+    if (el('btn-drive-save')) {
+      el('btn-drive-save').addEventListener('click', function () { saveDriveSettings(false); });
+    }
+    if (el('btn-drive-backup')) {
+      el('btn-drive-backup').addEventListener('click', function () {
+        if (!saveDriveSettings(true)) { return; }
+        driveBackupNow(true);
+      });
+    }
+    if (el('btn-drive-restore')) {
+      el('btn-drive-restore').addEventListener('click', function () {
+        if (!saveDriveSettings(true)) { return; }
+        driveRestoreFromDrive();
+      });
+    }
+    if (el('btn-drive-auto')) {
+      el('btn-drive-auto').addEventListener('click', function () {
+        if (!saveDriveSettings(true)) { return; }
+        var c = driveConf();
+        if (!c.autoBackup && !driveConfigured()) {
+          toast('먼저 Apps Script 웹 앱 URL을 저장해 주세요.');
+          return;
+        }
+        c.autoBackup = !c.autoBackup;
+        saveSettings();
+        renderDriveState();
+        if (c.autoBackup) {
+          toast('매일 자동 백업을 켰어요 · 출석·원비가 바뀌면 2분 뒤 드라이브에 저장합니다');
+          driveAutoBoot();
+        } else {
+          toast('매일 자동 백업을 껐어요');
+        }
+      });
+    }
+    if (el('btn-drive-guide')) {
+      el('btn-drive-guide').addEventListener('click', openDriveGuide);
+    }
+
     // JSON 내려받기
     el('btn-export-json').addEventListener('click', function () {
       var key = todayKey();
@@ -7359,6 +7841,7 @@
     renderAll();
     renderPin();
     fillSmsForm();
+    fillDriveForm();
     resetStudentForm();
     switchTouch('pin');
     el('p-threshold').value = promoThreshold();
@@ -7391,6 +7874,7 @@
     renderFaceAdmin();
     refreshAiHint();
     initFaceAI();
+    driveAutoBoot();
 
     var xlsxOk = (typeof XLSX !== 'undefined') && !window.__xlsxLoadFailed;
     el('xlsx-state').textContent = xlsxOk ? '엑셀 엔진 준비됨 (SheetJS)' : 'CSV 모드 (오프라인)';
@@ -7438,6 +7922,27 @@
       buildBackup: buildBackup,
       validateBackup: validateBackup,
       applyBackup: applyBackup
+    },
+    drive: {
+      folderId: DRIVE_FOLDER_ID,
+      folderName: DRIVE_FOLDER_NAME,
+      conf: driveConf,
+      configured: driveConfigured,
+      autoOn: driveAutoOn,
+      endpoint: driveEndpoint,
+      payload: driveBackupPayload,
+      save: saveDriveSettings,
+      backup: driveBackupNow,
+      restore: driveRestoreFromDrive,
+      touch: driveTouchData,
+      boot: driveAutoBoot,
+      render: renderDriveState,
+      fill: fillDriveForm,
+      code: appsScriptCode,
+      openGuide: openDriveGuide,
+      copy: copyPlainText,
+      confirm: confirmRestoreBackup,
+      readJson: driveReadJson
     },
     tuition: {
       status: TUITION_STATUS,
