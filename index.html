@@ -7,11 +7,17 @@
 <title>경희대MTA태권도 · AI 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
+  window.__faceApiFailed = false;
   window.addEventListener('error', function (e) {
-    if (e && e.target && e.target.tagName === 'SCRIPT') { window.__xlsxLoadFailed = true; }
+    if (!e || !e.target || e.target.tagName !== 'SCRIPT') { return; }
+    var src = String(e.target.src || '');
+    if (src.indexOf('xlsx') !== -1) { window.__xlsxLoadFailed = true; }
+    if (src.indexOf('face-api') !== -1) { window.__faceApiFailed = true; }
   }, true);
 </script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.full.min.js"></script>
+<!-- 온디바이스 얼굴인식 엔진 (face-api.js · TF.js 번들). 로드 실패 시 터치·시뮬레이션으로 자동 전환 -->
+<script async src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
 <style>
   :root{
     --navy:#0d1b3e; --navy-2:#16294f; --navy-3:#22386a;
@@ -479,6 +485,39 @@
   .mon-legend .lg-dot{width:9px; height:9px; border-radius:50%; background:var(--mint); display:inline-block; margin-right:4px}
   .mon-legend .lg-dot.m{background:#f0a020}
 
+  /* ---------- 실제 AI 얼굴인식 ---------- */
+  .ai-chip{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; background:#f0f3f9; color:#6b7280; white-space:nowrap}
+  .ai-chip::before{content:""; width:6px; height:6px; border-radius:50%; background:#b0b8c6; flex:0 0 auto}
+  .ai-chip.loading{background:#fff4e6; color:#a35b00}
+  .ai-chip.loading::before{background:#f0a020; animation:aiPulse 1.1s ease-in-out infinite}
+  .ai-chip.ready{background:#e6f7f0; color:#0b7a55}
+  .ai-chip.ready::before{background:#12b886}
+  .ai-chip.offline{background:#fdecec; color:#c0392b}
+  .ai-chip.offline::before{background:#e23b3b}
+  @keyframes aiPulse{0%,100%{opacity:.35}50%{opacity:1}}
+  #face-overlay{position:absolute; inset:0; width:100%; height:100%; z-index:3; pointer-events:none; display:none}
+  body.cam-live #face-overlay{display:block}
+  .face-cell{display:flex; align-items:center; gap:5px; flex-wrap:wrap}
+  .face-badge{display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:800; padding:3px 7px; border-radius:999px; background:#f0f3f9; color:#8a94a6; white-space:nowrap}
+  .face-badge.on{background:#e6f7f0; color:#0b7a55}
+  .face-thumb{width:26px; height:26px; border-radius:8px; object-fit:cover; border:1px solid #dbe3f0; background:#f6f8fc; flex:0 0 auto}
+  .face-cam{position:relative; width:100%; aspect-ratio:4/3; border-radius:15px; overflow:hidden; background:radial-gradient(120% 90% at 50% 0%,#2b4373 0%,#16274a 48%,#0a1428 100%); margin-bottom:10px}
+  .face-cam video{width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block}
+  .face-cam .face-frame{position:absolute; left:50%; top:50%; width:56%; aspect-ratio:.78; transform:translate(-50%,-52%); border:2px dashed rgba(142,245,213,.55); border-radius:46% 46% 42% 42%; pointer-events:none}
+  .face-cam .face-frame::after{content:"얼굴을 이 안에 맞춰 주세요"; position:absolute; left:50%; bottom:-26px; transform:translateX(-50%); font-size:10.5px; font-weight:700; color:rgba(223,232,251,.82); background:rgba(6,14,30,.55); border:1px solid rgba(255,255,255,.13); padding:3px 8px; border-radius:999px; white-space:nowrap}
+  .face-status{font-size:11.5px; font-weight:700; border-radius:11px; padding:9px 12px; margin-bottom:10px; background:#f7f9fd; border:1px solid #e9eef7; color:#667085; line-height:1.55}
+  .face-status.ok{background:#e9f9f1; color:#0b7a55; border-color:#bfe9d4}
+  .face-status.err{background:#fdecec; color:#c0392b; border-color:#f6c9c9}
+  .face-status.wait{background:#fff7e8; color:#8a5300; border-color:#f4e0b6}
+  .face-tip{font-size:10.5px; color:#8a94a6; font-weight:600; line-height:1.6; margin-top:8px}
+  .face-preview{display:flex; align-items:center; gap:9px; margin-top:10px}
+  .face-preview:empty{display:none}
+  .face-preview img{width:64px; height:64px; border-radius:12px; object-fit:cover; border:1px solid #dbe3f0}
+  .face-preview .face-preview-txt{font-size:11px; color:#667085; font-weight:700; line-height:1.5}
+  .range-row{display:flex; align-items:center; gap:10px}
+  .range-row input[type="range"]{flex:1; accent-color:var(--navy); height:26px}
+  .range-row b{font-size:13px; font-variant-numeric:tabular-nums; color:var(--navy); min-width:38px; text-align:right}
+
   /* 스크롤바 */
   ::-webkit-scrollbar{width:8px; height:8px}
   ::-webkit-scrollbar-thumb{background:#cfd8e6; border-radius:8px}
@@ -544,6 +583,7 @@
           <div class="card-title"><span class="dot"></span>AI 얼굴인식 출석</div>
           <div class="spacer"></div>
           <span class="tiny-note" id="cam-head-note">시뮬레이션 모드</span>
+          <span class="ai-chip loading" id="ai-state">AI 모델 준비 중…</span>
         </div>
 
         <div class="stage" id="camera-stage">
@@ -554,6 +594,7 @@
             <div class="ph-sub">웹캠이 없어도 시뮬레이션으로 그대로 테스트할 수 있어요</div>
           </div>
           <div class="scanline"></div>
+          <canvas id="face-overlay" aria-hidden="true"></canvas>
           <div class="bbox" id="bbox">
             <span class="corner c1"></span><span class="corner c2"></span>
             <span class="corner c3"></span><span class="corner c4"></span>
@@ -693,7 +734,7 @@
                 </div>
                 <div class="tablewrap" style="margin-top:13px; max-height:330px; overflow:auto">
                   <table class="tb">
-                    <thead><tr><th>이름</th><th>반 / 시간</th><th>띠</th><th>보호자</th><th style="width:96px"></th></tr></thead>
+                    <thead><tr><th>이름</th><th>반 / 시간</th><th>띠</th><th>보호자</th><th>얼굴</th><th style="width:78px"></th></tr></thead>
                     <tbody id="stu-table"></tbody>
                   </table>
                 </div>
@@ -769,6 +810,52 @@
             </div>
 
             <div class="panel">
+              <div class="panel-head"><h3>🧠 AI 얼굴인식 설정</h3><div class="spacer"></div><span class="chip" id="ai-admin-state">확인 중…</span></div>
+              <div class="panel-body">
+                <div class="field">
+                  <label>일치 판정 거리 (낮을수록 엄격 · 기본 0.48)</label>
+                  <div class="range-row">
+                    <input type="range" id="face-threshold" min="0.30" max="0.65" step="0.01" value="0.48" aria-label="일치 판정 거리">
+                    <b id="face-threshold-val">0.48</b>
+                  </div>
+                </div>
+                <div class="row2">
+                  <div class="field"><label>재인식 쿨다운(초)</label><input class="input" id="face-cooldown" type="number" min="5" max="300" step="1" value="20" inputmode="numeric"></div>
+                  <div class="field"><label>자동 출석</label>
+                    <select class="input" id="face-auto">
+                      <option value="on">켜짐 — 인식되면 바로 등원/하원</option>
+                      <option value="off">꺼짐 — 인식만 표시</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button class="btn btn-primary" id="btn-face-save">설정 저장</button>
+                  <div class="spacer"></div>
+                  <span class="tiny-note" id="face-reg-count">0 / 0명 등록</span>
+                </div>
+                <div class="help" style="margin-top:10px">
+                  웹캠이 켜져 있고 얼굴이 등록된 관원이 있으면 <b>약 0.9초마다</b> 화면을 분석해 자동으로 출석 처리합니다. 같은 관원이 연속으로 찍히지 않도록 <b>쿨다운</b>을 두고, 등록되지 않은 얼굴은 <b>터치 출석</b>으로 안내합니다.
+                  얼굴 특징값(128개 숫자)은 <b>이 태블릿의 localStorage에만</b> 저장되고 외부 서버로 전송되지 않습니다. 관원별 등록은 「관원 명단 관리」 표의 <b>📸 얼굴 등록</b>에서 하세요.
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h3>💾 도장 데이터 전체 백업 / 복원 (JSON)</h3><div class="spacer"></div><span class="tiny-note">명단 · 얼굴 · 출석 이력</span></div>
+              <div class="panel-body">
+                <div class="form-actions" style="flex-wrap:wrap">
+                  <button class="btn btn-primary" id="btn-backup-all">⬇ 전체 백업 내려받기</button>
+                  <button class="btn" id="btn-restore-all">⬆ 백업 파일로 복원</button>
+                  <input type="file" id="restore-input" accept=".json,application/json" style="display:none">
+                </div>
+                <div class="help" style="margin-top:10px">
+                  관원 명단 · <b>얼굴 특징값</b> · 날짜별 출석 이력 · 띠 체계 · 문자 발송 설정과 로그를 <b>파일 하나(JSON)</b>로 내려받습니다. 태블릿을 바꾸거나 브라우저 저장소를 지워야 할 때 이 파일 하나로 그대로 되살릴 수 있어요.
+                  복원은 지금 화면의 데이터를 <b>백업 파일 내용으로 바꾸는</b> 작업이라, 실행 전에 한 번 더 확인합니다.
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
               <div class="panel-head"><h3>🔒 공개 설정</h3><div class="spacer"></div><span class="tiny-note">키오스크 · 문자</span></div>
               <div class="panel-body">
                 <div class="vis-row">
@@ -796,7 +883,7 @@
               <div class="panel-head"><h3>ℹ️ 이 프로토타입에 대해</h3></div>
               <div class="panel-body">
                 <div class="help" style="margin-top:0">
-                  명단·출석 기록·설정은 모두 <b>이 브라우저(localStorage)</b>에 저장됩니다. 무료문자 자동발송을 켜면 <b>문자 발송에 필요한 이름·번호·문구만</b> 입력한 웹훅 주소(도장폰 MacroDroid)로 전송되고, 그 밖의 데이터는 어디로도 가지 않아요.
+                  명단·출석 기록·설정은 모두 <b>이 브라우저(localStorage)</b>에 저장됩니다. <b>얼굴 특징값(128개 숫자)</b>도 이 태블릿에만 저장되고 어디로도 전송되지 않으며, 얼굴 사진 원본은 저장하지 않습니다(작은 썸네일만 선택 저장). 무료문자 자동발송을 켜면 <b>문자 발송에 필요한 이름·번호·문구만</b> 입력한 웹훅 주소(도장폰 MacroDroid)로 전송되고, 그 밖의 데이터는 어디로도 가지 않아요.
                   태블릿에서 실제로 쓰려면 이 파일을 태블릿에 저장해 열거나, 웹에 올려 홈 화면에 추가하면 됩니다.
                   실제 운영 시에는 여러 기기 기록 동기화·개인정보 보관을 위해 서버와 DB가 필요합니다.
                 </div>
@@ -1010,7 +1097,8 @@
     records: 'tdk.records.v1',
     logs: 'tdk.logs.v1',
     muted: 'tdk.muted.v1',
-    attendance: 'tdk.attendance.v1'
+    attendance: 'tdk.attendance.v1',
+    faces: 'tdk.faces.v1'
   };
 
   var SAMPLE_STUDENTS = [
@@ -1058,6 +1146,7 @@
     gukTime: '10:00',
     gukPlace: '',
     visibility: { beltSystem: true, promotion: true, gukgiwon: false },
+    face: { threshold: 0.48, cooldown: 20, auto: true },
     sms: { webhookUrl: '', method: 'query', autoSend: true, testPhone: '' }
   };
 
@@ -1073,6 +1162,7 @@
     pin: '',
     busy: false,
     cameraStream: null,
+    faces: {},
     beltDraft: null,
     promoSelected: {},
     promoFilter: 'all',
@@ -1237,6 +1327,16 @@
     );
     if (!app.settings.gukTime) { app.settings.gukTime = '10:00'; }
 
+    // AI 얼굴인식 설정 (판정 거리 · 쿨다운 · 자동 출석)
+    app.settings.face = Object.assign({}, DEFAULT_SETTINGS.face, (settings && settings.face) || {});
+    var fth = parseFloat(app.settings.face.threshold);
+    app.settings.face.threshold = (isNaN(fth) || fth < 0.30 || fth > 0.65) ? DEFAULT_SETTINGS.face.threshold : Math.round(fth * 100) / 100;
+    var fcd = parseInt(app.settings.face.cooldown, 10);
+    app.settings.face.cooldown = (isNaN(fcd) || fcd < 5 || fcd > 300) ? DEFAULT_SETTINGS.face.cooldown : fcd;
+    app.settings.face.auto = app.settings.face.auto !== false;
+
+    app.faces = loadFaces();
+
     var records = readJSON(LS.records, {});
     app.records = (records && typeof records === 'object') ? records : {};
 
@@ -1263,6 +1363,37 @@
   function saveRecords() { writeJSON(LS.records, app.records); }
   function saveLogs() { writeJSON(LS.logs, app.logs.slice(0, 200)); }
   function saveAttendance() { writeJSON(LS.attendance, app.attendance); }
+  function saveFaces() { writeJSON(LS.faces, app.faces); }
+
+  /* =========================================================
+     3-A. 얼굴 특징값 저장소 (온디바이스 전용)
+     구조: { studentId: { descriptor:[128 floats], thumb:'data:image/jpeg;…', at:ISO } }
+     ========================================================= */
+  function sanitizeFace(f) {
+    if (!f || typeof f !== 'object' || Array.isArray(f)) { return null; }
+    var d = f.descriptor;
+    if (!Array.isArray(d) || d.length !== 128) { return null; }
+    var vec = [];
+    for (var i = 0; i < 128; i++) {
+      var v = Number(d[i]);
+      if (typeof v !== 'number' || !isFinite(v)) { return null; }
+      vec.push(v);
+    }
+    var out = { descriptor: vec, at: String(f.at || '') };
+    if (typeof f.thumb === 'string' && /^data:image\//.test(f.thumb)) { out.thumb = f.thumb; }
+    return out;
+  }
+  function loadFaces() {
+    var raw = readJSON(LS.faces, {});
+    var out = {};
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      Object.keys(raw).forEach(function (sid) {
+        var f = sanitizeFace(raw[sid]);
+        if (f) { out[sid] = f; }
+      });
+    }
+    return out;
+  }
 
   /* =========================================================
      3-B. 날짜별 출석 이력 (월간 출석부 저장소)
@@ -1559,9 +1690,7 @@
     saveSettings();
     el('mode-in').classList.toggle('active', app.settings.mode === 'in');
     el('mode-out').classList.toggle('active', app.settings.mode === 'out');
-    el('cam-help').innerHTML = app.settings.mode === 'in'
-      ? '관원을 선택하면 인식 → 자동 <b>등원</b> 처리까지 재생됩니다.'
-      : '관원을 선택하면 인식 → 자동 <b>하원</b> 처리까지 재생됩니다.';
+    refreshAiHint();
     tickClock();
     renderStudentsList();
     toast(app.settings.mode === 'in' ? '등원 모드로 전환했어요' : '하원 모드로 전환했어요');
@@ -2025,13 +2154,16 @@
       var p = video.play();
       if (p && p.catch) { p.catch(function () {}); }
       document.body.classList.add('cam-live');
+      ai.lastStatus = '';
       setCamStatus('웹캠 LIVE · 얼굴을 비춰 주세요');
       el('cam-head-note').textContent = '웹캠 연결됨';
       el('btn-camera').textContent = '📷 카메라 끄기';
       el('stage-tip').textContent = 'AI ENGINE · LIVE';
-      toast('카메라가 연결됐어요. 관원을 비추고 [관원 선택 인식]으로 테스트해 보세요.');
+      refreshAiHint();
+      toast(ai.ready ? '카메라가 연결됐어요. 등록된 관원은 자동으로 출석 처리됩니다.' : '카메라가 연결됐어요. 관원을 선택해 인식을 재생해 볼 수 있습니다.');
     }).catch(function (err) {
       document.body.classList.remove('cam-live');
+      ai.lastStatus = '';
       setCamStatus('웹캠 사용 불가 · 시뮬레이션 모드');
       el('cam-head-note').textContent = '시뮬레이션 모드';
       el('btn-camera').textContent = '📷 카메라 연결';
@@ -2048,10 +2180,13 @@
     var video = el('camera-video');
     video.srcObject = null;
     document.body.classList.remove('cam-live');
+    ai.lastStatus = '';
+    clearFaceOverlay();
     setCamStatus('웹캠 대기');
     el('cam-head-note').textContent = '시뮬레이션 모드';
     el('btn-camera').textContent = '📷 카메라 연결';
     el('stage-tip').textContent = 'AI ENGINE · READY';
+    refreshAiHint();
   }
 
   function toggleCamera() {
@@ -2063,6 +2198,8 @@
     if (!student) { return; }
     if (app.busy) { return; }
     app.busy = true;
+    ai.suppress = true;
+    clearFaceOverlay();
     hideBanner();
 
     var stage = el('camera-stage');
@@ -2101,6 +2238,7 @@
     el('stage-tip').textContent = document.body.classList.contains('cam-live') ? 'AI ENGINE · LIVE' : 'AI ENGINE · READY';
 
     app.busy = false;
+    ai.suppress = false;
     checkIn(student, 'ai');
   }
 
@@ -2122,6 +2260,580 @@
       var s = app.students.filter(function (x) { return x.id === studentId; })[0];
       if (s) { runRecognition(s); }
     });
+  }
+
+  /* =========================================================
+     10-B. 실제 AI 얼굴인식 (face-api.js · 온디바이스)
+     - 모델: tinyFaceDetector + faceLandmark68 + faceRecognition(128차원)
+     - 모든 분석은 브라우저 안에서만, 특징값은 이 기기 localStorage에만 저장
+     ========================================================= */
+  var FACE_MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+  var FACE_LOAD_TIMEOUT = 25000;
+  var FACE_LOOP_MS = 900;
+
+  var ai = {
+    state: 'idle',          // idle | loading | ready | offline
+    ready: false,
+    lib: null,
+    error: '',
+    loopTimer: null,
+    detecting: false,
+    suppress: false,        // 시뮬레이션 재생 중에는 실시간 루프를 쉼
+    lastSeen: {},           // studentId -> timestamp (쿨다운)
+    lastUnknownAt: 0,
+    lastStatus: ''
+  };
+
+  function setAiState(state, text) {
+    ai.state = state;
+    var chip = el('ai-state');
+    if (chip) { chip.className = 'ai-chip ' + state; chip.textContent = text; }
+    var admin = el('ai-admin-state');
+    if (admin) { admin.className = 'chip ' + (state === 'ready' ? 'ok' : state === 'offline' ? 'off' : 'wait'); admin.textContent = text; }
+    refreshAiHint();
+  }
+
+  function faceCount() {
+    var n = 0;
+    Object.keys(app.faces || {}).forEach(function (sid) { if (byId(sid)) { n++; } });
+    return n;
+  }
+
+  function faceThreshold() {
+    var f = app.settings && app.settings.face;
+    var t = f ? Number(f.threshold) : 0.48;
+    return (isNaN(t) || t < 0.30 || t > 0.65) ? 0.48 : t;
+  }
+  function faceCooldownMs() {
+    var f = app.settings && app.settings.face;
+    var s = f ? parseInt(f.cooldown, 10) : 20;
+    if (isNaN(s) || s < 5 || s > 300) { s = 20; }
+    return s * 1000;
+  }
+  function faceAutoOn() {
+    return !(app.settings && app.settings.face && app.settings.face.auto === false);
+  }
+  function cooldownActive(studentId, now) {
+    var t = (ai.lastSeen && ai.lastSeen[studentId]) || 0;
+    return (now - t) < faceCooldownMs();
+  }
+
+  function euclideanDistance(a, b) {
+    if (!a || !b || a.length !== b.length) { return Infinity; }
+    var s = 0;
+    for (var i = 0; i < a.length; i++) {
+      var d = a[i] - b[i];
+      s += d * d;
+    }
+    return Math.sqrt(s);
+  }
+
+  // 등록된 모든 얼굴과 비교해 가장 가까운 관원을 찾는다 (거리 자체는 판정하지 않음)
+  function bestFaceMatch(descriptor) {
+    if (!descriptor || descriptor.length !== 128) { return null; }
+    var best = null;
+    Object.keys(app.faces || {}).forEach(function (sid) {
+      var f = app.faces[sid];
+      if (!f || !f.descriptor || f.descriptor.length !== 128) { return; }
+      var student = byId(sid);
+      if (!student) { return; }
+      var dist = euclideanDistance(descriptor, f.descriptor);
+      if (!best || dist < best.distance) { best = { studentId: sid, student: student, distance: dist }; }
+    });
+    return best;
+  }
+
+  function waitFaceLib() {
+    return new Promise(function (resolve, reject) {
+      var start = Date.now();
+      (function poll() {
+        if (window.faceapi) { resolve(window.faceapi); return; }
+        if (window.__faceApiFailed) { reject(new Error('cdn')); return; }
+        if (Date.now() - start > FACE_LOAD_TIMEOUT) { reject(new Error('timeout')); return; }
+        setTimeout(poll, 250);
+      })();
+    });
+  }
+
+  function initFaceAI() {
+    setAiState('loading', 'AI 모델 준비 중…');
+    waitFaceLib().then(function (fa) {
+      ai.lib = fa;
+      if (!fa.nets || !fa.nets.tinyFaceDetector) { throw new Error('engine'); }
+      var tf = fa.tf;
+      var prep = Promise.resolve();
+      if (tf && tf.ready) {
+        prep = tf.ready().catch(function () {}).then(function () {
+          if (tf.setBackend) {
+            return tf.setBackend('webgl').catch(function () { return tf.setBackend('cpu'); });
+          }
+        });
+      }
+      return prep.then(function () {
+        return fa.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
+      }).then(function () {
+        return fa.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL);
+      }).then(function () {
+        return fa.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL);
+      });
+    }).then(function () {
+      ai.ready = true;
+      ai.error = '';
+      setAiState('ready', 'AI 얼굴인식 준비 완료');
+      startFaceLoop();
+    }).catch(function (err) {
+      ai.ready = false;
+      ai.error = (err && err.message) ? err.message : 'error';
+      setAiState('offline', '오프라인 · 터치/시뮬레이션');
+    });
+  }
+
+  function detectorOptions(inputSize) {
+    var fa = ai.lib || window.faceapi;
+    return new fa.TinyFaceDetectorOptions({ inputSize: inputSize || 320, scoreThreshold: 0.5 });
+  }
+
+  function detectFaces(input, inputSize) {
+    var fa = ai.lib || window.faceapi;
+    if (!fa || !ai.ready) { return Promise.reject(new Error('AI 모델 준비 안 됨')); }
+    return fa.detectAllFaces(input, detectorOptions(inputSize)).withFaceLandmarks().withFaceDescriptors();
+  }
+
+  function startFaceLoop() {
+    if (ai.loopTimer) { clearInterval(ai.loopTimer); }
+    ai.loopTimer = setInterval(faceLoopTick, FACE_LOOP_MS);
+  }
+
+  function aiStatus(text) {
+    if (ai.lastStatus === text) { return; }
+    ai.lastStatus = text;
+    setCamStatus(text);
+  }
+
+  function faceLoopTick() {
+    if (!ai.ready || ai.detecting || app.busy || ai.suppress) { return; }
+    if (!app.cameraStream) { return; }
+    if (typeof document.hidden !== 'undefined' && document.hidden) { return; }
+    var modal = el('modal-root');
+    if (modal && modal.classList.contains('open')) { return; }
+    if (faceCount() === 0) { aiStatus('등록된 얼굴이 없어요 · 관리자 → 관원 명단에서 얼굴 등록'); return; }
+    var video = el('camera-video');
+    if (!video || !video.videoWidth) { return; }
+    ai.detecting = true;
+    detectFaces(video, 320).then(function (results) {
+      ai.detecting = false;
+      if (ai.suppress || !app.cameraStream) { return; }
+      handleKioskFaces(results, video);
+    }).catch(function () {
+      ai.detecting = false;
+    });
+  }
+
+  function handleKioskFaces(results, video) {
+    var items = [];
+    var matched = null;
+    var unknown = 0;
+    var now = Date.now();
+    var mode = app.settings.mode;
+    var threshold = faceThreshold();
+
+    (results || []).forEach(function (r) {
+      var box = (r && r.detection && r.detection.box) ? r.detection.box : null;
+      if (!box) { return; }
+      var best = bestFaceMatch(r.descriptor);
+      if (best && best.distance <= threshold) {
+        var s = best.student;
+        var pct = Math.max(0, Math.min(100, Math.round((1 - best.distance) * 100)));
+        var label = s.name + ' ' + pct + '%';
+        if (cooldownActive(s.id, now)) {
+          label = s.name + ' · 재인식 대기';
+        } else {
+          ai.lastSeen[s.id] = now;
+          var rec = recordOf(s.id);
+          if (!faceAutoOn()) {
+            label = s.name + ' · 인식됨';
+          } else if (mode === 'in' && rec.in) {
+            label = s.name + ' · 이미 등원';
+          } else if (mode === 'out' && rec.out) {
+            label = s.name + ' · 이미 하원';
+          } else {
+            label = s.name + ' · 자동 ' + (mode === 'in' ? '등원' : '하원');
+            checkIn(s, 'ai');
+          }
+        }
+        items.push({ box: box, label: label, ok: true, pct: pct });
+        matched = matched || s;
+      } else {
+        unknown++;
+        items.push({ box: box, label: '미등록 얼굴', ok: false });
+      }
+    });
+
+    drawFaceOverlay(video, items);
+
+    if (matched) {
+      aiStatus(matched.name + ' 관원 인식 · ' + (mode === 'in' ? '등원' : '하원') + ' 모드');
+    } else if (unknown > 0) {
+      aiStatus('미등록 얼굴 — 터치로 출석해 주세요');
+      if (now - ai.lastUnknownAt > 8000) {
+        ai.lastUnknownAt = now;
+        toast('미등록 얼굴이에요. 얼굴을 등록하거나 터치로 출석해 주세요.');
+      }
+    } else {
+      aiStatus('얼굴을 찾는 중 · 카메라 앞에 서 주세요');
+    }
+  }
+
+  function drawFaceOverlay(video, items) {
+    var canvas = el('face-overlay');
+    var stage = el('camera-stage');
+    if (!canvas || !stage) { return; }
+    var w = stage.clientWidth || 0;
+    var h = stage.clientHeight || 0;
+    if (!w || !h) { return; }
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    var ctx = canvas.getContext ? canvas.getContext('2d') : null;
+    if (!ctx) { return; }
+    ctx.clearRect(0, 0, w, h);
+    if (!items || !items.length) { return; }
+    var vw = video.videoWidth || 0;
+    var vh = video.videoHeight || 0;
+    if (!vw || !vh) { return; }
+    // object-fit:cover 로 표시된 영상 좌표 → 화면 좌표 (영상은 CSS로 좌우 반전됨)
+    var scale = Math.max(w / vw, h / vh);
+    var ox = (w - vw * scale) / 2;
+    var oy = (h - vh * scale) / 2;
+
+    items.forEach(function (it) {
+      var b = it.box;
+      var bw = b.width * scale;
+      var bh = b.height * scale;
+      var x = w - ox - (b.x + b.width) * scale;
+      var y = oy + b.y * scale;
+      var color = it.ok ? '#3ce0a8' : '#f6c343';
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 12;
+      var rad = Math.min(14, bw / 5, bh / 5);
+      ctx.beginPath();
+      if (ctx.roundRect) { ctx.roundRect(x, y, bw, bh, rad); } else { ctx.rect(x, y, bw, bh); }
+      ctx.stroke();
+      ctx.restore();
+
+      var text = it.label || '';
+      ctx.font = '800 12px "Pretendard", "Apple SD Gothic Neo", system-ui, sans-serif';
+      var tw = ctx.measureText ? ctx.measureText(text).width : text.length * 7;
+      var lw = tw + 18;
+      var lh = 24;
+      var lx = Math.max(4, Math.min(w - lw - 4, x));
+      var ly = (y - lh - 6 < 4) ? y + 6 : y - lh - 6;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      if (ctx.roundRect) { ctx.roundRect(lx, ly, lw, lh, 7); } else { ctx.rect(lx, ly, lw, lh); }
+      ctx.fill();
+      ctx.fillStyle = it.ok ? '#04251a' : '#3d2a00';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, lx + 9, ly + lh / 2 + 0.5);
+    });
+  }
+
+  function clearFaceOverlay() {
+    var canvas = el('face-overlay');
+    if (!canvas || !canvas.getContext) { return; }
+    var ctx = canvas.getContext('2d');
+    if (ctx) { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+  }
+
+  function makeFaceThumb(source, box) {
+    try {
+      var c = document.createElement('canvas');
+      var size = 160;
+      c.width = size;
+      c.height = size;
+      var ctx = c.getContext ? c.getContext('2d') : null;
+      if (!ctx) { return ''; }
+      var pad = Math.max(box.width, box.height) * 0.35;
+      var x = Math.max(0, box.x - pad);
+      var y = Math.max(0, box.y - pad);
+      var sw = Math.max(1, Math.min((source.width || 640) - x, box.width + pad * 2));
+      var sh = Math.max(1, Math.min((source.height || 480) - y, box.height + pad * 2));
+      var side = Math.min(sw, sh);
+      var sx = x + (sw - side) / 2;
+      var sy = y + (sh - side) / 2;
+      ctx.drawImage(source, sx, sy, side, side, 0, 0, size, size);
+      return c.toDataURL('image/jpeg', 0.72);
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function saveFace(studentId, descriptor, thumb) {
+    var clean = sanitizeFace({ descriptor: descriptor, thumb: thumb, at: new Date().toISOString() });
+    if (!clean) { return false; }
+    app.faces[studentId] = clean;
+    saveFaces();
+    renderStudentsTable();
+    renderFaceSummary();
+    refreshAiHint();
+    return true;
+  }
+
+  function removeFace(studentId) {
+    if (!app.faces[studentId]) { return false; }
+    delete app.faces[studentId];
+    saveFaces();
+    renderStudentsTable();
+    renderFaceSummary();
+    refreshAiHint();
+    return true;
+  }
+
+  function confirmRemoveFace(studentId) {
+    var s = byId(studentId);
+    if (!s) { return; }
+    openModal({
+      title: s.name + ' 관원 얼굴 등록을 삭제할까요?',
+      sub: '삭제하면 이 관원은 자동 인식되지 않고, 터치·시뮬레이션으로만 출석할 수 있어요.',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '삭제', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      removeFace(studentId);
+      toast(s.name + ' 관원 얼굴 등록을 삭제했어요.');
+    });
+  }
+
+  // 촬영/업로드한 이미지 한 장에서 정확히 얼굴 1명을 찾아 128차원 특징값을 저장
+  function registerFaceFromCanvas(student, canvas, onStatus) {
+    var setStatus = onStatus || function () {};
+    setStatus('wait', '얼굴을 분석하는 중…');
+    return detectFaces(canvas, 416).then(function (results) {
+      if (!results || !results.length) {
+        setStatus('err', '얼굴을 찾지 못했어요. 밝은 곳에서 정면을 바라봐 주세요.');
+        return false;
+      }
+      if (results.length > 1) {
+        setStatus('err', '얼굴이 ' + results.length + '명 보여요. 한 명만 비춰 주세요.');
+        return false;
+      }
+      var r = results[0];
+      var descriptor = Array.prototype.slice.call(r.descriptor);
+      var thumb = makeFaceThumb(canvas, r.detection.box);
+      if (!saveFace(student.id, descriptor, thumb)) {
+        setStatus('err', '얼굴 특징값을 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.');
+        return false;
+      }
+      setStatus('ok', '✅ ' + student.name + ' 관원 얼굴을 등록했어요. 이제 키오스크에서 자동으로 인식됩니다.');
+      playSuccess();
+      toast(student.name + ' 관원 얼굴을 등록했어요 (판정 거리 ' + faceThreshold().toFixed(2) + ' 이하).');
+      return true;
+    }).catch(function (err) {
+      setStatus('err', '얼굴 분석에 실패했어요 (' + ((err && err.message) || 'error') + '). 다시 시도해 주세요.');
+      return false;
+    });
+  }
+
+  function readImageFile(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () { resolve(img); };
+        img.onerror = function () { reject(new Error('image')); };
+        img.src = reader.result;
+      };
+      reader.onerror = function () { reject(new Error('file')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function imageToCanvas(img, maxSide) {
+    var iw = img.naturalWidth || img.width || 0;
+    var ih = img.naturalHeight || img.height || 0;
+    if (!iw || !ih) { return null; }
+    var scale = Math.min(1, (maxSide || 900) / Math.max(iw, ih));
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(iw * scale);
+    canvas.height = Math.round(ih * scale);
+    var ctx = canvas.getContext ? canvas.getContext('2d') : null;
+    if (!ctx) { return null; }
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+
+  function openFaceRegister(studentId) {
+    var s = byId(studentId);
+    if (!s) { return; }
+    var existing = app.faces[s.id];
+
+    var body = '' +
+      '<div class="face-cam"><video id="face-video" autoplay muted playsinline></video>' +
+      '<div class="face-frame"></div></div>' +
+      '<div class="face-status" id="face-status">카메라를 준비하고 있어요…</div>' +
+      '<div class="form-actions" style="flex-wrap:wrap">' +
+      '<button class="btn btn-mint" id="face-capture">📷 지금 화면으로 등록</button>' +
+      '<button class="btn" id="face-upload">🖼️ 사진 파일로 등록</button>' +
+      '<input type="file" id="face-file" accept="image/*" style="display:none">' +
+      '</div>' +
+      '<div class="face-preview" id="face-preview"></div>' +
+      '<div class="face-tip">얼굴 한 명만 정면으로 비춰 주세요. 촬영·업로드한 사진은 이 태블릿 안에서만 분석되고, 저장되는 것은 128개 숫자(특징값)와 작은 썸네일뿐입니다. 외부 서버로 전송하지 않습니다.</div>';
+
+    var done = openModal({
+      title: s.name + ' 관원 얼굴 ' + (existing ? '재등록' : '등록'),
+      sub: '얼굴이 정확히 1명 검출되면 바로 저장됩니다.',
+      body: body,
+      actions: [{ label: '닫기', value: null, kind: 'btn-ghost' }]
+    });
+
+    var video = el('face-video');
+    var localStream = null;
+    var closed = false;
+
+    function setStatus(kind, text) {
+      var box = el('face-status');
+      if (!box) { return; }
+      box.className = 'face-status' + (kind ? ' ' + kind : '');
+      box.textContent = text;
+    }
+
+    function showPreview() {
+      var box = el('face-preview');
+      if (!box) { return; }
+      var f = app.faces[s.id];
+      if (!f) { box.innerHTML = ''; return; }
+      box.innerHTML = (f.thumb ? '<img src="' + esc(f.thumb) + '" alt="등록된 얼굴">' : '') +
+        '<div class="face-preview-txt">등록 시각 ' + esc(f.at ? f.at.slice(0, 16).replace('T', ' ') : '-') + '</div>';
+    }
+
+    function attachCamera() {
+      if (!video) { return; }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus('err', '이 브라우저에서는 카메라를 열 수 없어요. 사진 파일로 등록해 주세요.');
+        return;
+      }
+      if (app.cameraStream) {
+        video.srcObject = app.cameraStream;
+        var p1 = video.play();
+        if (p1 && p1.catch) { p1.catch(function () {}); }
+        setStatus('ok', '카메라 준비 완료 · 얼굴을 맞추고 촬영해 주세요.');
+        return;
+      }
+      setStatus('wait', '카메라를 켜는 중…');
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      }).then(function (stream) {
+        if (closed) {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          return;
+        }
+        localStream = stream;
+        video.srcObject = stream;
+        var p = video.play();
+        if (p && p.catch) { p.catch(function () {}); }
+        setStatus('ok', '카메라 준비 완료 · 얼굴을 맞추고 촬영해 주세요.');
+      }).catch(function (err) {
+        setStatus('err', '카메라를 열 수 없어요 (' + ((err && err.name) || 'error') + '). 사진 파일로 등록해 주세요.');
+      });
+    }
+
+    function captureCurrent() {
+      if (!ai.ready) {
+        setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
+        return;
+      }
+      if (!video || !video.videoWidth) {
+        setStatus('wait', '카메라 화면이 아직 준비되지 않았어요. 사진 파일로 등록할 수도 있습니다.');
+        return;
+      }
+      var canvas = document.createElement('canvas');
+      var vw = video.videoWidth;
+      var vh = video.videoHeight;
+      var scale = Math.min(1, 900 / Math.max(vw, vh));
+      canvas.width = Math.round(vw * scale);
+      canvas.height = Math.round(vh * scale);
+      var ctx = canvas.getContext ? canvas.getContext('2d') : null;
+      if (!ctx) { setStatus('err', '이 브라우저에서는 사진을 만들 수 없어요.'); return; }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      registerFaceFromCanvas(s, canvas, function (kind, text) {
+        setStatus(kind, text);
+        if (kind === 'ok') { showPreview(); }
+      });
+    }
+
+    function handleUpload(file) {
+      if (!file) { return; }
+      if (!ai.ready) {
+        setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
+        return;
+      }
+      setStatus('wait', '사진에서 얼굴을 찾는 중…');
+      readImageFile(file).then(function (img) {
+        var canvas = imageToCanvas(img, 900);
+        if (!canvas) { throw new Error('canvas'); }
+        return registerFaceFromCanvas(s, canvas, function (kind, text) {
+          setStatus(kind, text);
+          if (kind === 'ok') { showPreview(); }
+        });
+      }).catch(function () {
+        setStatus('err', '사진 파일을 읽지 못했어요. JPG·PNG 파일로 다시 시도해 주세요.');
+      });
+    }
+
+    var capBtn = el('face-capture');
+    if (capBtn) { capBtn.addEventListener('click', captureCurrent); }
+    var upBtn = el('face-upload');
+    if (upBtn) {
+      upBtn.addEventListener('click', function () {
+        var f = el('face-file');
+        if (f) { f.click(); }
+      });
+    }
+    var fileEl = el('face-file');
+    if (fileEl) {
+      fileEl.addEventListener('change', function () {
+        if (fileEl.files && fileEl.files[0]) { handleUpload(fileEl.files[0]); }
+        fileEl.value = '';
+      });
+    }
+
+    showPreview();
+    if (!ai.ready) {
+      setStatus(ai.state === 'loading' ? 'wait' : 'err', ai.state === 'loading'
+        ? 'AI 모델을 불러오는 중이에요. 준비되면 촬영할 수 있습니다.'
+        : 'AI 모델을 불러오지 못했어요. 터치·시뮬레이션으로 출석해 주세요.');
+    }
+    attachCamera();
+
+    done.then(function () {
+      closed = true;
+      if (localStream) {
+        localStream.getTracks().forEach(function (t) { t.stop(); });
+        localStream = null;
+      }
+      clearFaceOverlay();
+    });
+  }
+
+  function refreshAiHint() {
+    var help = el('cam-help');
+    if (!help) { return; }
+    var modeTxt = app.settings.mode === 'in' ? '등원' : '하원';
+    if (ai.ready && faceCount() > 0) {
+      help.innerHTML = '카메라 앞에 서면 등록된 관원을 자동 인식해 <b>' + modeTxt + '</b> 처리합니다. 인식이 안 되면 터치로 출석하세요.';
+    } else if (ai.ready) {
+      help.innerHTML = '등록된 얼굴이 없어요. <b>관리자 → 관원 명단</b>에서 얼굴을 등록하면 자동 인식이 켜집니다.';
+    } else if (ai.state === 'loading') {
+      help.innerHTML = 'AI 모델을 준비하는 중입니다. 그동안 <b>터치 출석</b>과 시뮬레이션을 쓸 수 있어요.';
+    } else if (ai.state === 'offline') {
+      help.innerHTML = 'AI 모델을 불러오지 못했어요. <b>터치 출석</b>·시뮬레이션으로 그대로 사용할 수 있습니다.';
+    } else {
+      help.innerHTML = '카메라를 연결하거나 <b>관원 선택 인식</b>으로 AI 얼굴인식을 체험해 보세요.';
+    }
   }
 
   /* =========================================================
@@ -2196,11 +2908,25 @@
     return app.logs.filter(function (l) { return l.date === key && l.studentId === studentId; }).length;
   }
 
+  function faceCell(s) {
+    var f = app.faces[s.id];
+    if (f) {
+      return '<div class="face-cell">' +
+        (f.thumb ? '<img class="face-thumb" src="' + esc(f.thumb) + '" alt="">' : '') +
+        '<span class="face-badge on">✅ 등록됨</span>' +
+        '<button class="btn btn-sm" data-face-reg="' + esc(s.id) + '" title="얼굴을 다시 등록합니다">재등록</button>' +
+        '<button class="btn btn-sm btn-danger" data-face-del="' + esc(s.id) + '" title="얼굴 등록을 삭제합니다">삭제</button>' +
+        '</div>';
+    }
+    return '<div class="face-cell"><span class="face-badge">미등록</span>' +
+      '<button class="btn btn-sm" data-face-reg="' + esc(s.id) + '">📸 얼굴 등록</button></div>';
+  }
+
   function renderStudentsTable() {
     el('stu-count').textContent = app.students.length + '명';
     var tbody = el('stu-table');
     if (!app.students.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="5">관원이 없습니다</td></tr>';
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">관원이 없습니다</td></tr>';
       return;
     }
     tbody.innerHTML = app.students.slice().sort(function (a, b) {
@@ -2211,11 +2937,30 @@
         '<td><span class="sub">' + esc(s.className || '-') + '</span></td>' +
         '<td><span class="chip">' + esc(s.belt || '-') + (studentGrade(s) ? ' · ' + esc(studentGrade(s)) : '') + '</span></td>' +
         '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
+        '<td>' + faceCell(s) + '</td>' +
         '<td style="white-space:nowrap">' +
         '<button class="btn btn-sm" data-edit="' + esc(s.id) + '">편집</button> ' +
         '<button class="btn btn-sm btn-danger" data-del="' + esc(s.id) + '">삭제</button>' +
         '</td></tr>';
     }).join('');
+  }
+
+  function renderFaceAdmin() {
+    var f = app.settings.face || DEFAULT_SETTINGS.face;
+    var range = el('face-threshold');
+    if (range && document.activeElement !== range) { range.value = String(f.threshold); }
+    var lab = el('face-threshold-val');
+    if (lab) { lab.textContent = Number(f.threshold).toFixed(2); }
+    var cd = el('face-cooldown');
+    if (cd && document.activeElement !== cd) { cd.value = String(f.cooldown); }
+    var au = el('face-auto');
+    if (au) { au.value = f.auto ? 'on' : 'off'; }
+    renderFaceSummary();
+  }
+
+  function renderFaceSummary() {
+    var note = el('face-reg-count');
+    if (note) { note.textContent = faceCount() + ' / ' + app.students.length + '명 등록'; }
   }
 
   function renderSmsState() {
@@ -2386,6 +3131,7 @@
     }).then(function (ok) {
       if (!ok) { return; }
       app.students = app.students.filter(function (x) { return x.id !== id; });
+      if (app.faces[id]) { delete app.faces[id]; saveFaces(); }
       saveStudents();
       renderAll();
       toast(s.name + ' 관원을 삭제했어요.');
@@ -3531,6 +4277,143 @@
   }
 
   /* =========================================================
+     12-B. 도장 데이터 전체 백업 / 복원 (JSON)
+     ========================================================= */
+  function buildBackup() {
+    return {
+      app: 'mta-taekwondo-attendance',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      dojoName: app.settings.dojoName,
+      students: app.students,
+      faces: app.faces,
+      records: app.records,
+      attendance: app.attendance,
+      logs: app.logs,
+      settings: app.settings
+    };
+  }
+
+  function downloadText(text, type, filename) {
+    var blob = new Blob([text], { type: type || 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function downloadBackup() {
+    var data = buildBackup();
+    var now = new Date();
+    var name = '도장백업_' + todayKey(now) + '_' + pad2(now.getHours()) + pad2(now.getMinutes()) + '.json';
+    downloadText(JSON.stringify(data, null, 2), 'application/json', name);
+    toast('전체 백업을 내려받았어요 · 관원 ' + data.students.length + '명 · 얼굴 ' + faceCount() + '명');
+  }
+
+  function validateBackup(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return { ok: false, reason: '백업 파일 형식이 아니에요.' };
+    }
+    if (!Array.isArray(data.students)) {
+      return { ok: false, reason: '관원 명단이 들어 있지 않은 파일이에요.' };
+    }
+    if (!data.students.length) {
+      return { ok: false, reason: '관원 명단이 비어 있는 백업 파일은 복원할 수 없어요.' };
+    }
+    var named = data.students.filter(function (s) { return s && String(s.name || '').trim(); });
+    if (!named.length) {
+      return { ok: false, reason: '이름이 있는 관원이 없어 복원할 수 없어요.' };
+    }
+    if (data.faces != null && (typeof data.faces !== 'object' || Array.isArray(data.faces))) {
+      return { ok: false, reason: '얼굴 데이터 형식이 올바르지 않아요.' };
+    }
+    var bad = '';
+    ['records', 'attendance', 'settings'].forEach(function (k) {
+      if (data[k] != null && (typeof data[k] !== 'object' || Array.isArray(data[k]))) { bad = k; }
+    });
+    if (bad) { return { ok: false, reason: bad + ' 데이터 형식이 올바르지 않아요.' }; }
+    if (data.logs != null && !Array.isArray(data.logs)) {
+      return { ok: false, reason: '문자 로그 형식이 올바르지 않아요.' };
+    }
+    return { ok: true };
+  }
+
+  function applyBackup(data) {
+    var faces = {};
+    if (data.faces && typeof data.faces === 'object') {
+      Object.keys(data.faces).forEach(function (sid) {
+        var f = sanitizeFace(data.faces[sid]);
+        if (f) { faces[sid] = f; }
+      });
+    }
+    writeJSON(LS.students, data.students);
+    writeJSON(LS.faces, faces);
+    if (data.records) { writeJSON(LS.records, data.records); }
+    if (data.attendance) { writeJSON(LS.attendance, data.attendance); }
+    if (data.logs) { writeJSON(LS.logs, data.logs); }
+    if (data.settings) { writeJSON(LS.settings, data.settings); }
+
+    loadState();
+    app._renderedDay = todayKey();
+    app.beltDraft = null;
+    resetStudentForm();
+    fillSmsForm();
+    el('dojo-name').value = app.settings.dojoName;
+    document.title = app.settings.dojoName + ' · AI 출석 알림';
+    el('mode-in').classList.toggle('active', app.settings.mode !== 'out');
+    el('mode-out').classList.toggle('active', app.settings.mode === 'out');
+    el('p-threshold').value = promoThreshold();
+    renderAll();
+    renderFaceAdmin();
+    renderBeltEditor(true);
+    renderPromotion();
+    renderGukgiwon();
+    renderMonthly();
+    renderPin();
+    refreshAiHint();
+    toast('백업을 복원했어요 · 관원 ' + app.students.length + '명 · 얼굴 ' + faceCount() + '명');
+  }
+
+  function restoreBackupFile(file) {
+    if (!file) { return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var data;
+      try {
+        data = JSON.parse(String(reader.result || ''));
+      } catch (e) {
+        toast('백업 파일을 읽을 수 없어요 (JSON 형식 오류).');
+        return;
+      }
+      var check = validateBackup(data);
+      if (!check.ok) { toast(check.reason); return; }
+      var faces = (data.faces && typeof data.faces === 'object') ? Object.keys(data.faces).length : 0;
+      var days = (data.attendance && typeof data.attendance === 'object') ? Object.keys(data.attendance).length : 0;
+      openModal({
+        title: '백업 파일로 복원할까요?',
+        sub: '지금 이 브라우저의 데이터가 백업 파일 내용으로 바뀝니다.',
+        body: '<div class="help" style="margin-top:0">' +
+          '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 띠 체계·문자 설정 포함<br>' +
+          (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
+          '</div>',
+        actions: [
+          { label: '취소', value: false, kind: 'btn-ghost' },
+          { label: '복원', value: true, kind: 'btn-primary' }
+        ]
+      }).then(function (ok) {
+        if (!ok) { return; }
+        applyBackup(data);
+      });
+    };
+    reader.onerror = function () { toast('백업 파일을 읽지 못했어요.'); };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  /* =========================================================
      13. 초기화 / 이벤트 연결
      ========================================================= */
   function renderAll() {
@@ -3543,6 +4426,7 @@
     renderAdminLog();
     renderGradeList();
     updateMuteBtn();
+    renderFaceSummary();
     el('dojo-name').value = app.settings.dojoName;
     renderPin();
   }
@@ -3635,6 +4519,10 @@
       });
     });
     el('stu-table').addEventListener('click', function (e) {
+      var fr = e.target.closest('[data-face-reg]');
+      if (fr) { openFaceRegister(fr.getAttribute('data-face-reg')); return; }
+      var fd = e.target.closest('[data-face-del]');
+      if (fd) { confirmRemoveFace(fd.getAttribute('data-face-del')); return; }
       var ed = e.target.closest('[data-edit]');
       if (ed) { startEdit(ed.getAttribute('data-edit')); return; }
       var del = e.target.closest('[data-del]');
@@ -3901,6 +4789,44 @@
       if (f) { f.addEventListener('change', function () { readSmsForm(); renderLog(); }); }
     });
 
+    // AI 얼굴인식 설정
+    if (el('face-threshold')) {
+      el('face-threshold').addEventListener('input', function () {
+        var lab = el('face-threshold-val');
+        var v = parseFloat(el('face-threshold').value);
+        if (lab) { lab.textContent = (isNaN(v) ? 0.48 : v).toFixed(2); }
+      });
+    }
+    if (el('btn-face-save')) {
+      el('btn-face-save').addEventListener('click', function () {
+        var f = app.settings.face;
+        var th = parseFloat(el('face-threshold').value);
+        var cd = parseInt(el('face-cooldown').value, 10);
+        if (isNaN(th) || th < 0.30 || th > 0.65) { toast('일치 판정 거리는 0.30 ~ 0.65 사이로 정해 주세요.'); return; }
+        if (isNaN(cd) || cd < 5 || cd > 300) { toast('재인식 쿨다운은 5 ~ 300초 사이로 정해 주세요.'); return; }
+        f.threshold = Math.round(th * 100) / 100;
+        f.cooldown = cd;
+        f.auto = el('face-auto').value !== 'off';
+        saveSettings();
+        renderFaceAdmin();
+        toast('AI 얼굴인식 설정을 저장했어요 · 거리 ' + f.threshold.toFixed(2) + ' · 쿨다운 ' + f.cooldown + '초');
+      });
+    }
+
+    // 전체 백업 / 복원
+    el('btn-backup-all').addEventListener('click', downloadBackup);
+    el('btn-restore-all').addEventListener('click', function () {
+      var inp = el('restore-input');
+      if (inp) { inp.click(); }
+    });
+    var restoreInput = el('restore-input');
+    if (restoreInput) {
+      restoreInput.addEventListener('change', function () {
+        if (restoreInput.files && restoreInput.files[0]) { restoreBackupFile(restoreInput.files[0]); }
+        restoreInput.value = '';
+      });
+    }
+
     // JSON 내려받기
     el('btn-export-json').addEventListener('click', function () {
       var key = todayKey();
@@ -3973,9 +4899,9 @@
     renderVisibility();
     renderAdminLog();
 
-    el('cam-help').innerHTML = app.settings.mode === 'in'
-      ? '관원을 선택하면 인식 → 자동 <b>등원</b> 처리까지 재생됩니다.'
-      : '관원을 선택하면 인식 → 자동 <b>하원</b> 처리까지 재생됩니다.';
+    renderFaceAdmin();
+    refreshAiHint();
+    initFaceAI();
 
     var xlsxOk = (typeof XLSX !== 'undefined') && !window.__xlsxLoadFailed;
     el('xlsx-state').textContent = xlsxOk ? '엑셀 엔진 준비됨 (SheetJS)' : 'CSV 모드 (오프라인)';
@@ -3997,6 +4923,33 @@
       document.removeEventListener('pointerdown', once);
     });
   }
+
+  /* 자동 검증(모의 DOM)용 최소 훅 — 같은 페이지 안에서만 접근됩니다. */
+  window.__tdk = {
+    app: app,
+    LS: LS,
+    face: {
+      euclideanDistance: euclideanDistance,
+      bestFaceMatch: bestFaceMatch,
+      cooldownActive: cooldownActive,
+      faceThreshold: faceThreshold,
+      faceCooldownMs: faceCooldownMs,
+      saveFace: saveFace,
+      removeFace: removeFace,
+      sanitizeFace: sanitizeFace,
+      registerFaceFromCanvas: registerFaceFromCanvas,
+      handleKioskFaces: handleKioskFaces,
+      faceLoopTick: faceLoopTick,
+      faceCount: faceCount,
+      markModelReady: function () { ai.ready = true; ai.state = 'ready'; },
+      resetSeen: function () { ai.lastSeen = {}; }
+    },
+    data: {
+      buildBackup: buildBackup,
+      validateBackup: validateBackup,
+      applyBackup: applyBackup
+    }
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
