@@ -495,6 +495,9 @@
   #gk-table select.input.mini{min-width:58px}
   #gk-table select[data-gk="gukStatus"]{min-width:80px}
   #gk-table input[type="date"].input.mini{width:112px; min-width:112px}
+  /* 국기원 심사접수용 — 생년월일 · 티콘 ID 인라인 입력 */
+  #gk-table input[data-gk="birthDate"]{width:126px; min-width:126px}
+  #gk-table input[data-gk="tconId"]{width:108px; min-width:104px; font-weight:700; color:var(--navy); letter-spacing:-.2px}
   #gk-table td:first-child{min-width:82px; white-space:nowrap}
   .ck{width:17px; height:17px; accent-color:#16294f; cursor:pointer; vertical-align:middle}
   .grade-chip{font-size:10px; font-weight:800; color:#475467; background:#eef2f9; padding:2px 6px; border-radius:6px; margin-left:4px; white-space:nowrap}
@@ -605,8 +608,12 @@
   /* 재원생 전체 명단: 화면 가로 전체 · 넉넉한 높이 */
   .stu-wide-panel{margin-bottom:15px}
   .stu-tablewrap{max-height:min(62vh,680px); overflow:auto; border:1px solid #eef2f8; border-radius:12px; -webkit-overflow-scrolling:touch}
-  table.stu-tb{min-width:1100px}
+  table.stu-tb{min-width:1200px}
   table.stu-tb .belt-chip-cell{white-space:nowrap}
+  table.stu-tb td.nm{white-space:nowrap}
+  /* 국기원 심사접수용 생년월일 · 티콘 ID — 표 안에서 바로 고친다 */
+  table.stu-tb input.stu-tbirth{width:112px; min-width:112px; height:30px}
+  table.stu-tb input.stu-ttcon{width:88px; min-width:84px; font-weight:700; color:var(--navy); letter-spacing:-.2px}
   table.stu-tb th{position:sticky; top:0; z-index:2; font-size:11.5px; padding:10px 12px}
   table.stu-tb td{padding:11px 12px; font-size:13px}
   table.stu-tb select.stu-tday{width:auto; min-width:76px; height:30px; font-size:12px; font-weight:700; padding:0 4px; text-align:center}
@@ -614,6 +621,12 @@
   .range-row{display:flex; align-items:center; gap:10px}
   .range-row input[type="range"]{flex:1; accent-color:var(--navy); height:26px}
   .range-row b{font-size:13px; font-variant-numeric:tabular-nums; color:var(--navy); min-width:38px; text-align:right}
+
+  /* 국기원 심사 탭: 접수용 칸(생년월일·티콘 ID)이 늘어 넓은 화면에서는 표를 화면 전체 폭으로 */
+  @media (min-width: 1100px){
+    #view-admin.guk-mode .admin-grid{grid-template-columns:1fr}
+    #view-admin.guk-mode .admin-col + .admin-col{display:grid; grid-template-columns:1fr 1fr; gap:15px; align-items:start}
+  }
 
   /* ---------- 원비 관리 ---------- */
   .tu-stats .stat-val{font-size:24px; letter-spacing:-.5px}
@@ -1085,7 +1098,7 @@
     .admin-face-body{gap:9px}
     .stu-wide-panel{margin-bottom:10px}
     .stu-tablewrap{max-height:min(56vh,440px); border-radius:10px}
-    table.stu-tb{min-width:1080px}
+    table.stu-tb{min-width:1300px}
     table.stu-tb td{padding:10px 9px; font-size:12.5px}
     .pick-grid{grid-template-columns:repeat(2,1fr); max-height:52vh}
     .banner-card{width:min(560px,92vw); padding:24px 20px 22px}
@@ -1103,7 +1116,7 @@
     #admin-promotion table.tb{min-width:560px}
     #promo-table td:nth-child(2) .sub{white-space:nowrap}
     /* 국기원 표: 칸이 잘리지 않게 표 폭을 넓히고 안에서 옆으로 넘겨 봄 */
-    #admin-gukgiwon table.tb{min-width:680px}
+    #admin-gukgiwon table.tb{min-width:930px}
     .tablewrap{-webkit-overflow-scrolling:touch}
     .mon-tablewrap{max-height:min(58vh,520px)}
     table.mtb .c-name{width:120px; min-width:120px; max-width:120px; padding:6px 7px}
@@ -1429,7 +1442,7 @@
               </div>
               <div class="tablewrap stu-tablewrap">
                 <table class="tb stu-tb">
-                  <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>보호자</th><th>첫 등록일</th><th>원비 날짜</th><th>얼굴</th><th style="width:150px"></th></tr></thead>
+                  <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>보호자</th><th>생년월일</th><th>티콘 ID</th><th>첫 등록일</th><th>원비 날짜</th><th>얼굴</th><th style="width:150px"></th></tr></thead>
                   <tbody id="stu-table"></tbody>
                 </table>
               </div>
@@ -1474,6 +1487,11 @@
                     <div class="field"><label>급수 (비우면 띠 기준 자동)</label><input class="input" id="f-grade" list="grade-list" placeholder="예: 7급, 품, 단"></div>
                     <div class="field"><label>현재 품·단</label><select class="input" id="f-poomdan"></select></div>
                   </div>
+                  <div class="row2">
+                    <div class="field"><label>생년월일 <span style="font-weight:600;color:#8a94a6">(국기원 심사접수용)</span></label><input class="input" id="f-birth" type="date" aria-label="생년월일"></div>
+                    <div class="field"><label>티콘 ID <span style="font-weight:600;color:#8a94a6">(국기원 심사접수용)</span></label><input class="input" id="f-tcon" type="text" maxlength="40" placeholder="예: tkd_minjun" autocomplete="off" spellcheck="false" aria-label="티콘 ID"></div>
+                  </div>
+                  <div class="tiny-note" style="margin:-2px 0 10px; line-height:1.55">생년월일·티콘 ID는 국기원 심사접수에 쓰는 정보예요. <b>관리자 화면에만</b> 보이고 출석 키오스크·공개 안내에는 표시되지 않습니다.</div>
                   <div class="row2">
                     <div class="field"><label>월 원비 (원) · 자동 계산</label><input class="input" id="f-fee" type="number" min="0" step="1000" inputmode="numeric" placeholder="수업을 고르면 자동" data-auto="1"></div>
                     <div class="field"><label>형제 할인</label>
@@ -1750,7 +1768,7 @@
                 <div class="panel-head"><h3>🏅 국기원 승품·승단 심사</h3><div class="spacer"></div><span class="tiny-note" id="gk-note">-</span><button class="btn btn-sm" id="btn-gk-csv">📥 심사 명단 CSV</button></div>
                 <div class="tablewrap">
                   <table class="tb">
-                    <thead><tr><th>관원</th><th>현재 품·단</th><th>급수</th><th>목표</th><th>응시 상태</th><th>심사일</th><th style="width:132px"></th></tr></thead>
+                    <thead><tr><th>관원</th><th>생년월일</th><th>티콘 ID</th><th>현재 품·단</th><th>급수</th><th>목표</th><th>응시 상태</th><th>심사일</th><th style="width:132px"></th></tr></thead>
                     <tbody id="gk-table"></tbody>
                   </table>
                 </div>
@@ -1773,6 +1791,7 @@
                   <div class="help">
                     <b>대상 · 서류준비 · 접수완료</b> 관원에게 안내가 나갑니다. <b>합격</b> 처리하면 현재 품·단이 목표로 바뀌고 학부모님께 축하 문자를 보냅니다.
                     품·단과 응시 상태는 표에서 바로 바꿀 수 있습니다.
+                    <b>생년월일 · 티콘 ID</b>는 국기원 심사접수에 필요한 정보로, 여기서 바로 고치면 「🥋 원생 관리」 명단에도 함께 저장됩니다(표에서 바로 접수·복사). 이 두 칸은 <b>관리자 화면에만</b> 보이고 출석 키오스크·공개 안내에는 나오지 않습니다.
                   </div>
                 </div>
               </div>
@@ -2427,12 +2446,12 @@
   };
 
   var SAMPLE_STUDENTS = [
-    { id: 's1', name: '김민준', division: '초등부', course: '16회', siblingDiscount: false, belt: '파란띠', phone: '010-2345-6789', attendCount: 22, firstRegDate: '2024-03-04', tuitionDay: 5, poomDan: '없음', targetPoomDan: '1품', gukStatus: 'target' },
-    { id: 's2', name: '이서연', division: '유치부', course: '8회', siblingDiscount: true, belt: '노란띠', phone: '010-3456-7890', attendCount: 8, firstRegDate: '2025-03-03', tuitionDay: 10, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
-    { id: 's3', name: '박지호', division: '초등부', course: '12회', siblingDiscount: false, belt: '빨간띠', phone: '010-4567-8901', attendCount: 17, firstRegDate: '2023-09-01', tuitionDay: 0, poomDan: '1품', targetPoomDan: '2품', gukStatus: 'docs' },
-    { id: 's4', name: '최수아', division: '초등부', course: '입시반', siblingDiscount: false, belt: '초록띠', phone: '010-5678-9012', attendCount: 20, firstRegDate: '2025-06-02', tuitionDay: 0, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
-    { id: 's5', name: '정도윤', division: '고등부', course: '선수단', siblingDiscount: false, belt: '검정띠', phone: '010-6789-0123', attendCount: 26, firstRegDate: '2022-03-02', tuitionDay: 0, poomDan: '2단', targetPoomDan: '3단', gukStatus: 'applied' },
-    { id: 's6', name: '한유진', division: '유치부', course: '시범단', siblingDiscount: false, belt: '흰띠', phone: '010-7890-1234', attendCount: 4, firstRegDate: '2026-02-02', tuitionDay: 0, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' }
+    { id: 's1', name: '김민준', division: '초등부', course: '16회', siblingDiscount: false, belt: '파란띠', phone: '010-2345-6789', attendCount: 22, firstRegDate: '2024-03-04', tuitionDay: 5, poomDan: '없음', targetPoomDan: '1품', gukStatus: 'target', birthDate: '2016-05-12', tconId: 'tkd_minjun' },
+    { id: 's2', name: '이서연', division: '유치부', course: '8회', siblingDiscount: true, belt: '노란띠', phone: '010-3456-7890', attendCount: 8, firstRegDate: '2025-03-03', tuitionDay: 10, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none', birthDate: '2020-09-18', tconId: 'tkd_seoyeon' },
+    { id: 's3', name: '박지호', division: '초등부', course: '12회', siblingDiscount: false, belt: '빨간띠', phone: '010-4567-8901', attendCount: 17, firstRegDate: '2023-09-01', tuitionDay: 0, poomDan: '1품', targetPoomDan: '2품', gukStatus: 'docs', birthDate: '2014-02-27', tconId: 'tkd_jiho' },
+    { id: 's4', name: '최수아', division: '초등부', course: '입시반', siblingDiscount: false, belt: '초록띠', phone: '010-5678-9012', attendCount: 20, firstRegDate: '2025-06-02', tuitionDay: 0, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none', birthDate: '2015-11-03', tconId: 'tkd_sua' },
+    { id: 's5', name: '정도윤', division: '고등부', course: '선수단', siblingDiscount: false, belt: '검정띠', phone: '010-6789-0123', attendCount: 26, firstRegDate: '2022-03-02', tuitionDay: 0, poomDan: '2단', targetPoomDan: '3단', gukStatus: 'applied', birthDate: '2008-07-21', tconId: 'tkd_doyoon' },
+    { id: 's6', name: '한유진', division: '유치부', course: '시범단', siblingDiscount: false, belt: '흰띠', phone: '010-7890-1234', attendCount: 4, firstRegDate: '2026-02-02', tuitionDay: 0, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none', birthDate: '2021-04-09', tconId: 'tkd_yujin' }
   ];
 
   var BELT_ORDER = ['흰띠', '노란띠', '주황띠', '초록띠', '파란띠', '보라띠', '갈색띠', '빨간띠', '품띠', '검정띠'];
@@ -2914,6 +2933,9 @@
         pausedDate: isDateKey(s.pausedDate) ? String(s.pausedDate) : '',
         pauseReason: String(s.pauseReason || '').trim().slice(0, 60),
         firstRegDate: isDateKey(s.firstRegDate) ? String(s.firstRegDate) : '',
+        // 국기원 심사접수용 — 구버전 데이터·백업에는 없으니 빈 값으로 맞춘다
+        birthDate: normalizeBirthDate(s.birthDate || s.birth || ''),
+        tconId: normalizeTconId(s.tconId || s.tconID || s.tcon || ''),
         tuitionDay: (function () {
           var d = parseInt(s.tuitionDay, 10);
           if (isNaN(d) || d < 1 || d > 31) {
@@ -4816,6 +4838,33 @@
 
   /* 관원의 첫 등록일 (YYYY-MM-DD, 없으면 '') */
   function firstRegOf(s) { return (s && isDateKey(s.firstRegDate)) ? String(s.firstRegDate) : ''; }
+
+  /* ---------- 국기원 심사접수용: 생년월일 · 티콘 ID ----------
+     · birthDate : YYYY-MM-DD 하나로 맞춘다(20160512 · 2016.5.12 · 2016년 5월 12일 모두 허용)
+     · tconId    : 앞뒤·중간 공백을 지운 40자 이내 문자열(tkd_minjun 같은 값)
+     둘 다 관리자 화면 전용 — 키오스크·공개 안내에는 그리지 않는다. */
+  function normalizeBirthDate(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) { return ''; }
+    if (!isDateKey(s)) {
+      var m8 = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+      if (m8) { s = m8[1] + '-' + m8[2] + '-' + m8[3]; }
+    }
+    if (!isDateKey(s)) {
+      var m = s.match(/^(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})\s*일?$/);
+      if (!m) { return ''; }
+      s = m[1] + '-' + pad2(Number(m[2])) + '-' + pad2(Number(m[3]));
+      if (!isDateKey(s)) { return ''; }
+    }
+    var y = Number(s.slice(0, 4));
+    if (y < 1900 || y > new Date().getFullYear()) { return ''; }
+    return s;
+  }
+  function normalizeTconId(v) {
+    return String(v == null ? '' : v).replace(/\s+/g, '').replace(/^@+/, '').slice(0, 40);
+  }
+  function birthOf(s) { return (s && isDateKey(s.birthDate)) ? String(s.birthDate) : ''; }
+  function tconOf(s) { return (s && s.tconId) ? String(s.tconId) : ''; }
   /* 관원의 「원비 날짜」 = 매달 원비 내는 날(1~31). 예전 YYYY-MM-DD 값은 일자만 뽑아 쓴다 */
   function tuitionDayOf(s) {
     if (!s) { return 0; }
@@ -4947,7 +4996,7 @@
 
     var tbody = el('stu-table');
     if (!list.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="8">' +
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="10">' +
         (app.students.length ? '이 상태의 관원이 없어요.' : '관원이 없습니다') + '</td></tr>';
       return;
     }
@@ -4959,6 +5008,12 @@
         '<td><div class="sub">' + esc(studentLabel(s)) + '</div>' + siblingBadge(s) + '</td>' +
         '<td><span class="chip belt-chip-cell">' + beltSwatchHtml(s.belt) + esc(s.belt || '-') + (studentGrade(s) ? ' · ' + esc(studentGrade(s)) : '') + '</span></td>' +
         '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
+        '<td><input class="input mini stu-tbirth" type="date" value="' + esc(birthOf(s)) + '"' +
+        ' data-stubirth="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 생년월일') + '"' +
+        ' title="생년월일 (국기원 심사접수용)"></td>' +
+        '<td><input class="input mini stu-ttcon" type="text" value="' + esc(tconOf(s)) + '"' +
+        ' data-stutcon="' + esc(s.id) + '" maxlength="40" placeholder="티콘 ID" autocomplete="off" spellcheck="false"' +
+        ' aria-label="' + esc(s.name + ' 티콘 ID') + '" title="티콘 ID (국기원 심사접수용)"></td>' +
         '<td><input class="input mini stu-tdate" type="date" value="' + esc(firstRegOf(s)) + '"' +
         ' data-stufirst="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 첫 등록일') + '"' +
         ' title="첫 등록일"></td>' +
@@ -5130,6 +5185,8 @@
     if (el('f-course')) { el('f-course').value = ''; }
     if (el('f-sibling')) { el('f-sibling').checked = false; }
     if (el('f-firstreg')) { el('f-firstreg').value = todayKey(); }
+    if (el('f-birth')) { el('f-birth').value = ''; }
+    if (el('f-tcon')) { el('f-tcon').value = ''; }
     renderTuitionDayOptions(0);
     el('f-grade').value = '';
     el('f-fee').value = '';
@@ -5155,6 +5212,8 @@
     if (el('f-course')) { el('f-course').value = courseOf(s); }
     if (el('f-sibling')) { el('f-sibling').checked = siblingOf(s); }
     if (el('f-firstreg')) { el('f-firstreg').value = firstRegOf(s); }
+    if (el('f-birth')) { el('f-birth').value = birthOf(s); }
+    if (el('f-tcon')) { el('f-tcon').value = tconOf(s); }
     renderTuitionDayOptions(tuitionDayOf(s));
     el('f-grade').value = s.grade || '';
     el('f-fee').value = (s.monthlyFee == null ? '' : String(s.monthlyFee));
@@ -5201,6 +5260,14 @@
     var status = (el('f-status') && el('f-status').value === 'paused') ? 'paused' : 'active';
     var firstRegRaw = String(el('f-firstreg') ? el('f-firstreg').value : '').trim();
     var firstRegDate = isDateKey(firstRegRaw) ? firstRegRaw : '';
+    var birthRaw = String(el('f-birth') ? el('f-birth').value : '').trim();
+    var birthDate = normalizeBirthDate(birthRaw);
+    if (birthRaw && !birthDate) {
+      toast('생년월일을 다시 확인해 주세요. (예: 2016-05-12)');
+      if (el('f-birth')) { el('f-birth').focus(); }
+      return;
+    }
+    var tconId = normalizeTconId(el('f-tcon') ? el('f-tcon').value : '');
     var tuitionDayRaw = String(el('f-tuitiondate') ? el('f-tuitiondate').value : '').trim();
     var tuitionDay = parseInt(tuitionDayRaw, 10);
     if (isNaN(tuitionDay) || tuitionDay < 1 || tuitionDay > 31) { tuitionDay = 0; }
@@ -5221,6 +5288,8 @@
         s.pausedDate = pausedDate;
         s.pauseReason = pauseReason;
         s.firstRegDate = firstRegDate;
+        s.birthDate = birthDate;
+        s.tconId = tconId;
         if (tuitionDay) { s.tuitionDay = tuitionDay; } else { delete s.tuitionDay; }
         delete s.tuitionDate;
         if (prevTuitionDay !== tuitionDay) { syncTuitionFromStudentDay(s.id, prevTuitionDay, tuitionDay); }
@@ -5233,7 +5302,8 @@
         attendCount: 0, grade: grade, poomDan: poomDan,
         targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '', monthlyFee: monthlyFee,
         status: status, pausedDate: pausedDate, pauseReason: pauseReason,
-        firstRegDate: firstRegDate || todayKey(), tuitionDay: tuitionDay
+        firstRegDate: firstRegDate || todayKey(), tuitionDay: tuitionDay,
+        birthDate: birthDate, tconId: tconId
       };
       app.students.push(fresh);
       if (tuitionDay) { syncTuitionFromStudentDay(fresh.id, 0, tuitionDay); }
@@ -6693,13 +6763,15 @@
     var rows = activeStudents().slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
     var tbody = el('gk-table');
     if (!rows.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="7">등록된 관원이 없습니다</td></tr>';
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="9">등록된 관원이 없습니다</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(function (s) {
       var grade = studentGrade(s);
       return '<tr>' +
         '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(s.belt || '') + (grade ? ' · ' + esc(grade) : '') + '</div></td>' +
+        '<td><input type="date" class="input mini" data-gk="birthDate" data-sid="' + esc(s.id) + '" value="' + esc(birthOf(s)) + '" aria-label="' + esc(s.name) + ' 생년월일" title="생년월일 (국기원 심사접수용)"></td>' +
+        '<td><input type="text" class="input mini" data-gk="tconId" data-sid="' + esc(s.id) + '" value="' + esc(tconOf(s)) + '" maxlength="40" placeholder="티콘 ID" autocomplete="off" spellcheck="false" aria-label="' + esc(s.name) + ' 티콘 ID" title="티콘 ID (국기원 심사접수용)"></td>' +
         '<td>' + poomSelect(s.id, 'poomDan', s.poomDan) + '</td>' +
         '<td>' + gradeSelect(s) + '</td>' +
         '<td>' + poomSelect(s.id, 'targetPoomDan', s.targetPoomDan) + '</td>' +
@@ -6714,12 +6786,12 @@
     }).join('');
   }
 
-  /* 국기원 심사 명단 CSV — 급수까지 화면과 같은 값으로 내보낸다 */
+  /* 국기원 심사 명단 CSV — 급수까지 화면과 같은 값으로 내보낸다 (생년월일·티콘 ID 포함: 접수에 그대로 사용) */
   function gkCSVText() {
-    var lines = [['관원', '부서', '수업', '띠', '급수', '현재 품·단', '목표 품·단', '응시 상태', '심사일']];
+    var lines = [['관원', '생년월일', '티콘 ID', '부서', '수업', '띠', '급수', '현재 품·단', '목표 품·단', '응시 상태', '심사일']];
     activeStudents().slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); }).forEach(function (s) {
       lines.push([
-        s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', studentGrade(s),
+        s.name, birthOf(s), tconOf(s), divisionOf(s), courseLabel(s.division, s.course), s.belt || '', studentGrade(s),
         s.poomDan || '없음', s.targetPoomDan || '없음', GK_STATUS[gkStatusOf(s)] || '', s.gukExamDate || ''
       ]);
     });
@@ -11551,17 +11623,21 @@
     phone: ['연락처', '전화', '휴대폰', '핸드폰', '보호자', '학부모', '부모', 'phone', 'tel', 'mobile', 'contact'],
     attendCount: ['누적출석', '출석일수', '출석횟수', '승급출석', '총출석', '출석', 'attend', 'count'],
     firstRegDate: ['첫등록일', '등록일', '가입일', '등록날짜', 'firstreg', 'regdate'],
+    birthDate: ['생년월일', '생일', '생년월일자', '출생일', 'birthdate', 'birthday', 'birth', 'dob'],
+    tconId: ['티콘id', '티콘아이디', '티콘', 'tconid', 'tcon'],
     tuitionDate: ['원비날짜', '원비 납부일', '원비납부일', '납부일', '수납일', 'tuitiondate', 'paiddate'],
     pausedDate: ['휴관일', '휴관시작', '휴관날짜', 'pausedate', 'pause_date'],
     pauseReason: ['휴관사유', '사유', '비고', 'reason'],
     status: ['상태', '구분', 'status', 'state']
   };
 
-  /* 엑셀·CSV의 휴관일 표기를 YYYY-MM-DD로 맞춘다 */
+  /* 엑셀·CSV의 날짜 표기를 YYYY-MM-DD로 맞춘다 (2016.5.12 · 2016년 5월 12일 · 20160512) */
   function normalizeImportDate(v) {
     var s = String(v == null ? '' : v).trim();
     if (!s) { return ''; }
     if (isDateKey(s)) { return s; }
+    var m8 = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (m8) { s = m8[1] + '-' + m8[2] + '-' + m8[3]; }
     var m = s.match(/^(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/);
     if (m) {
       var y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
@@ -11603,7 +11679,7 @@
   function matchField(text) {
     var t = String(text || '').toLowerCase().replace(/\s+/g, '');
     if (!t) { return null; }
-    var fields = ['name', 'phone', 'division', 'course', 'siblingDiscount', 'className', 'attendCount', 'firstRegDate', 'tuitionDate', 'belt', 'pausedDate', 'pauseReason', 'status'];
+    var fields = ['name', 'phone', 'division', 'course', 'siblingDiscount', 'className', 'attendCount', 'firstRegDate', 'birthDate', 'tconId', 'tuitionDate', 'belt', 'pausedDate', 'pauseReason', 'status'];
     for (var i = 0; i < fields.length; i++) {
       var f = fields[i];
       var keys = HEADER_KEYS[f];
@@ -11687,6 +11763,8 @@
         pausedDate: normalizeImportDate(pausedRaw) || (status === 'paused' ? todayKey() : ''),
         pauseReason: reasonRaw.trim().slice(0, 60),
         firstRegDate: normalizeImportDate(cellOf('firstRegDate')),
+        birthDate: normalizeBirthDate(cellOf('birthDate')),
+        tconId: normalizeTconId(cellOf('tconId')),
         tuitionDay: normalizeImportDay(cellOf('tuitionDate'))
       });
     }
@@ -11798,9 +11876,15 @@
             else if (!isDateKey(hit.pausedDate)) { hit.pausedDate = todayKey(); }
             if (s.pauseReason) { hit.pauseReason = s.pauseReason; }
           }
-          // 첫 등록일·원비 날짜는 비어 있을 때만 채운다(직접 고친 값을 덮지 않음)
+          // 첫 등록일·생년월일·티콘 ID·원비 날짜는 비어 있을 때만 채운다(직접 고친 값을 덮지 않음)
           if (!isDateKey(hit.firstRegDate) && isDateKey(s.firstRegDate)) {
             hit.firstRegDate = s.firstRegDate;
+          }
+          if (!isDateKey(hit.birthDate) && isDateKey(s.birthDate)) {
+            hit.birthDate = s.birthDate;
+          }
+          if (!String(hit.tconId || '').trim() && s.tconId) {
+            hit.tconId = s.tconId;
           }
           if (!tuitionDayOf(hit) && tuitionDayOf(s)) {
             hit.tuitionDay = tuitionDayOf(s);
@@ -11826,10 +11910,11 @@
   }
 
   function downloadSampleCSV() {
-    var lines = ['이름,부서,수업,띠,보호자 연락처,누적 출석,첫 등록일,원비 날짜,형제할인'];
+    var lines = ['이름,부서,수업,띠,보호자 연락처,누적 출석,첫 등록일,원비 날짜,생년월일,티콘 ID,형제할인'];
     SAMPLE_STUDENTS.forEach(function (s) {
       lines.push([s.name, s.division || '', s.course || '', s.belt, s.phone, s.attendCount || 0,
-        s.firstRegDate || '', tuitionDayOf(s) ? dayLabel(tuitionDayOf(s)) : '', s.siblingDiscount ? 'Y' : ''].join(','));
+        s.firstRegDate || '', tuitionDayOf(s) ? dayLabel(tuitionDayOf(s)) : '',
+        s.birthDate || '', s.tconId || '', s.siblingDiscount ? 'Y' : ''].join(','));
     });
     var csv = '\uFEFF' + lines.join('\r\n');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -12667,6 +12752,37 @@
         toast(fs.name + ' · 첫 등록일 ' + fs.firstRegDate + ' 저장');
         return;
       }
+      /* 국기원 심사접수용 — 생년월일 · 티콘 ID (국기원 심사 표와 양방향) */
+      var bt = t.closest('[data-stubirth]');
+      if (bt) {
+        var bs = byId(bt.getAttribute('data-stubirth'));
+        if (!bs) { return; }
+        var bRaw = String(bt.value || '').trim();
+        var bVal = normalizeBirthDate(bRaw);
+        if (bRaw && !bVal) {
+          renderStudentsTable();
+          toast(bs.name + ' 관원 생년월일을 다시 확인해 주세요. (예: 2016-05-12)');
+          return;
+        }
+        bs.birthDate = bVal;
+        saveStudents();
+        renderStudentsTable();
+        renderGukgiwon();
+        toast(bs.name + ' · 생년월일 ' + (bVal ? '저장' : '비움'));
+        return;
+      }
+      var tc = t.closest('[data-stutcon]');
+      if (tc) {
+        var cs = byId(tc.getAttribute('data-stutcon'));
+        if (!cs) { return; }
+        var cVal = normalizeTconId(tc.value);
+        cs.tconId = cVal;
+        saveStudents();
+        renderStudentsTable();
+        renderGukgiwon();
+        toast(cs.name + ' · 티콘 ID ' + (cVal ? '저장' : '비움'));
+        return;
+      }
       var td = t.closest('[data-stutdate]');
       if (td) {
         var ts = byId(td.getAttribute('data-stutdate'));
@@ -12846,6 +12962,24 @@
       var field = f.getAttribute('data-gk');
       var val = f.value;
       if (field === 'gukStatus' && !GK_STATUS[val]) { val = 'none'; }
+      /* 생년월일 · 티콘 ID — 원생 관리 명단과 같은 값을 바로 저장(양방향) */
+      if (field === 'birthDate' || field === 'tconId') {
+        var rawIn = String(val == null ? '' : val).trim();
+        var normIn = (field === 'birthDate') ? normalizeBirthDate(rawIn) : normalizeTconId(rawIn);
+        if (field === 'birthDate' && rawIn && !normIn) {
+          renderGukgiwon();
+          toast(s.name + ' 관원 생년월일을 다시 확인해 주세요. (예: 2016-05-12)');
+          return;
+        }
+        s[field] = normIn;
+        saveStudents();
+        renderGukgiwon();
+        renderStudentsTable();
+        renderKioskInfo();
+        renderLog();
+        toast(s.name + ' · ' + (field === 'birthDate' ? '생년월일 ' : '티콘 ID ') + (normIn ? '저장' : '비움'));
+        return;
+      }
       if (field === 'grade') {
         // 급수: 목록에서 고른 유품자·일반 급수를 student.grade 하나에 저장한다 (미지정이면 띠 기준 자동값)
         val = String(val == null ? '' : val).trim().slice(0, 12);
@@ -13720,6 +13854,10 @@
     },
     studentInfo: {
       firstReg: firstRegOf,
+      birth: birthOf,
+      tcon: tconOf,
+      normalizeBirth: normalizeBirthDate,
+      normalizeTcon: normalizeTconId,
       tuitionDay: tuitionDayOf,
       dayLabel: dayLabel,
       dateForDay: tuitionDateForDay,
