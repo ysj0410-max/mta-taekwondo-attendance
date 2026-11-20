@@ -766,6 +766,79 @@
   textarea.cs-text{height:auto; min-height:104px; padding:10px 12px; line-height:1.55; resize:vertical}
   .cs-actions{display:flex; gap:8px; align-items:center; margin-top:2px; flex-wrap:wrap}
 
+  /* 🚌 차량 운행 스케줄표 */
+  .sh-filters{display:flex; align-items:center; gap:7px; flex-wrap:wrap; padding:0 12px 11px}
+  .sh-filters .input{height:34px; flex:0 1 240px; min-width:150px; padding:0 11px; font-size:12px; border-radius:10px}
+  .sh-list{padding:0 12px 12px; display:flex; flex-direction:column; gap:10px}
+  .sh-list:empty{display:none}
+  .sh-row{border:1px solid #e3e9f3; border-radius:13px; background:#fff; padding:10px 11px; border-left:5px solid #d7dee9}
+  /* 부별 바탕색: 연한 파스텔 + 진한 글씨(#1b2537)가 어디서나 선명하게 */
+  .sh-row.sh-p1{background:#f2f4f8; border-left-color:#94a3b8}
+  .sh-row.sh-p2{background:#e9f3ff; border-left-color:#2f80d8}
+  .sh-row.sh-p3{background:#e6f8f0; border-left-color:#159d77}
+  .sh-row.sh-p4{background:#fdf7dd; border-left-color:#c79a12}
+  .sh-row.sh-p5{background:#ffefe4; border-left-color:#e07b3a}
+  .sh-row.sh-p6{background:#f2ecfd; border-left-color:#7c5cd0}
+  .sh-row.sh-p7{background:#fde9f1; border-left-color:#c74b83}
+  .sh-row.sh-pnone{background:#fff; border-left-color:#d7dee9}
+  .sh-row .sh-lbl{color:#5a6880}
+  .sh-row .input, .sh-row select.input{background:#fff}
+  .sh-grid{display:grid; gap:8px; align-items:start; grid-template-columns:220px 126px minmax(130px,1fr) minmax(175px,1.1fr) minmax(110px,.75fr) auto}
+  .sh-cell{min-width:0; display:flex; flex-direction:column; gap:4px}
+  .sh-lbl{font-size:10.5px; font-weight:800; color:#8492a8; white-space:nowrap}
+  .sh-lbl b{color:#33415c}
+  .sh-partbox{display:flex; gap:4px; min-width:0}
+  .sh-part{width:78px; flex:0 0 78px; height:34px; font-size:12px; font-weight:800; padding:0 2px}
+  .sh-time{flex:1 1 132px; min-width:132px; height:34px; font-weight:900; font-variant-numeric:tabular-nums; padding:0 5px; font-size:12.5px}
+  .sh-kind{display:flex; gap:4px}
+  .sh-kbtn{flex:1 1 0; border:1.5px solid #dde3ee; background:#fbfcfe; color:#3a475f; border-radius:9px; padding:7px 4px; font-weight:800; font-size:11.5px; cursor:pointer; white-space:nowrap}
+  .sh-kbtn.pick.active{background:#e9f7ef; border-color:#12a871; color:#0b7a55}
+  .sh-kbtn.drop.active{background:#eaf1ff; border-color:#2f6fed; color:#155e9c}
+  .sh-cell .input{height:34px; font-size:12.5px; min-width:0}
+  .sh-tools{display:flex; flex-direction:column; gap:3px; align-items:stretch}
+  .sh-tools .btn{padding:3px 8px; font-size:11px; line-height:1.15}
+  .sh-rchips{display:flex; flex-wrap:wrap; gap:5px}
+  .sh-rchip{display:inline-flex; align-items:center; gap:5px; border:1px solid #dbe4f2; background:#f5f8fd; border-radius:999px; padding:3px 5px 3px 10px; font-size:12px; font-weight:800; color:#1b2a5b}
+  .sh-rchip button{border:0; background:#e3e9f4; color:#5b6b85; width:18px; height:18px; border-radius:50%; font-weight:900; font-size:11px; line-height:1; cursor:pointer; padding:0}
+  .sh-rempty{font-size:11.5px; color:#98a2b3; font-weight:700; padding:2px 0}
+  .sh-radd{height:32px; font-size:12px}
+  .sh-picks{display:flex; flex-wrap:wrap; gap:5px; margin-top:5px}
+  .sh-picks:empty{display:none}
+  .sh-empty{padding:30px 12px; text-align:center; color:#98a2b3; font-size:13px; line-height:1.65}
+  .sh-empty b{color:#33415c}
+  .sh-print{display:none}
+  @media print{
+    .sh-screen{display:none !important}
+    #toast, #banner, #modal-root{display:none !important}
+    .sh-print{display:block !important; color:#000; padding:0 6mm}
+    .sh-print-title{font-size:19pt; font-weight:900; text-align:center; margin:0 0 3mm; letter-spacing:-.4px}
+    .sh-print-meta{font-size:9.5pt; color:#333; text-align:center; margin:0 0 5mm}
+    .sh-print-table{width:100%; border-collapse:collapse; font-size:10pt; table-layout:fixed}
+    .sh-print-table thead{display:table-header-group}
+    .sh-print-table th, .sh-print-table td{border:1px solid #555; padding:4px 6px; vertical-align:top; text-align:left; word-break:break-word}
+    .sh-print-table th{background:#eef1f6 !important; text-align:center; font-weight:900; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+    .sh-print-table td.c{text-align:center; white-space:nowrap}
+    .sh-print-table td.riders{line-height:1.5}
+    .sh-print-table tr{break-inside:avoid; page-break-inside:avoid}
+    .sh-print-table{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
+    .sh-print-table tr.sh-p1 td{background:#f2f4f8 !important}
+    .sh-print-table tr.sh-p2 td{background:#e9f3ff !important}
+    .sh-print-table tr.sh-p3 td{background:#e6f8f0 !important}
+    .sh-print-table tr.sh-p4 td{background:#fdf7dd !important}
+    .sh-print-table tr.sh-p5 td{background:#ffefe4 !important}
+    .sh-print-table tr.sh-p6 td{background:#f2ecfd !important}
+    .sh-print-table tr.sh-p7 td{background:#fde9f1 !important}
+    .sh-print-table tr.sh-p1 td:first-child{border-left:3px solid #94a3b8}
+    .sh-print-table tr.sh-p2 td:first-child{border-left:3px solid #2f80d8}
+    .sh-print-table tr.sh-p3 td:first-child{border-left:3px solid #159d77}
+    .sh-print-table tr.sh-p4 td:first-child{border-left:3px solid #c79a12}
+    .sh-print-table tr.sh-p5 td:first-child{border-left:3px solid #e07b3a}
+    .sh-print-table tr.sh-p6 td:first-child{border-left:3px solid #7c5cd0}
+    .sh-print-table tr.sh-p7 td:first-child{border-left:3px solid #c74b83}
+    .sh-print-table thead th{background:#e4e9f2 !important}
+    .sh-print-foot{margin-top:4mm; font-size:9pt; color:#444; display:flex; justify-content:space-between; gap:8mm}
+  }
+
   /* ---------- 📈 수납 리포트 ---------- */
   .rp-mlist{display:flex; flex-direction:column; gap:9px}
   .rp-mrow{display:flex; align-items:center; gap:9px; font-size:12.5px; font-weight:800; color:#33415c}
@@ -827,6 +900,11 @@
     .rp-mrow{gap:6px; font-size:12px}
     .rp-mrow .rp-mname{flex:0 0 62px}
     .rp-mrow .rp-pct{flex:0 0 34px}
+    .sh-fields{grid-template-columns:1fr}
+    .sh-filters .input{flex:1 1 100%}
+    .sh-grid{grid-template-columns:1fr; gap:9px}
+    .sh-tools{flex-direction:row; justify-content:flex-end}
+    .sh-tools .btn{padding:5px 11px; font-size:12px}
   }
 
   /* =====================================================================
@@ -1142,6 +1220,7 @@
           <button class="admin-tab" id="atab-monthly" data-atab="monthly">📅 월간 출석부</button>
           <button class="admin-tab" id="atab-tuition" data-atab="tuition">💳 원비 관리</button>
           <button class="admin-tab" id="atab-sms" data-atab="sms">📢 단체문자</button>
+          <button class="admin-tab" id="atab-shuttle" data-atab="shuttle">🚌 차량 운행</button>
           <button class="admin-tab" id="atab-counsel" data-atab="counsel">🗒️ 상담기록</button>
           <button class="admin-tab" id="atab-report" data-atab="report">📈 수납 리포트</button>
           <button class="admin-tab" id="atab-settings" data-atab="settings">🔐 관리자 계정</button>
@@ -2009,6 +2088,69 @@
             </div>
           </div>
         </div>
+        <div id="admin-shuttle" style="display:none">
+          <div class="sh-screen">
+            <div class="stats sh-stats">
+              <div class="stat"><div class="stat-label">🚌 전체 운행</div><div class="stat-val" id="sh-total">0<small>건</small></div><div class="tu-sub" id="sh-total-sub">등록된 스케줄</div></div>
+              <div class="stat in"><div class="stat-label">🔼 승차</div><div class="stat-val" id="sh-pick">0<small>건</small></div><div class="tu-sub">도장 → 목적지</div></div>
+              <div class="stat out"><div class="stat-label">🔽 하차</div><div class="stat-val" id="sh-drop">0<small>건</small></div><div class="tu-sub">목적지 → 도장</div></div>
+              <div class="stat absent"><div class="stat-label">👦 탑승 등록</div><div class="stat-val" id="sh-riders">0<small>명</small></div><div class="tu-sub">중복 없이 센 인원</div></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <h3>🚌 차량 운행 스케줄표</h3><div class="spacer"></div>
+                <span class="tiny-note" id="sh-note">-</span>
+                <button class="btn btn-sm" id="btn-sh-print" title="지금 보이는 스케줄을 A4로 인쇄합니다">🖨️ 인쇄</button>
+                <button class="btn btn-sm btn-primary" id="btn-sh-add">＋ 운행 추가</button>
+              </div>
+              <div class="promo-filters sh-filters" id="sh-filters">
+                <input class="input" id="sh-q" placeholder="🔍 목적지 · 원생 이름 · 비고 검색" autocomplete="off" aria-label="차량 운행 검색">
+                <button class="pchip active" data-shfilter="all" id="shf-all">전체</button>
+                <button class="pchip" data-shfilter="pick" id="shf-pick">🔼 승차</button>
+                <button class="pchip" data-shfilter="drop" id="shf-drop">🔽 하차</button>
+                <div class="spacer"></div>
+                <select class="input" id="sh-part" style="width:auto; min-width:104px" aria-label="몇시부 필터">
+                  <option value="all">전체 부</option>
+                  <option value="none">미지정</option>
+                  <option value="1부">1부</option>
+                  <option value="2부">2부</option>
+                  <option value="3부">3부</option>
+                  <option value="4부">4부</option>
+                  <option value="5부">5부</option>
+                  <option value="6부">6부</option>
+                  <option value="7부">7부</option>
+                </select>
+                <button class="btn btn-sm" id="btn-sh-sort">🕒 부·시간순 정렬</button>
+                <button class="btn btn-sm" id="btn-sh-csv">📥 스케줄 CSV</button>
+              </div>
+              <div class="sh-list" id="sh-list"></div>
+              <div class="panel-body" style="border-top:1px solid #eef1f6">
+                <div class="help" style="margin-top:0">
+                  시간·승차/하차·목적지·비고는 <b>화면에서 바로 고치면 즉시 저장</b>됩니다. 운행이 늘거나 줄면 <b>＋ 운행 추가</b>로 줄을 만들고, <b>▲▼</b>로 순서를 바꾸거나 <b>🕒 시간순 정렬</b>을 눌러 주세요.<br>
+                  원생은 이름·초성으로 <b>검색해 더하고</b>, 명단에 없는 이름은 그대로 입력한 뒤 <b>Enter</b>를 누르면 추가됩니다. <b>🖨️ 인쇄</b>를 누르면 차량에 비치할 스케줄표가 A4에 깔끔하게 나옵니다.<br>
+                  저장한 스케줄은 이 기기에 바로 담기고 <b>전체 백업(JSON)·구글 드라이브 자동 백업</b>에도 함께 들어갑니다.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 인쇄 전용 (화면에서는 보이지 않고 @media print 에서만 나타난다) -->
+          <div class="sh-print" id="sh-print">
+            <div class="sh-print-title" id="sh-print-title">경희대MTA태권도 차량운행 스케줄표</div>
+            <div class="sh-print-meta" id="sh-print-meta"></div>
+            <table class="sh-print-table">
+              <thead>
+                <tr>
+                  <th style="width:11mm">번호</th><th style="width:24mm">부 · 시간</th><th style="width:20mm">승차/하차</th>
+                  <th>목적지</th><th>원생</th><th>비고</th>
+                </tr>
+              </thead>
+              <tbody id="sh-print-body"></tbody>
+            </table>
+            <div class="sh-print-foot"><span id="sh-print-foot-left">경희대MTA태권도</span><span>차량 운행표는 도장·차량에 비치해 주세요</span></div>
+          </div>
+        </div>
         <div id="admin-counsel" style="display:none">
           <div class="cs-grid">
             <div class="panel">
@@ -2141,7 +2283,8 @@
     smsTemplates: 'tdk.smsTemplates.v1',
     admin: 'tdk.admin.v1',
     adminFace: 'tdk.adminFace.v1',
-    counsel: 'tdk.counsel.v1'
+    counsel: 'tdk.counsel.v1',
+    shuttle: 'tdk.shuttle.v1'
   };
 
   var SAMPLE_STUDENTS = [
@@ -2492,6 +2635,8 @@
     pausedUI: null,
     counsel: [],
     counselUI: null,
+    shuttle: [],
+    shuttleUI: null,
     admin: null,
     adminFace: null,
     adminAuthed: false
@@ -2732,6 +2877,8 @@
     app.smsTemplates = loadBulkTemplates();
     app.counsel = loadCounsel();
     app.counselUI = null;
+    app.shuttle = loadShuttle();
+    app.shuttleUI = null;
     app.admin = loadAdminAccount();
     app.adminFace = loadAdminFace();
     app.adminAuthed = false;
@@ -6495,7 +6642,7 @@
   }
 
   function setAdminTab(tab) {
-    var tabs = ['overview', 'students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'counsel', 'report', 'settings'];
+    var tabs = ['overview', 'students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'shuttle', 'counsel', 'report', 'settings'];
     if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
     app.adminTab = tab;
     tabs.forEach(function (t) {
@@ -6518,6 +6665,7 @@
     el('admin-tuition').style.display = tab === 'tuition' ? 'block' : 'none';
     el('admin-bulk-sms').style.display = tab === 'sms' ? 'block' : 'none';
     el('admin-paused').style.display = tab === 'paused' ? 'block' : 'none';
+    el('admin-shuttle').style.display = tab === 'shuttle' ? 'block' : 'none';
     el('admin-counsel').style.display = tab === 'counsel' ? 'block' : 'none';
     el('admin-report').style.display = tab === 'report' ? 'block' : 'none';
     el('admin-settings').style.display = tab === 'settings' ? 'block' : 'none';
@@ -6529,6 +6677,7 @@
     if (tab === 'sms') { renderBulkSms(true); }
     if (tab === 'paused') { renderPaused(true); }
     if (tab === 'counsel') { renderCounsel(); }
+    if (tab === 'shuttle') { renderShuttle(); }
     if (tab === 'report') { renderReport(true); }
   }
 
@@ -9782,6 +9931,598 @@
   }
 
   /* =========================================================
+     11-J. 차량 운행 스케줄표 (시간 · 승차/하차 · 목적지 · 원생 · 비고)
+     ---------------------------------------------------------
+     저장 구조
+       tdk.shuttle.v1 = [
+         { id, time:'HH:MM', kind:'pick'|'drop', dest, memo, riders:[{ id, name }] }
+       ]
+     · 배열 순서가 화면 순서 — ▲▼ 수동 이동, 🕒 시간순 정렬 버튼
+     · 계속 바뀌는 스케줄이라 화면에서 고치는 즉시 localStorage 에 저장한다
+     ========================================================= */
+  var SHUTTLE_KINDS = { pick: '승차', drop: '하차' };
+  /* 몇시부 — 새 운행은 앞 줄의 부를 이어받고, 필요하면 미지정·임의 값도 보관한다 */
+  var SHUTTLE_PARTS = ['1부', '2부', '3부', '4부', '5부', '6부', '7부'];
+
+  function normShuttlePart(v) {
+    var s = String(v == null ? '' : v).trim().slice(0, 12);
+    if (!s || s === '미지정' || s === '없음') { return ''; }
+    if (/^\d{1,2}$/.test(s)) { return s + '부'; }
+    return s;
+  }
+
+  function shuttlePartIndex(p) {
+    var m = String(p || '').match(/^(\d{1,2})부$/);
+    return m ? parseInt(m[1], 10) : 99;
+  }
+
+  function shuttlePartLabel(p) { return p || '미지정'; }
+
+  /* 부별 바탕색 — 글씨가 선명하게 읽히는 연한 파스텔 + 왼쪽 포인트 색 */
+  function shuttlePartClass(p) {
+    var i = shuttlePartIndex(p);
+    return (i >= 1 && i <= 7) ? ('sh-p' + i) : 'sh-pnone';
+  }
+
+  function normShuttleTime(v) {
+    var m = String(v == null ? '' : v).trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) { return ''; }
+    var h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+    if (isNaN(h) || isNaN(mi) || h > 23 || mi > 59) { return ''; }
+    return pad2(h) + ':' + pad2(mi);
+  }
+
+  function shuttleKindLabel(kind) { return kind === 'drop' ? '하차' : '승차'; }
+
+  function loadShuttle() {
+    var raw = readJSON(LS.shuttle, []);
+    var out = [];
+    if (!Array.isArray(raw)) { return out; }
+    raw.forEach(function (r) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) { return; }
+      var riders = [];
+      (Array.isArray(r.riders) ? r.riders : []).forEach(function (p) {
+        var nm = String(typeof p === 'string' ? p : ((p && p.name) || '')).trim().slice(0, 24);
+        var pid = typeof p === 'string' ? '' : String((p && p.id) || '');
+        if (!nm) { return; }
+        for (var i = 0; i < riders.length; i++) { if (riders[i].name === nm) { return; } }
+        riders.push({ id: pid, name: nm });
+      });
+      var row = {
+        id: String(r.id || uid('sh')),
+        time: normShuttleTime(r.time),
+        kind: r.kind === 'drop' ? 'drop' : 'pick',
+        part: normShuttlePart(r.part),
+        dest: String(r.dest == null ? '' : r.dest).trim().slice(0, 60),
+        memo: String(r.memo == null ? '' : r.memo).trim().slice(0, 80),
+        riders: riders
+      };
+      // 시간도 목적지도 원생도 없는 빈 줄은 보관하지 않는다
+      if (!row.time && !row.dest && !row.memo && !row.riders.length) { return; }
+      out.push(row);
+    });
+    return out;
+  }
+
+  function saveShuttle() {
+    writeJSON(LS.shuttle, app.shuttle || []);
+    if (typeof driveTouchData === 'function') { driveTouchData(); }
+  }
+
+  function ensureShuttleUI() {
+    if (!app.shuttleUI || typeof app.shuttleUI !== 'object' || Array.isArray(app.shuttleUI)) {
+      app.shuttleUI = { q: '', kind: 'all', part: 'all', picks: {} };
+    }
+    var u = app.shuttleUI;
+    if (typeof u.q !== 'string') { u.q = ''; }
+    if (u.kind !== 'pick' && u.kind !== 'drop') { u.kind = 'all'; }
+    if (typeof u.part !== 'string') { u.part = 'all'; }
+    if (!u.picks || typeof u.picks !== 'object' || Array.isArray(u.picks)) { u.picks = {}; }
+    return u;
+  }
+
+  function shuttleById(id) {
+    var list = app.shuttle || [];
+    for (var i = 0; i < list.length; i++) { if (list[i].id === id) { return list[i]; } }
+    return null;
+  }
+
+  function shuttleRidersText(r) {
+    return ((r && r.riders) || []).map(function (p) { return p.name; }).join(', ');
+  }
+
+  function shuttleSummary() {
+    var pick = 0, drop = 0, names = {};
+    (app.shuttle || []).forEach(function (r) {
+      if (r.kind === 'drop') { drop++; } else { pick++; }
+      (r.riders || []).forEach(function (p) { names[p.name] = true; });
+    });
+    return { total: (app.shuttle || []).length, pick: pick, drop: drop, riders: Object.keys(names).length };
+  }
+
+  /* 현재 필터(전체/승차/하차 + 검색)에 맞는 줄 — 화면·인쇄·CSV가 같은 목록을 쓴다 */
+  function shuttleRows() {
+    var u = ensureShuttleUI();
+    var q = String(u.q || '').replace(/\s+/g, '');
+    return (app.shuttle || []).filter(function (r) {
+      if (u.kind !== 'all' && r.kind !== u.kind) { return false; }
+      if (u.part !== 'all') {
+        if (u.part === 'none') { if (r.part) { return false; } }
+        else if ((r.part || '') !== u.part) { return false; }
+      }
+      if (!q) { return true; }
+      var hay = [r.part, r.time, shuttleKindLabel(r.kind), r.dest, r.memo, shuttleRidersText(r)].join(' ').replace(/\s+/g, '');
+      if (hay.indexOf(q) !== -1) { return true; }
+      if (isChosungQuery(q)) {
+        for (var i = 0; i < r.riders.length; i++) {
+          if (toChosung(String(r.riders[i].name).replace(/\s+/g, '')).indexOf(q) !== -1) { return true; }
+        }
+      }
+      return false;
+    });
+  }
+
+  function renderShuttleStats() {
+    var s = shuttleSummary();
+    var partsUsed = {};
+    (app.shuttle || []).forEach(function (r) { if (r.part) { partsUsed[r.part] = true; } });
+    if (el('sh-total')) { el('sh-total').innerHTML = s.total + '<small>건</small>'; }
+    if (el('sh-pick')) { el('sh-pick').innerHTML = s.pick + '<small>건</small>'; }
+    if (el('sh-drop')) { el('sh-drop').innerHTML = s.drop + '<small>건</small>'; }
+    if (el('sh-riders')) { el('sh-riders').innerHTML = s.riders + '<small>명</small>'; }
+    if (el('sh-total-sub')) {
+      el('sh-total-sub').textContent = s.total
+        ? ('부 ' + Object.keys(partsUsed).length + '개 · 승차 ' + s.pick + ' · 하차 ' + s.drop)
+        : '등록된 스케줄';
+    }
+  }
+
+  function shuttleEmptyHtml() {
+    return '<div class="sh-empty">🚌 아직 운행 스케줄이 없어요.<br>' +
+      '<b>＋ 운행 추가</b>를 눌러 <b>시간 · 승차/하차 · 목적지</b>를 적고 원생을 더하면 끝이에요.<br>' +
+      '적은 내용은 이 기기에 바로 저장되고 백업에도 함께 담깁니다.</div>';
+  }
+
+  function shuttlePartOptions(cur) {
+    var list = [''].concat(SHUTTLE_PARTS);
+    var c = normShuttlePart(cur);
+    if (c && list.indexOf(c) === -1) { list.push(c); }
+    return list.map(function (p) {
+      return '<option value="' + esc(p) + '"' + (p === c ? ' selected' : '') + '>' + esc(shuttlePartLabel(p)) + '</option>';
+    }).join('');
+  }
+
+  function shuttleRowHtml(r) {
+    var u = ensureShuttleUI();
+    var q = String(u.picks[r.id] || '');
+    var chips = (r.riders || []).map(function (p) {
+      return '<span class="sh-rchip">' + esc(p.name) +
+        '<button data-shrm="' + esc(r.id) + '" data-shname="' + esc(p.name) + '" title="빼기" aria-label="' + esc(p.name) + ' 빼기">×</button></span>';
+    }).join('');
+    if (!chips) { chips = '<span class="sh-rempty">아직 없음 — 아래에서 이름을 더해 주세요</span>'; }
+    return '<div class="sh-row ' + shuttlePartClass(r.part) + '" data-shrow="' + esc(r.id) + '">' +
+      '<div class="sh-grid">' +
+      '<div class="sh-cell sh-c-part"><span class="sh-lbl">몇시부</span>' +
+      '<div class="sh-partbox">' +
+      '<select class="input sh-part" data-shfield="part" data-shid="' + esc(r.id) + '" aria-label="몇시부">' + shuttlePartOptions(r.part) + '</select>' +
+      '<input class="input sh-time" type="time" value="' + esc(r.time) + '" data-shfield="time" data-shid="' + esc(r.id) + '" aria-label="운행 시간">' +
+      '</div></div>' +
+      '<div class="sh-cell sh-c-kind"><span class="sh-lbl">승차/하차</span>' +
+      '<div class="sh-kind">' +
+      '<button class="sh-kbtn pick' + (r.kind === 'pick' ? ' active' : '') + '" data-shkind="pick" data-shid="' + esc(r.id) + '">🔼 승차</button>' +
+      '<button class="sh-kbtn drop' + (r.kind === 'drop' ? ' active' : '') + '" data-shkind="drop" data-shid="' + esc(r.id) + '">🔽 하차</button>' +
+      '</div></div>' +
+      '<div class="sh-cell"><span class="sh-lbl">목적지</span>' +
+      '<input class="input" value="' + esc(r.dest) + '" data-shfield="dest" data-shid="' + esc(r.id) + '" placeholder="예: ○○초 정문 · △△아파트" aria-label="목적지"></div>' +
+      '<div class="sh-cell sh-c-riders"><span class="sh-lbl">👦 원생 <b>' + r.riders.length + '명</b></span>' +
+      '<div class="sh-rchips">' + chips + '</div>' +
+      '<input class="input sh-radd" value="' + esc(q) + '" data-shpick="' + esc(r.id) + '" placeholder="➕ 이름·초성 검색 후 Enter" autocomplete="off" aria-label="탑승 원생 추가">' +
+      '<div class="sh-picks cs-picks" id="sh-picks-' + esc(r.id) + '"></div></div>' +
+      '<div class="sh-cell"><span class="sh-lbl">비고</span>' +
+      '<input class="input" value="' + esc(r.memo) + '" data-shfield="memo" data-shid="' + esc(r.id) + '" placeholder="예: 월수금만 · 정문 앞 대기" aria-label="비고"></div>' +
+      '<div class="sh-tools">' +
+      '<button class="btn btn-sm btn-ghost" data-shup="' + esc(r.id) + '" title="위로 옮기기" aria-label="위로 옮기기">▲</button>' +
+      '<button class="btn btn-sm btn-ghost" data-shdown="' + esc(r.id) + '" title="아래로 옮기기" aria-label="아래로 옮기기">▼</button>' +
+      '<button class="btn btn-sm btn-danger" data-shdel="' + esc(r.id) + '" title="이 운행 지우기" aria-label="이 운행 지우기">🗑️</button>' +
+      '</div>' +
+      '</div></div>';
+  }
+
+  /* 한 운행 줄의 원생 후보 칩 — 입력칸은 건드리지 않고 후보 상자만 다시 그린다 */
+  function renderShuttlePicks(rowId) {
+    var r = shuttleById(rowId);
+    var box = el('sh-picks-' + rowId);
+    if (!r || !box) { return; }
+    var u = ensureShuttleUI();
+    var q = String(u.picks[rowId] || '').trim();
+    if (!q) { box.innerHTML = ''; return; }
+    var have = {};
+    (r.riders || []).forEach(function (p) { have[p.name] = true; });
+    var typed = q.replace(/\s+/g, '');
+    var exact = null, list = [];
+    (app.students || []).forEach(function (s) {
+      if (String(s.name).replace(/\s+/g, '') === typed) { exact = s; }
+      if (!have[s.name] && matchSearch(s, q)) { list.push(s); }
+    });
+    list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); });
+    var html = list.slice(0, 8).map(function (s) {
+      return '<button class="cs-pick" data-shadd="' + esc(rowId) + '" data-shsid="' + esc(s.id) + '" data-shname="' + esc(s.name) + '">' +
+        esc(s.name) + (isPaused(s) ? ' · 휴권' : '') + '</button>';
+    }).join('');
+    if (!exact) {
+      html += '<button class="cs-pick" data-shaddfree="' + esc(rowId) + '" data-shname="' + esc(q.slice(0, 24)) + '">➕ \'' + esc(q.slice(0, 24)) + '\' 직접 추가</button>';
+    }
+    box.innerHTML = html;
+  }
+
+  function renderShuttle() {
+    var u = ensureShuttleUI();
+    renderShuttleStats();
+    ['all', 'pick', 'drop'].forEach(function (k) {
+      var b = el('shf-' + k);
+      if (b) { b.classList.toggle('active', u.kind === k); }
+    });
+    if (el('sh-q') && document.activeElement !== el('sh-q') && el('sh-q').value !== (u.q || '')) {
+      el('sh-q').value = u.q || '';
+    }
+    if (el('sh-part') && el('sh-part').value !== (u.part || 'all')) { el('sh-part').value = u.part || 'all'; }
+    var rows = shuttleRows();
+    var box = el('sh-list');
+    if (box) {
+      box.innerHTML = rows.length ? rows.map(shuttleRowHtml).join('') : shuttleEmptyHtml();
+    }
+    (app.shuttle || []).forEach(function (r) { renderShuttlePicks(r.id); });
+    if (el('sh-note')) {
+      el('sh-note').textContent = rows.length === (app.shuttle || []).length
+        ? '총 ' + rows.length + '건 · 저장됨'
+        : rows.length + '건 / 전체 ' + (app.shuttle || []).length + '건';
+    }
+    renderShuttlePrint();
+  }
+
+  function addShuttleRow(opts) {
+    opts = opts || {};
+    var last = (app.shuttle || [])[app.shuttle.length - 1] || null;
+    var row = {
+      id: uid('sh'),
+      // 연속된 운행을 빨리 적을 수 있게 앞 줄의 시간·부에서 시작한다
+      time: normShuttleTime(opts.time) || (last ? last.time : ''),
+      kind: opts.kind === 'drop' ? 'drop' : 'pick',
+      part: normShuttlePart(opts.part) || (last ? last.part : ''),
+      dest: String(opts.dest == null ? '' : opts.dest).trim().slice(0, 60),
+      memo: String(opts.memo == null ? '' : opts.memo).trim().slice(0, 80),
+      riders: []
+    };
+    if (!app.shuttle) { app.shuttle = []; }
+    app.shuttle.push(row);
+    saveShuttle();
+    renderShuttle();
+    toast('운행을 추가했어요 · 시간·목적지를 적고 원생을 더해 주세요');
+    return row;
+  }
+
+  function setShuttleField(id, field, value) {
+    var r = shuttleById(id);
+    if (!r) { return null; }
+    if (field === 'time') {
+      r.time = normShuttleTime(value);
+      if (String(value == null ? '' : value).trim() && !r.time) { toast('시간은 00:00 ~ 23:59 형식으로 넣어 주세요.'); }
+    } else if (field === 'dest') {
+      r.dest = String(value == null ? '' : value).trim().slice(0, 60);
+    } else if (field === 'memo') {
+      r.memo = String(value == null ? '' : value).trim().slice(0, 80);
+    } else if (field === 'part') {
+      r.part = normShuttlePart(value);
+    } else {
+      return null;
+    }
+    saveShuttle();
+    renderShuttleStats();
+    renderShuttlePrint();
+    return r;
+  }
+
+  function setShuttleKind(id, kind) {
+    var r = shuttleById(id);
+    if (!r) { return null; }
+    r.kind = kind === 'drop' ? 'drop' : 'pick';
+    saveShuttle();
+    renderShuttle();
+    return r;
+  }
+
+  function addShuttleRider(rowId, rider) {
+    var r = shuttleById(rowId);
+    if (!r) { return null; }
+    var obj = (rider && typeof rider === 'object') ? rider : { name: rider };
+    var name = String((obj && obj.name) == null ? '' : obj.name).trim().slice(0, 24);
+    if (!name) { return null; }
+    var sid = String((obj && obj.id) || '');
+    var existing = null;
+    (r.riders || []).forEach(function (p) { if (p.name === name) { existing = p; } });
+    if (existing) {
+      toast(name + '은(는) 이미 이 운행에 들어 있어요');
+      return existing;
+    }
+    r.riders.push({ id: sid, name: name });
+    var u = ensureShuttleUI();
+    u.picks[rowId] = '';
+    saveShuttle();
+    renderShuttle();
+    toast(r.time ? r.time + ' ' + shuttleKindLabel(r.kind) + ' · ' + name + ' 추가' : name + ' 추가');
+    return r.riders[r.riders.length - 1];
+  }
+
+  function removeShuttleRider(rowId, name) {
+    var r = shuttleById(rowId);
+    if (!r) { return false; }
+    var nm = String(name == null ? '' : name).trim();
+    var before = r.riders.length;
+    r.riders = r.riders.filter(function (p) { return p.name !== nm; });
+    if (r.riders.length === before) { return false; }
+    saveShuttle();
+    renderShuttle();
+    toast(nm + '을(를) 뺐어요');
+    return true;
+  }
+
+  function moveShuttleRow(id, dir) {
+    var list = app.shuttle || [];
+    var i = -1;
+    for (var k = 0; k < list.length; k++) { if (list[k].id === id) { i = k; } }
+    if (i < 0) { return false; }
+    var j = i + (dir < 0 ? -1 : 1);
+    if (j < 0 || j >= list.length) { return false; }
+    var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+    saveShuttle();
+    renderShuttle();
+    return true;
+  }
+
+  function sortShuttleByTime() {
+    if (!app.shuttle || !app.shuttle.length) { toast('정리할 운행이 없어요'); return false; }
+    app.shuttle.sort(function (a, b) {
+      var pa = shuttlePartIndex(a.part), pb = shuttlePartIndex(b.part);
+      if (pa !== pb) { return pa - pb; }
+      var x = a.time || '99:99', y = b.time || '99:99';
+      if (x !== y) { return x < y ? -1 : 1; }
+      if (a.kind !== b.kind) { return a.kind === 'pick' ? -1 : 1; }
+      return 0;
+    });
+    saveShuttle();
+    renderShuttle();
+    toast('부·시간 순으로 정리했어요');
+    return true;
+  }
+
+  function deleteShuttleRow(id) {
+    var r = shuttleById(id);
+    if (!r) { return Promise.resolve(false); }
+    return openModal({
+      title: '이 운행을 지울까요?',
+      sub: (r.time || '시간 미정') + ' · ' + shuttleKindLabel(r.kind) + ' · ' + (r.dest || '목적지 없음'),
+      body: '<div class="help" style="margin-top:0">' + (r.riders.length ? '탑승 원생: ' + esc(shuttleRidersText(r)) : '탑승 원생 없음') +
+        (r.memo ? '<br>비고: ' + esc(r.memo) : '') + '</div>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '지우기', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return false; }
+      app.shuttle = (app.shuttle || []).filter(function (x) { return x.id !== id; });
+      var u = ensureShuttleUI();
+      delete u.picks[id];
+      saveShuttle();
+      renderShuttle();
+      toast('운행을 지웠어요');
+      return true;
+    });
+  }
+
+  function shuttleCSVText(list) {
+    var lines = [['번호', '부', '시간', '승차/하차', '목적지', '원생', '비고']];
+    (list || []).forEach(function (r, i) {
+      lines.push([i + 1, shuttlePartLabel(r.part), r.time || '', shuttleKindLabel(r.kind), r.dest || '', shuttleRidersText(r), r.memo || '']);
+    });
+    return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
+  }
+
+  function downloadShuttleCSV() {
+    var rows = shuttleRows();
+    if (!rows.length) {
+      toast((app.shuttle || []).length ? '조건에 맞는 운행이 없어요. 검색어나 승차/하차 필터를 바꿔 주세요.' : '내려받을 운행 스케줄이 없어요.');
+      return false;
+    }
+    if (downloadFile('차량운행_' + todayKey() + '.csv', shuttleCSVText(rows), 'text/csv;charset=utf-8')) {
+      toast('차량 운행 ' + rows.length + '건을 내려받았어요');
+      return true;
+    }
+    return false;
+  }
+
+  /* ---------------- 인쇄용 스케줄표 (지금 화면에 보이는 필터 그대로) ---------------- */
+  function shuttlePrintScope() {
+    var u = ensureShuttleUI();
+    var label = u.kind === 'pick' ? '승차만' : (u.kind === 'drop' ? '하차만' : '전체');
+    if (u.part && u.part !== 'all') { label += ' · ' + (u.part === 'none' ? '미지정' : u.part); }
+    return label;
+  }
+
+  function renderShuttlePrint() {
+    var rows = shuttleRows();
+    var body = el('sh-print-body');
+    if (body) {
+      body.innerHTML = rows.length ? rows.map(function (r, i) {
+        return '<tr class="' + shuttlePartClass(r.part) + '">' +
+          '<td class="c">' + (i + 1) + '</td>' +
+          '<td class="c">' + esc(shuttlePartLabel(r.part)) + '<br>' + esc(r.time || '-') + '</td>' +
+          '<td class="c">' + shuttleKindLabel(r.kind) + '</td>' +
+          '<td>' + esc(r.dest || '-') + '</td>' +
+          '<td class="riders">' + esc(shuttleRidersText(r) || '-') + '</td>' +
+          '<td>' + esc(r.memo || '') + '</td>' +
+          '</tr>';
+      }).join('') : '<tr><td class="c" colspan="6">등록된 운행이 없습니다.</td></tr>';
+    }
+    var now = new Date();
+    var dojo = (app.settings && app.settings.dojoName) ? app.settings.dojoName : '경희대MTA태권도';
+    if (el('sh-print-title')) { el('sh-print-title').textContent = dojo + ' 차량운행 스케줄표'; }
+    if (el('sh-print-meta')) {
+      el('sh-print-meta').textContent = '인쇄 ' + fmtDateKorean(now) + ' ' + fmtKoreanTime(now) +
+        ' · ' + shuttlePrintScope() + ' ' + rows.length + '건' +
+        (String(ensureShuttleUI().q || '').trim() ? ' · 검색 "' + String(ensureShuttleUI().q).trim() + '"' : '');
+    }
+    if (el('sh-print-foot-left')) { el('sh-print-foot-left').textContent = dojo; }
+  }
+
+  function printShuttle() {
+    renderShuttle();
+    renderShuttlePrint();
+    if (typeof window !== 'undefined' && window && typeof window.print === 'function') {
+      window.print();
+      return true;
+    }
+    toast('이 브라우저에서는 인쇄 창을 열 수 없어요.');
+    return false;
+  }
+
+  /* 백업 복원: 관원 id가 달라도 이름이 같으면 다시 연결한다 (모르는 이름은 이름만 보관) */
+  function remapShuttleBackup(raw, students) {
+    var list = Array.isArray(raw) ? raw : [];
+    var byOldId = {}, byName = {};
+    (students || []).forEach(function (s) {
+      if (!s || !s.name) { return; }
+      if (s.id) { byOldId[String(s.id)] = s; }
+      var nm = String(s.name).trim();
+      if (nm && !byName[nm]) { byName[nm] = s; }
+    });
+    var out = [];
+    list.forEach(function (r) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) { return; }
+      var riders = [];
+      var seen = {};
+      (Array.isArray(r.riders) ? r.riders : []).forEach(function (p) {
+        var nm = String(typeof p === 'string' ? p : ((p && p.name) || '')).trim().slice(0, 24);
+        if (!nm || seen[nm]) { return; }
+        seen[nm] = true;
+        var m = byOldId[String((p && p.id) || '')] || byName[nm] || null;
+        riders.push({ id: m ? String(m.id) : '', name: m ? String(m.name) : nm });
+      });
+      var row = {
+        id: String(r.id || uid('sh')),
+        time: normShuttleTime(r.time),
+        kind: r.kind === 'drop' ? 'drop' : 'pick',
+        part: normShuttlePart(r.part),
+        dest: String(r.dest == null ? '' : r.dest).trim().slice(0, 60),
+        memo: String(r.memo == null ? '' : r.memo).trim().slice(0, 80),
+        riders: riders
+      };
+      if (!row.time && !row.dest && !row.memo && !row.riders.length) { return; }
+      out.push(row);
+    });
+    return out;
+  }
+
+  function onShuttleListClick(e) {
+    var t = e && e.target;
+    if (!t || !t.closest) { return; }
+    var k = t.closest('[data-shkind]');
+    if (k) { setShuttleKind(k.getAttribute('data-shid'), k.getAttribute('data-shkind')); return; }
+    var up = t.closest('[data-shup]');
+    if (up) { moveShuttleRow(up.getAttribute('data-shup'), -1); return; }
+    var dn = t.closest('[data-shdown]');
+    if (dn) { moveShuttleRow(dn.getAttribute('data-shdown'), 1); return; }
+    var del = t.closest('[data-shdel]');
+    if (del) { deleteShuttleRow(del.getAttribute('data-shdel')); return; }
+    var rm = t.closest('[data-shrm]');
+    if (rm) { removeShuttleRider(rm.getAttribute('data-shrm'), rm.getAttribute('data-shname')); return; }
+    var add = t.closest('[data-shadd]');
+    if (add) {
+      addShuttleRider(add.getAttribute('data-shadd'), {
+        id: add.getAttribute('data-shsid') || '',
+        name: add.getAttribute('data-shname') || ''
+      });
+      return;
+    }
+    var free = t.closest('[data-shaddfree]');
+    if (free) { addShuttleRider(free.getAttribute('data-shaddfree'), { name: free.getAttribute('data-shname') || '' }); }
+  }
+
+  function onShuttleListInput(e, changeOnly) {
+    var t = e && e.target;
+    if (!t || !t.closest) { return; }
+    var f = t.closest('[data-shfield]');
+    if (f) {
+      var field = f.getAttribute('data-shfield');
+      setShuttleField(f.getAttribute('data-shid'), field, t.value);
+      // 부가 바뀌면 줄 바탕색이 바로 따라오도록 그 줄을 다시 그린다 (글씨 입력 중인 칸은 건드리지 않는다)
+      if (field === 'part') { renderShuttle(); }
+      return;
+    }
+    // blur 때 오는 change 로 후보 칩을 다시 그리면, 누르려던 칩이 사라져 클릭이 먹지 않는다.
+    // 후보 칩은 글자를 칠 때(input)만 새로 그린다.
+    if (changeOnly) { return; }
+    var pk = t.closest('[data-shpick]');
+    if (pk) {
+      var id = pk.getAttribute('data-shpick');
+      ensureShuttleUI().picks[id] = String(t.value == null ? '' : t.value);
+      renderShuttlePicks(id);
+    }
+  }
+
+  function onShuttleListKey(e) {
+    var t = e && e.target;
+    if (!t || !t.closest) { return; }
+    var pk = t.closest('[data-shpick]');
+    if (!pk) { return; }
+    if (e.key !== 'Enter') { return; }
+    if (e.preventDefault) { e.preventDefault(); }
+    var id = pk.getAttribute('data-shpick');
+    var name = String(ensureShuttleUI().picks[id] || '').trim();
+    if (!name) { return; }
+    var exact = null;
+    (app.students || []).forEach(function (s) {
+      if (String(s.name).replace(/\s+/g, '') === name.replace(/\s+/g, '')) { exact = s; }
+    });
+    addShuttleRider(id, exact ? { id: exact.id, name: exact.name } : { name: name });
+  }
+
+  function bindShuttleEvents() {
+    if (el('atab-shuttle')) { el('atab-shuttle').addEventListener('click', function () { setAdminTab('shuttle'); }); }
+    if (el('btn-sh-add')) { el('btn-sh-add').addEventListener('click', function () { addShuttleRow(); }); }
+    if (el('btn-sh-sort')) { el('btn-sh-sort').addEventListener('click', function () { sortShuttleByTime(); }); }
+    if (el('btn-sh-csv')) { el('btn-sh-csv').addEventListener('click', function () { downloadShuttleCSV(); }); }
+    if (el('btn-sh-print')) { el('btn-sh-print').addEventListener('click', function () { printShuttle(); }); }
+    if (el('sh-q')) {
+      el('sh-q').addEventListener('input', function () {
+        ensureShuttleUI().q = String(el('sh-q').value || '');
+        renderShuttle();
+      });
+    }
+    if (el('sh-filters')) {
+      el('sh-filters').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-shfilter]');
+        if (!b) { return; }
+        var v = b.getAttribute('data-shfilter');
+        ensureShuttleUI().kind = (v === 'pick' || v === 'drop') ? v : 'all';
+        renderShuttle();
+      });
+    }
+    if (el('sh-part')) {
+      el('sh-part').addEventListener('change', function () {
+        ensureShuttleUI().part = el('sh-part').value || 'all';
+        renderShuttle();
+      });
+    }
+    var list = el('sh-list');
+    if (list) {
+      list.addEventListener('click', onShuttleListClick);
+      list.addEventListener('input', function (e) { onShuttleListInput(e, false); });
+      list.addEventListener('change', function (e) { onShuttleListInput(e, true); });
+      list.addEventListener('keydown', onShuttleListKey);
+    }
+  }
+
+  /* =========================================================
      12. 파일 가져오기 (SheetJS + CSV 폴백)
      ========================================================= */
   var HEADER_KEYS = {
@@ -10104,6 +10845,7 @@
       feeTable: feeTable(),
       smsTemplates: app.smsTemplates || [],
       counsel: app.counsel || [],
+      shuttle: app.shuttle || [],
       admin: app.admin ? {
         id: app.admin.id,
         salt: app.admin.salt,
@@ -10177,6 +10919,9 @@
     if (data.counsel != null && !Array.isArray(data.counsel)) {
       return { ok: false, reason: '상담 기록 형식이 올바르지 않아요.' };
     }
+    if (data.shuttle != null && !Array.isArray(data.shuttle)) {
+      return { ok: false, reason: '차량 운행 스케줄 형식이 올바르지 않아요.' };
+    }
     if (data.admin != null && (typeof data.admin !== 'object' || Array.isArray(data.admin))) {
       return { ok: false, reason: '관리자 계정 설정 형식이 올바르지 않아요.' };
     }
@@ -10214,6 +10959,8 @@
     if (Array.isArray(data.counsel)) {
       writeJSON(LS.counsel, remapCounselBackup(data.counsel, data.students));
     }
+    // 차량 운행: 이 기능 이전 백업(항목 없음)은 빈 스케줄로 복원한다
+    writeJSON(LS.shuttle, remapShuttleBackup(data.shuttle, data.students));
     if (data.admin && typeof data.admin === 'object' && !Array.isArray(data.admin) && data.admin.hash) {
       writeJSON(LS.admin, {
         id: String(data.admin.id || DEFAULT_ADMIN_ID).slice(0, 24),
@@ -10279,6 +11026,7 @@
     renderBulkSms(true);
     renderPaused(true);
     renderCounsel();
+    renderShuttle();
     renderAdminAccountState();
     renderAdminFaceState();
     fillDriveForm();
@@ -10293,10 +11041,11 @@
     var tMonths = (data.tuition && typeof data.tuition === 'object') ? Object.keys(data.tuition).length : 0;
     var tplCount = Array.isArray(data.smsTemplates) ? data.smsTemplates.length : 0;
     var csCount = Array.isArray(data.counsel) ? data.counsel.length : 0;
+    var shCount = Array.isArray(data.shuttle) ? data.shuttle.length : 0;
     var hasAdmin = !!(data.admin && data.admin.hash);
     var hasAdminFace = !!(data.adminFace && data.adminFace.descriptor);
     return '<div class="help" style="margin-top:0">' +
-      '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 상담 기록 <b>' + csCount + '건</b>' +
+      '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 상담 기록 <b>' + csCount + '건</b> · 차량 운행 <b>' + shCount + '건</b>' +
       (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') +
       (hasAdminFace ? ' · 관리자 얼굴 <b>등록됨</b>' : ' · 관리자 얼굴 미등록') +
       ' · 띠 체계·문자·원비·수업별 단가표 설정 포함<br>' +
@@ -11484,6 +12233,7 @@
     el('btn-rp-csv-year').addEventListener('click', downloadReportYearCSV);
     el('btn-rp-print').addEventListener('click', printReport);
     bindCounselEvents();
+    bindShuttleEvents();
     el('pz-search').addEventListener('input', function () {
       ensurePausedUI().q = el('pz-search').value || '';
       renderPaused();
@@ -11732,6 +12482,7 @@
     renderBulkSms(true);
     renderPaused(true);
     renderCounsel();
+    renderShuttle();
     renderKioskInfo();
     renderVisibility();
     renderAdminLog();
@@ -12079,6 +12830,34 @@
       dateLabel: counselDateLabel,
       setTab: setAdminTab,
       download: downloadCounselCSV
+    },
+    shuttle: {
+      list: function () { return app.shuttle; },
+      rows: shuttleRows,
+      summary: shuttleSummary,
+      add: addShuttleRow,
+      setField: setShuttleField,
+      setKind: setShuttleKind,
+      addRider: addShuttleRider,
+      removeRider: removeShuttleRider,
+      up: function (id) { return moveShuttleRow(id, -1); },
+      down: function (id) { return moveShuttleRow(id, 1); },
+      sort: sortShuttleByTime,
+      remove: deleteShuttleRow,
+      csv: shuttleCSVText,
+      download: downloadShuttleCSV,
+      render: renderShuttle,
+      renderPrint: renderShuttlePrint,
+      print: printShuttle,
+      ui: ensureShuttleUI,
+      kinds: SHUTTLE_KINDS,
+      parts: function () { return SHUTTLE_PARTS.slice(); },
+      partLabel: shuttlePartLabel,
+      label: shuttleKindLabel,
+      ridersText: shuttleRidersText,
+      remap: remapShuttleBackup,
+      load: loadShuttle,
+      setTab: setAdminTab
     },
     admin: {
       account: adminAccount,
