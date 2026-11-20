@@ -598,6 +598,8 @@
   table.stu-tb .belt-chip-cell{white-space:nowrap}
   table.stu-tb th{position:sticky; top:0; z-index:2; font-size:11.5px; padding:10px 12px}
   table.stu-tb td{padding:11px 12px; font-size:13px}
+  table.stu-tb select.stu-tday{width:auto; min-width:76px; height:30px; font-size:12px; font-weight:700; padding:0 4px; text-align:center}
+  .tu-date-def{color:#8a94a6}
   .range-row{display:flex; align-items:center; gap:10px}
   .range-row input[type="range"]{flex:1; accent-color:var(--navy); height:26px}
   .range-row b{font-size:13px; font-variant-numeric:tabular-nums; color:var(--navy); min-width:38px; text-align:right}
@@ -734,6 +736,7 @@
   .cs-mbtn{flex:1 1 0; min-width:54px; border:1.5px solid #dde3ee; background:#fbfcfe; color:#33405a; border-radius:11px; padding:9px 6px; font-weight:800; font-size:13px; cursor:pointer}
   .cs-mbtn.active{background:var(--navy); border-color:var(--navy); color:#fff}
   .cs-picks{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+  .cs-picks:empty{display:none}
   .cs-pick{border:1.5px solid #dde3ee; background:#fff; border-radius:999px; padding:6px 11px; font-size:12.5px; font-weight:700; color:#33405a; cursor:pointer}
   .cs-pick.on{background:#eaf0ff; border-color:#8aa4ff; color:#1b2a5b}
   .cs-picked{margin-top:8px; font-size:12.5px; font-weight:800; color:#0b7a55}
@@ -1300,7 +1303,7 @@
                   </div>
                   <div class="row2">
                     <div class="field"><label>첫 등록일</label><input class="input" id="f-firstreg" type="date"></div>
-                    <div class="field"><label>원비 날짜 <span style="font-weight:600;color:#8a94a6">(원비 관리와 연동)</span></label><input class="input" id="f-tuitiondate" type="date"></div>
+                    <div class="field"><label>원비 날짜 <span style="font-weight:600;color:#8a94a6">(매달 원비 내는 날 · 원비 관리와 연동)</span></label><select class="input" id="f-tuitiondate"></select></div>
                   </div>
                   <div class="row2">
                     <div class="field"><label>급수 (비우면 띠 기준 자동)</label><input class="input" id="f-grade" list="grade-list" placeholder="예: 7급, 품, 단"></div>
@@ -2035,7 +2038,7 @@
               <div class="cs-list" id="cs-list"></div>
               <div class="panel-body" style="border-top:1px solid #eef1f6">
                 <div class="help" style="margin-top:0">
-                  관원을 고르고 <b>날짜·방식·내용</b>을 적어 저장하면 그 아이 기록으로 계속 쌓입니다.
+                  관원 이름·초성을 <b>검색</b>해 관원을 고르고 <b>날짜·방식·내용</b>을 적어 저장하면 그 아이 기록으로 계속 쌓입니다.
                   <b>관원별 보기</b>로 한 아이의 기록만 모아 볼 수 있고, 각 기록에서 <b>수정·삭제</b>할 수 있어요.<br>
                   상담 기록은 <b>관리자 화면에만</b> 보이고 출석 키오스크에는 나오지 않습니다. 전체 백업(JSON)·CSV에 함께 담깁니다.
                 </div>
@@ -2124,12 +2127,12 @@
   };
 
   var SAMPLE_STUDENTS = [
-    { id: 's1', name: '김민준', division: '초등부', course: '16회', siblingDiscount: false, belt: '파란띠', phone: '010-2345-6789', attendCount: 22, firstRegDate: '2024-03-04', tuitionDate: '', poomDan: '없음', targetPoomDan: '1품', gukStatus: 'target' },
-    { id: 's2', name: '이서연', division: '유치부', course: '8회', siblingDiscount: true, belt: '노란띠', phone: '010-3456-7890', attendCount: 8, firstRegDate: '2025-03-03', tuitionDate: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
-    { id: 's3', name: '박지호', division: '초등부', course: '12회', siblingDiscount: false, belt: '빨간띠', phone: '010-4567-8901', attendCount: 17, firstRegDate: '2023-09-01', tuitionDate: '', poomDan: '1품', targetPoomDan: '2품', gukStatus: 'docs' },
-    { id: 's4', name: '최수아', division: '초등부', course: '입시반', siblingDiscount: false, belt: '초록띠', phone: '010-5678-9012', attendCount: 20, firstRegDate: '2025-06-02', tuitionDate: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
-    { id: 's5', name: '정도윤', division: '고등부', course: '선수단', siblingDiscount: false, belt: '검정띠', phone: '010-6789-0123', attendCount: 26, firstRegDate: '2022-03-02', tuitionDate: '', poomDan: '2단', targetPoomDan: '3단', gukStatus: 'applied' },
-    { id: 's6', name: '한유진', division: '유치부', course: '시범단', siblingDiscount: false, belt: '흰띠', phone: '010-7890-1234', attendCount: 4, firstRegDate: '2026-02-02', tuitionDate: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' }
+    { id: 's1', name: '김민준', division: '초등부', course: '16회', siblingDiscount: false, belt: '파란띠', phone: '010-2345-6789', attendCount: 22, firstRegDate: '2024-03-04', tuitionDay: 5, poomDan: '없음', targetPoomDan: '1품', gukStatus: 'target' },
+    { id: 's2', name: '이서연', division: '유치부', course: '8회', siblingDiscount: true, belt: '노란띠', phone: '010-3456-7890', attendCount: 8, firstRegDate: '2025-03-03', tuitionDay: 10, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
+    { id: 's3', name: '박지호', division: '초등부', course: '12회', siblingDiscount: false, belt: '빨간띠', phone: '010-4567-8901', attendCount: 17, firstRegDate: '2023-09-01', tuitionDay: 0, poomDan: '1품', targetPoomDan: '2품', gukStatus: 'docs' },
+    { id: 's4', name: '최수아', division: '초등부', course: '입시반', siblingDiscount: false, belt: '초록띠', phone: '010-5678-9012', attendCount: 20, firstRegDate: '2025-06-02', tuitionDay: 0, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
+    { id: 's5', name: '정도윤', division: '고등부', course: '선수단', siblingDiscount: false, belt: '검정띠', phone: '010-6789-0123', attendCount: 26, firstRegDate: '2022-03-02', tuitionDay: 0, poomDan: '2단', targetPoomDan: '3단', gukStatus: 'applied' },
+    { id: 's6', name: '한유진', division: '유치부', course: '시범단', siblingDiscount: false, belt: '흰띠', phone: '010-7890-1234', attendCount: 4, firstRegDate: '2026-02-02', tuitionDay: 0, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' }
   ];
 
   var BELT_ORDER = ['흰띠', '노란띠', '주황띠', '초록띠', '파란띠', '보라띠', '갈색띠', '빨간띠', '품띠', '검정띠'];
@@ -2613,7 +2616,13 @@
         pausedDate: isDateKey(s.pausedDate) ? String(s.pausedDate) : '',
         pauseReason: String(s.pauseReason || '').trim().slice(0, 60),
         firstRegDate: isDateKey(s.firstRegDate) ? String(s.firstRegDate) : '',
-        tuitionDate: isDateKey(s.tuitionDate) ? String(s.tuitionDate) : '',
+        tuitionDay: (function () {
+          var d = parseInt(s.tuitionDay, 10);
+          if (isNaN(d) || d < 1 || d > 31) {
+            d = isDateKey(s.tuitionDate) ? parseInt(String(s.tuitionDate).slice(8, 10), 10) : 0;
+          }
+          return (d >= 1 && d <= 31) ? d : 0;
+        })(),
         monthlyFee: (function () {
           var v = parseInt(s.monthlyFee, 10);
           return (isNaN(v) || v < 0) ? null : v;
@@ -3213,7 +3222,7 @@
       var dedReason = real ? tuitionDeductionReason(mk, real.id) : '';
       var bank = tuitionBankAccount();
       var rec = real ? (tuitionOf(mk, real.id) || {}) : {};
-      var pd = rec.paidDate || ((s && isDateKey(s.tuitionDate) && String(s.tuitionDate).slice(0, 7) === mk) ? s.tuitionDate : '');
+      var pd = rec.paidDate || tuitionDateForDay(mk, tuitionDayOf(s));
       v['월'] = tuitionMonthLabel(mk);
       v['금액'] = fmtWon(amount);
       v['차감'] = ded ? fmtWon(ded) : '0';
@@ -4497,61 +4506,114 @@
       '<button class="btn btn-sm" data-face-reg="' + esc(s.id) + '">📸 얼굴 등록</button></div>';
   }
 
-  /* 관원의 첫 등록일 · 원비 날짜 (YYYY-MM-DD, 없으면 '') */
+  /* 관원의 첫 등록일 (YYYY-MM-DD, 없으면 '') */
   function firstRegOf(s) { return (s && isDateKey(s.firstRegDate)) ? String(s.firstRegDate) : ''; }
-  function tuitionDateOf(s) { return (s && isDateKey(s.tuitionDate)) ? String(s.tuitionDate) : ''; }
-  /* 원비 관리 표에 보여줄 납부일 — 그 달 기록에 없으면 관원의 원비 날짜가 같은 달일 때 맞춰 보여준다 */
+  /* 관원의 「원비 날짜」 = 매달 원비 내는 날(1~31). 예전 YYYY-MM-DD 값은 일자만 뽑아 쓴다 */
+  function tuitionDayOf(s) {
+    if (!s) { return 0; }
+    var d = parseInt(s.tuitionDay, 10);
+    if (!isNaN(d) && d >= 1 && d <= 31) { return d; }
+    if (isDateKey(s.tuitionDate)) {
+      var legacy = parseInt(String(s.tuitionDate).slice(8, 10), 10);
+      if (!isNaN(legacy) && legacy >= 1 && legacy <= 31) { return legacy; }
+    }
+    return 0;
+  }
+  function dayLabel(d) { d = parseInt(d, 10); return (d >= 1 && d <= 31) ? d + '일' : ''; }
+  function isMonthKey(mk) { return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(mk || '')); }
+  function daysInMonth(mk) {
+    var y = parseInt(String(mk).slice(0, 4), 10), m = parseInt(String(mk).slice(5, 7), 10);
+    if (isNaN(y) || isNaN(m)) { return 31; }
+    return new Date(y, m, 0).getDate();
+  }
+  /* 일자 → 그 달의 날짜 (2월 31일 같은 값은 그 달 말일로 맞춘다) */
+  function tuitionDateForDay(mk, day) {
+    var d = parseInt(day, 10);
+    if (!isMonthKey(mk) || isNaN(d) || d < 1 || d > 31) { return ''; }
+    return mk + '-' + pad2(Math.min(d, daysInMonth(mk)));
+  }
+  /* 원비 날짜 고르기 — 미지정 / 1일 ~ 31일 */
+  function tuitionDayOptions(selected) {
+    var cur = parseInt(selected, 10) || 0;
+    var out = '<option value="">미지정</option>';
+    for (var i = 1; i <= 31; i++) {
+      out += '<option value="' + i + '"' + (i === cur ? ' selected' : '') + '>' + i + '일</option>';
+    }
+    return out;
+  }
+  /* 지금 「원비 관리」에서 보고 있는 달 (없으면 이번 달) */
+  function tuitionSyncMonth() {
+    var u = app.tuitionUI;
+    return (u && isMonthKey(u.month)) ? u.month : monthKey(new Date());
+  }
+  /* 원비 관리 표에 보여줄 납부일 — 그 달 기록에 없으면 관원의 원비 날짜(일자)로 그 달 날짜를 보여준다 */
   function tuitionDateShown(mk, sid) {
     var rec = tuitionOf(mk, sid);
     if (rec && isDateKey(rec.paidDate)) { return String(rec.paidDate); }
     var s = byId(sid);
-    if (s && isDateKey(s.tuitionDate) && String(s.tuitionDate).slice(0, 7) === mk) { return String(s.tuitionDate); }
-    return '';
+    return s ? tuitionDateForDay(mk, tuitionDayOf(s)) : '';
   }
 
-  /* 관원 관리의 「원비 날짜」 → 원비 관리(paidDate) 동기화
-     · 날짜를 고르면 그 달 기록을 완납 + 납부일로 저장(없으면 만듦)
-     · 날짜를 비우면 그 전 날짜가 있던 달의 납부일만 지운다(지난 달 납부 기록은 남긴다) */
-  function syncTuitionFromStudentDate(sid, oldDate, newDate) {
+  /* 관원 관리의 「원비 날짜」(일자) → 원비 관리(paidDate) 동기화
+     · 일자를 고르면 지금 보고 있는 달의 기록을 완납 + 그 달의 그 날짜로 저장(없으면 만듦)
+     · 일자를 비우면 그 달에 그 날짜로 잡혀 있던 납부 기록만 지운다(지난 달 납부 기록은 남긴다) */
+  function syncTuitionFromStudentDay(sid, oldDay, newDay) {
     var s = byId(sid);
     if (!s) { return false; }
-    var old = isDateKey(oldDate) ? String(oldDate) : '';
-    var neu = isDateKey(newDate) ? String(newDate) : '';
+    var old = parseInt(oldDay, 10) || 0;
+    var neu = parseInt(newDay, 10) || 0;
+    var mk = tuitionSyncMonth();
     var changed = false;
     if (neu) {
-      var mk = neu.slice(0, 7);
+      var paid = tuitionDateForDay(mk, neu);
+      if (!paid) { return false; }
       if (!app.tuition[mk]) { app.tuition[mk] = {}; }
       var rec = app.tuition[mk][sid] || { status: 'unpaid' };
       if (!TUITION_STATUS[rec.status]) { rec.status = 'unpaid'; }
       rec.status = 'paid';
-      rec.paidDate = neu;
+      rec.paidDate = paid;
       app.tuition[mk][sid] = rec;
       changed = true;
     } else if (old) {
-      var mkOld = old.slice(0, 7);
-      var prev = app.tuition[mkOld] && app.tuition[mkOld][sid];
-      if (prev && prev.paidDate === old) {
+      var prev = app.tuition[mk] && app.tuition[mk][sid];
+      if (prev && prev.paidDate === tuitionDateForDay(mk, old)) {
         delete prev.paidDate;
+        delete prev.method;
+        prev.status = 'unpaid';
         changed = true;
       }
     }
     if (changed) { saveTuition(); }
     return changed;
   }
-  /* 원비 관리의 납부일 → 관원의 「원비 날짜」 (setTuition 안에서만 부른다) */
-  function syncStudentDateFromTuition(sid, prevPaid, nextPaid) {
+  /* 원비 관리의 납부일 → 관원의 「원비 날짜」(일자) (setTuition 안에서만 부른다)
+     · 납부일의 일(1~31)을 뽑아 원비 날짜로 옮기고, 납부일을 비우면 원비 날짜도 비운다 */
+  function syncStudentDayFromTuition(sid, prevPaid, nextPaid) {
     var s = byId(sid);
     if (!s) { return; }
-    var prev = isDateKey(prevPaid) ? String(prevPaid) : '';
-    var next = isDateKey(nextPaid) ? String(nextPaid) : '';
+    var prev = isDateKey(prevPaid) ? parseInt(String(prevPaid).slice(8, 10), 10) : 0;
+    var next = isDateKey(nextPaid) ? parseInt(String(nextPaid).slice(8, 10), 10) : 0;
     if (prev === next) { return; }
     if (next) {
-      if (s.tuitionDate !== next) { s.tuitionDate = next; saveStudents(); }
-    } else if (prev && s.tuitionDate === prev) {
-      s.tuitionDate = '';
+      if (tuitionDayOf(s) !== next || s.tuitionDate) {
+        s.tuitionDay = next;
+        delete s.tuitionDate;
+        saveStudents();
+      }
+    } else if (prev && tuitionDayOf(s) === prev) {
+      delete s.tuitionDay;
+      delete s.tuitionDate;
       saveStudents();
     }
     if (el('stu-table')) { renderStudentsTable(); }
+  }
+  /* 관원 폼의 「원비 날짜」 선택지 (미지정 / 1일 ~ 31일) */
+  function renderTuitionDayOptions(selected) {
+    var sel = el('f-tuitiondate');
+    if (!sel) { return; }
+    sel.innerHTML = tuitionDayOptions(selected);
+    var d = parseInt(selected, 10) || 0;
+    sel.value = (d >= 1 && d <= 31) ? String(d) : '';
   }
 
   function renderStudentsTable() {
@@ -4593,9 +4655,8 @@
         '<td><input class="input mini stu-tdate" type="date" value="' + esc(firstRegOf(s)) + '"' +
         ' data-stufirst="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 첫 등록일') + '"' +
         ' title="첫 등록일"></td>' +
-        '<td><input class="input mini stu-tdate" type="date" value="' + esc(tuitionDateOf(s)) + '"' +
-        ' data-stutdate="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 원비 날짜') + '"' +
-        ' title="원비 날짜 · 원비 관리와 연동"></td>' +
+        '<td><select class="input mini stu-tday" data-stutdate="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 원비 날짜') + '"' +
+        ' title="원비 날짜(매달 원비 내는 날) · 원비 관리와 연동">' + tuitionDayOptions(tuitionDayOf(s)) + '</select></td>' +
         '<td>' + faceCell(s) + '</td>' +
         '<td style="white-space:nowrap">' +
         '<button class="btn btn-sm" data-edit="' + esc(s.id) + '">편집</button> ' +
@@ -4762,7 +4823,7 @@
     if (el('f-course')) { el('f-course').value = ''; }
     if (el('f-sibling')) { el('f-sibling').checked = false; }
     if (el('f-firstreg')) { el('f-firstreg').value = todayKey(); }
-    if (el('f-tuitiondate')) { el('f-tuitiondate').value = ''; }
+    renderTuitionDayOptions(0);
     el('f-grade').value = '';
     el('f-fee').value = '';
     el('f-fee').setAttribute('data-auto', '1');
@@ -4787,7 +4848,7 @@
     if (el('f-course')) { el('f-course').value = courseOf(s); }
     if (el('f-sibling')) { el('f-sibling').checked = siblingOf(s); }
     if (el('f-firstreg')) { el('f-firstreg').value = firstRegOf(s); }
-    if (el('f-tuitiondate')) { el('f-tuitiondate').value = tuitionDateOf(s); }
+    renderTuitionDayOptions(tuitionDayOf(s));
     el('f-grade').value = s.grade || '';
     el('f-fee').value = (s.monthlyFee == null ? '' : String(s.monthlyFee));
     el('f-fee').setAttribute('data-auto', s.monthlyFee == null ? '1' : '0');
@@ -4833,8 +4894,9 @@
     var status = (el('f-status') && el('f-status').value === 'paused') ? 'paused' : 'active';
     var firstRegRaw = String(el('f-firstreg') ? el('f-firstreg').value : '').trim();
     var firstRegDate = isDateKey(firstRegRaw) ? firstRegRaw : '';
-    var tuitionRaw = String(el('f-tuitiondate') ? el('f-tuitiondate').value : '').trim();
-    var tuitionDate = isDateKey(tuitionRaw) ? tuitionRaw : '';
+    var tuitionDayRaw = String(el('f-tuitiondate') ? el('f-tuitiondate').value : '').trim();
+    var tuitionDay = parseInt(tuitionDayRaw, 10);
+    if (isNaN(tuitionDay) || tuitionDay < 1 || tuitionDay > 31) { tuitionDay = 0; }
     var pausedDateRaw = String(el('f-paused-date') ? el('f-paused-date').value : '').trim();
     var pauseReason = String(el('f-pause-reason') ? el('f-pause-reason').value : '').trim().slice(0, 60);
     var pausedDate = (status === 'paused') ? (isDateKey(pausedDateRaw) ? pausedDateRaw : todayKey()) : '';
@@ -4843,7 +4905,7 @@
     if (app.editingId) {
       var s = app.students.filter(function (x) { return x.id === app.editingId; })[0];
       if (s) {
-        var prevTuitionDate = tuitionDateOf(s);
+        var prevTuitionDay = tuitionDayOf(s);
         s.name = name; s.phone = phone; s.belt = belt;
         s.className = ''; s.division = division; s.course = course; s.siblingDiscount = siblingDiscount;
         s.grade = grade; s.poomDan = poomDan;
@@ -4852,8 +4914,9 @@
         s.pausedDate = pausedDate;
         s.pauseReason = pauseReason;
         s.firstRegDate = firstRegDate;
-        s.tuitionDate = tuitionDate;
-        if (prevTuitionDate !== tuitionDate) { syncTuitionFromStudentDate(s.id, prevTuitionDate, tuitionDate); }
+        if (tuitionDay) { s.tuitionDay = tuitionDay; } else { delete s.tuitionDay; }
+        delete s.tuitionDate;
+        if (prevTuitionDay !== tuitionDay) { syncTuitionFromStudentDay(s.id, prevTuitionDay, tuitionDay); }
       }
       toast(name + ' 관원 정보를 수정했어요.' + (status === 'paused' ? ' (휴관생)' : ''));
     } else {
@@ -4863,10 +4926,10 @@
         attendCount: 0, grade: grade, poomDan: poomDan,
         targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '', monthlyFee: monthlyFee,
         status: status, pausedDate: pausedDate, pauseReason: pauseReason,
-        firstRegDate: firstRegDate || todayKey(), tuitionDate: tuitionDate
+        firstRegDate: firstRegDate || todayKey(), tuitionDay: tuitionDay
       };
       app.students.push(fresh);
-      if (tuitionDate) { syncTuitionFromStudentDate(fresh.id, '', tuitionDate); }
+      if (tuitionDay) { syncTuitionFromStudentDay(fresh.id, 0, tuitionDay); }
       toast(name + ' 관원을 추가했어요.' + (status === 'paused' ? ' (휴관생)' : ''));
     }
     saveStudents();
@@ -7378,12 +7441,18 @@
     if (cur.status !== 'paid') { delete cur.paidDate; delete cur.method; }
     app.tuition[mk][sid] = cur;
     saveTuition();
-    // 원비 관리의 납부일 → 「🥋 원생 관리」의 원비 날짜
-    syncStudentDateFromTuition(sid, prevPaid, cur.paidDate);
+    // 원비 관리의 납부일 → 「🥋 원생 관리」의 원비 날짜(일자)
+    syncStudentDayFromTuition(sid, prevPaid, cur.paidDate);
     return cur;
   }
 
   function tuitionSort(a, b) { return rosterSort(a, b); }
+  /* 완납할 때 기본 납부일 — 관원의 원비 날짜(일자)가 있으면 그 달의 그 날, 없으면 오늘 */
+  function tuitionPaidDefault(sid) {
+    var u = ensureTuition();
+    var day = tuitionDayOf(byId(sid));
+    return (day ? tuitionDateForDay(u.month, day) : '') || todayKey();
+  }
   function tuitionScopeRows() {
     var u = ensureTuition();
     return activeStudents().filter(function (s) {
@@ -7561,8 +7630,11 @@
           '<option value="unpaid"' + (st === 'unpaid' ? ' selected' : '') + '>미납</option>' +
           '<option value="paid"' + (st === 'paid' ? ' selected' : '') + '>완납</option>' +
           '<option value="exempt"' + (st === 'exempt' ? ' selected' : '') + '>면제·휴원</option></select></td>' +
-          '<td><input class="input mini tu-date" type="date" value="' + esc(tuitionDateShown(mk, s.id)) + '"' +
-          ' data-tdate="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 납부일') + '"></td>' +
+          '<td><input class="input mini tu-date' + (!rec.paidDate && tuitionDayOf(s) ? ' tu-date-def' : '') + '" type="date" value="' + esc(tuitionDateShown(mk, s.id)) + '"' +
+          ' data-tdate="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 납부일') + '"' +
+          ' title="' + esc(!rec.paidDate && tuitionDayOf(s)
+            ? ('원비 날짜 ' + dayLabel(tuitionDayOf(s)) + ' 기준으로 보여줍니다 · 고치면 관원의 원비 날짜도 바뀝니다')
+            : '납부일 · 고치면 관원의 원비 날짜도 바뀝니다') + '"></td>' +
           '<td><div class="tu-mgroup">' + methods + '</div></td>' +
           '<td><input class="input mini tu-memo" type="text" maxlength="40" value="' + esc(rec.memo || '') + '"' +
           ' placeholder="메모" data-tmemo="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 메모') + '"></td>' +
@@ -7586,9 +7658,10 @@
       renderTuition(true);
       toast(s.name + ' · ' + tuitionMonthLabel(mk) + ' 원비를 미납으로 되돌렸어요');
     } else {
-      setTuition(mk, sid, { status: 'paid', paidDate: todayKey() });
+      var pd = tuitionPaidDefault(sid);
+      setTuition(mk, sid, { status: 'paid', paidDate: pd });
       renderTuition(true);
-      toast(s.name + ' · ' + tuitionMonthLabel(mk) + ' 원비 완납 (납부일 ' + dateKo(todayKey()) + ')');
+      toast(s.name + ' · ' + tuitionMonthLabel(mk) + ' 원비 완납 (납부일 ' + dateKo(pd) + ')');
     }
   }
   function setTuitionStatus(sid, status) {
@@ -7596,7 +7669,7 @@
     if (!s || !TUITION_STATUS[status]) { return; }
     var cur = tuitionOf(mk, sid) || {};
     if (status === 'paid') {
-      setTuition(mk, sid, { status: 'paid', paidDate: cur.paidDate || todayKey(), method: cur.method });
+      setTuition(mk, sid, { status: 'paid', paidDate: cur.paidDate || tuitionPaidDefault(sid), method: cur.method });
     } else if (status === 'exempt') {
       setTuition(mk, sid, { status: 'exempt', paidDate: undefined, method: undefined });
     } else {
@@ -7613,7 +7686,7 @@
       toast(s.name + ' 관원은 이미 ' + method + ' 수납으로 기록되어 있어요.');
       return;
     }
-    setTuition(mk, sid, { status: 'paid', method: method, paidDate: cur.paidDate || todayKey() });
+    setTuition(mk, sid, { status: 'paid', method: method, paidDate: cur.paidDate || tuitionPaidDefault(sid) });
     renderTuition(true);
     toast(s.name + ' · ' + tuitionMonthLabel(mk) + ' 원비 ' + method + ' 수납 완료로 처리했어요');
   }
@@ -9350,21 +9423,27 @@
     var u = ensureCounselUI();
     var box = el('cs-picks');
     var query = String(u.pickQ || '').trim();
-    var list = app.students.filter(function (s) {
-      return !query || matchSearch(s, query);
-    }).sort(function (a, b) {
-      var pa = isPaused(a) ? 1 : 0, pb = isPaused(b) ? 1 : 0;
-      if (pa !== pb) { return pa - pb; }
-      return String(a.name).localeCompare(String(b.name), 'ko');
-    }).slice(0, 8);
+    // 검색어가 비어 있거나 이미 관원을 골랐으면 이름 칩을 나열하지 않는다 — 검색했을 때만 후보를 보여준다
+    var list = [];
+    if (query && !u.studentId) {
+      list = app.students.filter(function (s) {
+        return matchSearch(s, query);
+      }).sort(function (a, b) {
+        var pa = isPaused(a) ? 1 : 0, pb = isPaused(b) ? 1 : 0;
+        if (pa !== pb) { return pa - pb; }
+        return String(a.name).localeCompare(String(b.name), 'ko');
+      }).slice(0, 8);
+    }
     if (box) {
-      box.innerHTML = list.length
-        ? list.map(function (s) {
-          var on = (u.studentId && u.studentId === s.id) || (!u.studentId && u.pickName === s.name);
-          return '<button class="cs-pick' + (on ? ' on' : '') + '" data-cpick="' + esc(s.id) + '">' +
-            esc(s.name) + (isPaused(s) ? ' · 휴권' : '') + '</button>';
-        }).join('')
-        : '<span class="tiny-note">맞는 관원이 없어요. 이름을 그대로 적고 저장해도 됩니다.</span>';
+      box.innerHTML = (query && !u.studentId)
+        ? (list.length
+          ? list.map(function (s) {
+            var on = (u.studentId && u.studentId === s.id) || (!u.studentId && u.pickName === s.name);
+            return '<button class="cs-pick' + (on ? ' on' : '') + '" data-cpick="' + esc(s.id) + '">' +
+              esc(s.name) + (isPaused(s) ? ' · 휴권' : '') + '</button>';
+          }).join('')
+          : '<span class="tiny-note">맞는 관원이 없어요. 이름을 그대로 적고 저장해도 됩니다.</span>')
+        : '';
     }
     var picked = el('cs-picked');
     if (picked) {
@@ -9435,7 +9514,7 @@
     if (!rows.length) {
       box.innerHTML = '<div class="cs-empty">🗒️ ' + (app.counsel.length
         ? '조건에 맞는 상담 기록이 없어요.<br>검색어나 기간을 바꿔 보세요.'
-        : '아직 저장된 상담 기록이 없어요.<br>왼쪽에서 관원을 고르고 상담 내용을 적어 저장하면 여기에 쌓입니다.') + '</div>';
+        : '아직 저장된 상담 기록이 없어요.<br>이름·초성을 검색해 관원을 찾고 상담 내용을 적어 저장하면 여기에 쌓입니다.') + '</div>';
       return;
     }
     box.innerHTML = rows.map(function (r) {
@@ -9714,6 +9793,26 @@
     }
     return '';
   }
+  /* 엑셀·CSV의 원비 날짜 표기(15 / 15일 / 2026-11-15 / 11월 15일)에서 일자(1~31)만 뽑는다 */
+  function normalizeImportDay(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) { return 0; }
+    var d = 0;
+    if (/^\d{1,2}$/.test(s)) {
+      d = parseInt(s, 10);
+    } else if (/^\d{1,2}\s*일$/.test(s)) {
+      d = parseInt(s.replace(/[^0-9]/g, ''), 10);
+    } else {
+      var full = normalizeImportDate(s);
+      if (full) {
+        d = parseInt(full.slice(8, 10), 10);
+      } else {
+        var m = s.match(/^(?:\d{4}\s*[.\-\/년]\s*)?(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})\s*일?$/);
+        if (m) { d = parseInt(m[2], 10); }
+      }
+    }
+    return (d >= 1 && d <= 31) ? d : 0;
+  }
   function importStatusOf(raw) {
     var s = String(raw == null ? '' : raw).trim();
     if (!s) { return ''; }
@@ -9809,7 +9908,7 @@
         pausedDate: normalizeImportDate(pausedRaw) || (status === 'paused' ? todayKey() : ''),
         pauseReason: reasonRaw.trim().slice(0, 60),
         firstRegDate: normalizeImportDate(cellOf('firstRegDate')),
-        tuitionDate: normalizeImportDate(cellOf('tuitionDate'))
+        tuitionDay: normalizeImportDay(cellOf('tuitionDate'))
       });
     }
     return out;
@@ -9924,19 +10023,21 @@
           if (!isDateKey(hit.firstRegDate) && isDateKey(s.firstRegDate)) {
             hit.firstRegDate = s.firstRegDate;
           }
-          if (!isDateKey(hit.tuitionDate) && isDateKey(s.tuitionDate)) {
-            hit.tuitionDate = s.tuitionDate;
+          if (!tuitionDayOf(hit) && tuitionDayOf(s)) {
+            hit.tuitionDay = tuitionDayOf(s);
+            delete hit.tuitionDate;
           }
         });
       }
       saveStudents();
       // 파일에 적힌 「원비 날짜」는 원비 관리 납부일로도 넣어 둔다
       students.forEach(function (s) {
-        if (!isDateKey(s.tuitionDate)) { return; }
+        var day = tuitionDayOf(s);
+        if (!day) { return; }
         var key = s.name + '|' + digitsOnly(s.phone);
         var hit = null;
         app.students.forEach(function (x) { if (x.name + '|' + digitsOnly(x.phone) === key) { hit = x; } });
-        if (hit) { syncTuitionFromStudentDate(hit.id, '', hit.tuitionDate); }
+        if (hit) { syncTuitionFromStudentDay(hit.id, 0, day); }
       });
       renderAll();
       resetStudentForm();
@@ -9949,7 +10050,7 @@
     var lines = ['이름,부서,수업,띠,보호자 연락처,누적 출석,첫 등록일,원비 날짜,형제할인'];
     SAMPLE_STUDENTS.forEach(function (s) {
       lines.push([s.name, s.division || '', s.course || '', s.belt, s.phone, s.attendCount || 0,
-        s.firstRegDate || '', s.tuitionDate || '', s.siblingDiscount ? 'Y' : ''].join(','));
+        s.firstRegDate || '', tuitionDayOf(s) ? dayLabel(tuitionDayOf(s)) : '', s.siblingDiscount ? 'Y' : ''].join(','));
     });
     var csv = '\uFEFF' + lines.join('\r\n');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -10763,19 +10864,24 @@
       if (td) {
         var ts = byId(td.getAttribute('data-stutdate'));
         if (!ts) { return; }
-        var tv = String(td.value || '').trim();
-        var before = tuitionDateOf(ts);
-        if (tv && !isDateKey(tv)) { renderStudentsTable(); toast('원비 날짜는 날짜로 골라 주세요.'); return; }
-        ts.tuitionDate = tv || '';
+        var rawDay = String(td.value || '').trim();
+        var day = parseInt(rawDay, 10);
+        if (isNaN(day) || day < 1 || day > 31) { day = 0; }
+        var before = tuitionDayOf(ts);
+        if (day) { ts.tuitionDay = day; } else { delete ts.tuitionDay; }
+        delete ts.tuitionDate;
         saveStudents();
-        syncTuitionFromStudentDate(ts.id, before, ts.tuitionDate);
+        syncTuitionFromStudentDay(ts.id, before, day);
         renderStudentsTable();
         renderTuition(true);
-        if (ts.tuitionDate) {
-          toast(ts.name + ' · 원비 날짜 ' + dateKo(ts.tuitionDate) + ' → 원비 관리 ' +
-            tuitionMonthLabel(ts.tuitionDate.slice(0, 7)) + ' 납부일로 저장했어요');
-        } else {
-          toast(ts.name + ' · 원비 날짜를 비웠어요' + (before ? ' (' + dateKo(before) + ' 납부 기록도 지웠습니다)' : ''));
+        if (day && before !== day) {
+          var syncMk = tuitionSyncMonth();
+          toast(ts.name + ' · 원비 날짜 ' + dayLabel(day) + ' → 원비 관리 ' +
+            tuitionMonthLabel(syncMk) + ' 납부일 ' + dateKo(tuitionDateForDay(syncMk, day)) + '로 저장했어요');
+        } else if (!day && before) {
+          toast(ts.name + ' · 원비 날짜를 비웠어요 (' + dayLabel(before) + ' 납부 기록도 지웠습니다)');
+        } else if (day) {
+          toast(ts.name + ' · 원비 날짜 ' + dayLabel(day));
         }
         return;
       }
@@ -11792,10 +11898,13 @@
     },
     studentInfo: {
       firstReg: firstRegOf,
-      tuitionDate: tuitionDateOf,
+      tuitionDay: tuitionDayOf,
+      dayLabel: dayLabel,
+      dateForDay: tuitionDateForDay,
+      dayOptions: tuitionDayOptions,
       tuitionDateShown: tuitionDateShown,
-      syncFromStudent: syncTuitionFromStudentDate,
-      syncFromTuition: syncStudentDateFromTuition,
+      syncFromStudent: syncTuitionFromStudentDay,
+      syncFromTuition: syncStudentDayFromTuition,
       save: saveStudent,
       edit: startEdit,
       reset: resetStudentForm,
