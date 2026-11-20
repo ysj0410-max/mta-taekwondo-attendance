@@ -594,7 +594,8 @@
   /* 재원생 전체 명단: 화면 가로 전체 · 넉넉한 높이 */
   .stu-wide-panel{margin-bottom:15px}
   .stu-tablewrap{max-height:min(62vh,680px); overflow:auto; border:1px solid #eef2f8; border-radius:12px; -webkit-overflow-scrolling:touch}
-  table.stu-tb{min-width:660px}
+  table.stu-tb{min-width:1100px}
+  table.stu-tb .belt-chip-cell{white-space:nowrap}
   table.stu-tb th{position:sticky; top:0; z-index:2; font-size:11.5px; padding:10px 12px}
   table.stu-tb td{padding:11px 12px; font-size:13px}
   .range-row{display:flex; align-items:center; gap:10px}
@@ -666,6 +667,9 @@
   .bs-tpl-label{font-size:10.5px; font-weight:800; color:#8a94a6; align-self:center; margin-right:1px}
   .bs-tpl-save{display:flex; gap:6px; margin-bottom:9px}
   .bs-tpl-save .input{height:34px; font-size:12px; flex:1; min-width:0}
+  .bs-msg-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start}
+  .bs-msg-grid .bs-preview{margin-top:0}
+  .bs-msg-grid .field{margin:0}
   textarea.input.bs-text{width:100%; min-height:150px; height:auto; padding:11px 12px; line-height:1.62; font-size:13px; resize:vertical; font-family:inherit}
   .bs-meta{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px}
   .bs-badge{font-size:11px; font-weight:900; padding:4px 10px; border-radius:999px; background:#e9f9f1; color:#0b7a55; white-space:nowrap}
@@ -801,6 +805,7 @@
     .admin-tabs{width:100%; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none}
     .admin-tabs::-webkit-scrollbar{display:none}
     .admin-tab{flex:0 0 auto; white-space:nowrap; font-size:12px; padding:9px 12px}
+    .bs-msg-grid{grid-template-columns:1fr}
     .bs-grid{grid-template-columns:1fr}
     .bs-row{padding:9px 4px; gap:6px}
     .bs-phone{font-size:11px}
@@ -922,7 +927,7 @@
     .admin-face-body{gap:9px}
     .stu-wide-panel{margin-bottom:10px}
     .stu-tablewrap{max-height:min(56vh,440px); border-radius:10px}
-    table.stu-tb{min-width:560px}
+    table.stu-tb{min-width:1080px}
     table.stu-tb td{padding:10px 9px; font-size:12.5px}
     .pick-grid{grid-template-columns:repeat(2,1fr); max-height:52vh}
     .banner-card{width:min(560px,92vw); padding:24px 20px 22px}
@@ -1119,6 +1124,7 @@
           <button class="admin-tab" id="atab-sms" data-atab="sms">📢 단체문자</button>
           <button class="admin-tab" id="atab-counsel" data-atab="counsel">🗒️ 상담기록</button>
           <button class="admin-tab" id="atab-report" data-atab="report">📈 수납 리포트</button>
+          <button class="admin-tab" id="atab-settings" data-atab="settings">🔐 관리자 계정</button>
         </div>
 
         <div id="admin-overview" class="ov">
@@ -1189,6 +1195,7 @@
                   <div class="form-actions">
                     <button class="btn btn-primary" id="btn-save-sms">설정 저장</button>
                     <button class="btn btn-mint" id="btn-test-sms">📨 테스트 문자 보내기</button>
+                    <button class="btn" id="btn-sms-templates">✍️ 문자 문구 설정</button>
                   </div>
                   <div class="sms-test-result" id="sms-test-result"></div>
                   <div class="help">
@@ -1254,7 +1261,7 @@
               </div>
               <div class="tablewrap stu-tablewrap">
                 <table class="tb stu-tb">
-                  <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>보호자</th><th>얼굴</th><th style="width:150px"></th></tr></thead>
+                  <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>보호자</th><th>첫 등록일</th><th>원비 날짜</th><th>얼굴</th><th style="width:150px"></th></tr></thead>
                   <tbody id="stu-table"></tbody>
                 </table>
               </div>
@@ -1291,8 +1298,11 @@
                       </select>
                     </div>
                   </div>
-                  <div class="row3">
-                    <div class="field"><label>누적 출석(회)</label><input class="input" id="f-count" type="number" min="0" step="1" value="0" inputmode="numeric"></div>
+                  <div class="row2">
+                    <div class="field"><label>첫 등록일</label><input class="input" id="f-firstreg" type="date"></div>
+                    <div class="field"><label>원비 날짜 <span style="font-weight:600;color:#8a94a6">(원비 관리와 연동)</span></label><input class="input" id="f-tuitiondate" type="date"></div>
+                  </div>
+                  <div class="row2">
                     <div class="field"><label>급수 (비우면 띠 기준 자동)</label><input class="input" id="f-grade" list="grade-list" placeholder="예: 7급, 품, 단"></div>
                     <div class="field"><label>현재 품·단</label><select class="input" id="f-poomdan"></select></div>
                   </div>
@@ -1346,45 +1356,13 @@
                 </div>
               </div>
 
-              <div class="panel">
-                <div class="panel-head"><h3>💾 도장 데이터 전체 백업 / 복원 (JSON)</h3><div class="spacer"></div><span class="tiny-note">명단 · 얼굴 · 출석 이력</span></div>
-                <div class="panel-body">
-                  <div class="form-actions" style="flex-wrap:wrap">
-                    <button class="btn btn-primary" id="btn-backup-all">⬇ 전체 백업 내려받기</button>
-                    <button class="btn" id="btn-restore-all">⬆ 백업 파일로 복원</button>
-                    <input type="file" id="restore-input" accept=".json,application/json" style="display:none">
-                  </div>
-                  <div class="help" style="margin-top:10px">
-                    관원 명단 · <b>얼굴 특징값</b> · 날짜별 출석 이력 · 띠 체계 · 문자 발송 설정과 로그를 <b>파일 하나(JSON)</b>로 내려받습니다. 태블릿을 바꾸거나 브라우저 저장소를 지워야 할 때 이 파일 하나로 그대로 되살릴 수 있어요.
-                    복원은 지금 화면의 데이터를 <b>백업 파일 내용으로 바꾸는</b> 작업이라, 실행 전에 한 번 더 확인합니다.
-                  </div>
-                </div>
-              </div>
+            </div>
+          </div>
+        </div>
 
-              <div class="panel" id="admin-drive-panel">
-                <div class="panel-head"><h3>☁️ 구글 드라이브 자동 백업 · 동기화</h3><div class="spacer"></div><span class="chip wait" id="drive-state">미연동</span></div>
-                <div class="panel-body">
-                  <div class="field">
-                    <label>Apps Script 웹 앱 URL</label>
-                    <input class="input" id="drive-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
-                  </div>
-                  <div class="form-actions" style="flex-wrap:wrap">
-                    <button class="btn btn-primary" id="btn-drive-save">URL 저장</button>
-                    <button class="btn" id="btn-drive-backup">☁️ 지금 드라이브에 백업</button>
-                    <button class="btn" id="btn-drive-restore">📥 드라이브에서 불러오기</button>
-                    <button class="btn" id="btn-drive-auto" aria-pressed="false">매일 자동 백업: 꺼짐</button>
-                    <button class="btn" id="btn-drive-guide">📋 Apps Script 코드 보기/복사</button>
-                  </div>
-                  <div class="tiny-note" id="drive-last" style="margin-top:8px">마지막 드라이브 백업: 아직 없음</div>
-                  <div class="help" style="margin-top:10px">
-                    관장님 구글 드라이브 안의 <b>「경희대MTA태권도 백업」</b> 폴더에 관원 명단 · 얼굴 · 출석 이력 · 원비를 <b>mta-taekwondo-backup-latest.json</b>으로 저장하고, 날짜별 사본도 함께 남깁니다.
-                    태블릿을 바꾸거나 브라우저 저장소를 지워도 <b>📥 드라이브에서 불러오기</b>로 그대로 이어 쓸 수 있어요(새 도장폰·PC에서 이어쓰기).
-                    처음 한 번만 <b>📋 Apps Script 코드 보기/복사</b>의 <b>4단계</b>(약 2분)를 따라 웹 앱 주소를 만들면 됩니다.
-                    웹 앱 주소는 관장님 드라이브에만 연결되는 긴 비밀 주소라, 화면을 다른 사람과 공유하거나 주소를 메신저에 그대로 붙여넣지 마세요.
-                  </div>
-                </div>
-              </div>
-
+        <div id="admin-settings" class="ov" style="display:none">
+          <div class="admin-grid">
+            <div class="admin-col">
               <div class="panel" id="admin-account-panel">
                 <div class="panel-head"><h3>🔐 관리자 계정 (ID · 비밀번호 · 얼굴)</h3><div class="spacer"></div><span class="tiny-note" id="adm-state">-</span></div>
                 <div class="panel-body">
@@ -1448,6 +1426,47 @@
                   </div>
                   <div class="help">
                     <b>비공개</b>로 두면 키오스크 화면과 학부모 문자 로그에서 가려지고, 관장님(관리자) 화면에만 보입니다. 바꾸면 바로 적용돼요.
+                  </div>
+                </div>
+              </div>
+
+            </div>
+            <div class="admin-col">
+              <div class="panel">
+                <div class="panel-head"><h3>💾 도장 데이터 전체 백업 / 복원 (JSON)</h3><div class="spacer"></div><span class="tiny-note">명단 · 얼굴 · 출석 이력</span></div>
+                <div class="panel-body">
+                  <div class="form-actions" style="flex-wrap:wrap">
+                    <button class="btn btn-primary" id="btn-backup-all">⬇ 전체 백업 내려받기</button>
+                    <button class="btn" id="btn-restore-all">⬆ 백업 파일로 복원</button>
+                    <input type="file" id="restore-input" accept=".json,application/json" style="display:none">
+                  </div>
+                  <div class="help" style="margin-top:10px">
+                    관원 명단 · <b>얼굴 특징값</b> · 날짜별 출석 이력 · 띠 체계 · 문자 발송 설정과 로그를 <b>파일 하나(JSON)</b>로 내려받습니다. 태블릿을 바꾸거나 브라우저 저장소를 지워야 할 때 이 파일 하나로 그대로 되살릴 수 있어요.
+                    복원은 지금 화면의 데이터를 <b>백업 파일 내용으로 바꾸는</b> 작업이라, 실행 전에 한 번 더 확인합니다.
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel" id="admin-drive-panel">
+                <div class="panel-head"><h3>☁️ 구글 드라이브 자동 백업 · 동기화</h3><div class="spacer"></div><span class="chip wait" id="drive-state">미연동</span></div>
+                <div class="panel-body">
+                  <div class="field">
+                    <label>Apps Script 웹 앱 URL</label>
+                    <input class="input" id="drive-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+                  </div>
+                  <div class="form-actions" style="flex-wrap:wrap">
+                    <button class="btn btn-primary" id="btn-drive-save">URL 저장</button>
+                    <button class="btn" id="btn-drive-backup">☁️ 지금 드라이브에 백업</button>
+                    <button class="btn" id="btn-drive-restore">📥 드라이브에서 불러오기</button>
+                    <button class="btn" id="btn-drive-auto" aria-pressed="false">매일 자동 백업: 꺼짐</button>
+                    <button class="btn" id="btn-drive-guide">📋 Apps Script 코드 보기/복사</button>
+                  </div>
+                  <div class="tiny-note" id="drive-last" style="margin-top:8px">마지막 드라이브 백업: 아직 없음</div>
+                  <div class="help" style="margin-top:10px">
+                    관장님 구글 드라이브 안의 <b>「경희대MTA태권도 백업」</b> 폴더에 관원 명단 · 얼굴 · 출석 이력 · 원비를 <b>mta-taekwondo-backup-latest.json</b>으로 저장하고, 날짜별 사본도 함께 남깁니다.
+                    태블릿을 바꾸거나 브라우저 저장소를 지워도 <b>📥 드라이브에서 불러오기</b>로 그대로 이어 쓸 수 있어요(새 도장폰·PC에서 이어쓰기).
+                    처음 한 번만 <b>📋 Apps Script 코드 보기/복사</b>의 <b>4단계</b>(약 2분)를 따라 웹 앱 주소를 만들면 됩니다.
+                    웹 앱 주소는 관장님 드라이브에만 연결되는 긴 비밀 주소라, 화면을 다른 사람과 공유하거나 주소를 메신저에 그대로 붙여넣지 마세요.
                   </div>
                 </div>
               </div>
@@ -1918,6 +1937,37 @@
             </div>
           </div>
 
+          <div class="panel" id="msg-tpl-panel" style="margin-top:13px">
+            <div class="panel-head">
+              <h3>✍️ 문자 문구 설정 (자동으로 나가는 문자)</h3><div class="spacer"></div>
+              <span class="tiny-note" id="msg-saved-note">-</span>
+            </div>
+            <div class="panel-body">
+              <div class="bs-tpl" id="msg-kind-row"></div>
+              <div class="bs-msg-grid">
+                <div class="field"><label id="msg-kind-label">등원 알림</label>
+                  <textarea class="input bs-text" id="msg-text" rows="8" autocomplete="off" placeholder="보낼 문구를 적어 주세요."></textarea>
+                </div>
+                <div class="bs-preview" id="msg-preview"></div>
+              </div>
+              <div class="bs-meta">
+                <span class="bs-badge" id="msg-bytes">0 B</span>
+                <span class="bs-vars" id="msg-vars">치환 변수 · -</span>
+              </div>
+              <div class="form-actions" style="flex-wrap:wrap">
+                <button class="btn btn-primary" id="btn-msg-save">문구 저장</button>
+                <button class="btn" id="btn-msg-reset">이 문구 기본값으로</button>
+                <div class="spacer"></div>
+                <button class="btn btn-ghost btn-sm" id="btn-msg-reset-all">모든 문구 기본값으로</button>
+              </div>
+              <div class="help">
+                여기서 바꾼 문구는 <b>등원·하원 알림, 승급 심사 안내, 승급 축하, 국기원 안내·합격, 원비 안내·수감, 재원 복귀 안내</b> 문자에 바로 쓰입니다.
+                <b>{도장}</b> <b>{이름}</b> 같은 치환 변수를 넣으면 관원마다 그 관원의 정보로 바뀌고, <b>{차감줄}</b>·<b>{계좌줄}</b>처럼 비울 수 있는 줄은 해당 내용이 없으면 그 줄이 통째로 빠집니다.
+                저장한 문구는 이 기기에 저장되고 <b>전체 백업·드라이브 자동 백업</b>에도 함께 담깁니다. 언제든 <b>기본값으로</b> 되돌릴 수 있어요.
+              </div>
+            </div>
+          </div>
+
           <div class="panel" style="margin-top:13px">
             <div class="panel-head">
               <h3>📋 보낸 단체문자</h3><div class="spacer"></div>
@@ -2074,12 +2124,12 @@
   };
 
   var SAMPLE_STUDENTS = [
-    { id: 's1', name: '김민준', division: '초등부', course: '16회', siblingDiscount: false, belt: '파란띠', phone: '010-2345-6789', attendCount: 22, poomDan: '없음', targetPoomDan: '1품', gukStatus: 'target' },
-    { id: 's2', name: '이서연', division: '유치부', course: '8회', siblingDiscount: true, belt: '노란띠', phone: '010-3456-7890', attendCount: 8, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
-    { id: 's3', name: '박지호', division: '초등부', course: '12회', siblingDiscount: false, belt: '빨간띠', phone: '010-4567-8901', attendCount: 17, poomDan: '1품', targetPoomDan: '2품', gukStatus: 'docs' },
-    { id: 's4', name: '최수아', division: '초등부', course: '입시반', siblingDiscount: false, belt: '초록띠', phone: '010-5678-9012', attendCount: 20, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
-    { id: 's5', name: '정도윤', division: '고등부', course: '선수단', siblingDiscount: false, belt: '검정띠', phone: '010-6789-0123', attendCount: 26, poomDan: '2단', targetPoomDan: '3단', gukStatus: 'applied' },
-    { id: 's6', name: '한유진', division: '유치부', course: '시범단', siblingDiscount: false, belt: '흰띠', phone: '010-7890-1234', attendCount: 4, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' }
+    { id: 's1', name: '김민준', division: '초등부', course: '16회', siblingDiscount: false, belt: '파란띠', phone: '010-2345-6789', attendCount: 22, firstRegDate: '2024-03-04', tuitionDate: '', poomDan: '없음', targetPoomDan: '1품', gukStatus: 'target' },
+    { id: 's2', name: '이서연', division: '유치부', course: '8회', siblingDiscount: true, belt: '노란띠', phone: '010-3456-7890', attendCount: 8, firstRegDate: '2025-03-03', tuitionDate: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
+    { id: 's3', name: '박지호', division: '초등부', course: '12회', siblingDiscount: false, belt: '빨간띠', phone: '010-4567-8901', attendCount: 17, firstRegDate: '2023-09-01', tuitionDate: '', poomDan: '1품', targetPoomDan: '2품', gukStatus: 'docs' },
+    { id: 's4', name: '최수아', division: '초등부', course: '입시반', siblingDiscount: false, belt: '초록띠', phone: '010-5678-9012', attendCount: 20, firstRegDate: '2025-06-02', tuitionDate: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
+    { id: 's5', name: '정도윤', division: '고등부', course: '선수단', siblingDiscount: false, belt: '검정띠', phone: '010-6789-0123', attendCount: 26, firstRegDate: '2022-03-02', tuitionDate: '', poomDan: '2단', targetPoomDan: '3단', gukStatus: 'applied' },
+    { id: 's6', name: '한유진', division: '유치부', course: '시범단', siblingDiscount: false, belt: '흰띠', phone: '010-7890-1234', attendCount: 4, firstRegDate: '2026-02-02', tuitionDate: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' }
   ];
 
   var BELT_ORDER = ['흰띠', '노란띠', '주황띠', '초록띠', '파란띠', '보라띠', '갈색띠', '빨간띠', '품띠', '검정띠'];
@@ -2330,8 +2380,68 @@
     face: { threshold: 0.48, cooldown: 20, auto: true },
     sms: { webhookUrl: '', method: 'query', autoSend: true, testPhone: '' },
     tuition: { defaultFee: 150000, dueDay: 5, bankAccount: '' },
-    drive: { webhookUrl: '', autoBackup: false, lastBackupAt: '' }
+    drive: { webhookUrl: '', autoBackup: false, lastBackupAt: '' },
+    messages: {}
   };
+
+  /* =========================================================
+     2-B. 문자 문구 기본값
+     · 「📢 단체문자 → ✍️ 문자 문구 설정」에서 관장님이 직접 고친다
+     · 저장 위치: app.settings.messages[kind] (문자열, 비어 있으면 기본값)
+     ========================================================= */
+  var MSG_DEFAULTS = {
+    attendanceIn: {
+      label: '등원 알림',
+      vars: ['도장', '이름', '시간', '부서', '수업', '띠', '상태'],
+      text: '[{도장}] {이름} 관원이 {시간} 등원하였습니다.'
+    },
+    attendanceOut: {
+      label: '하원 알림',
+      vars: ['도장', '이름', '시간', '부서', '수업', '띠', '상태'],
+      text: '[{도장}] {이름} 관원이 {시간} 하원하였습니다.'
+    },
+    exam: {
+      label: '승급 심사 안내',
+      vars: ['도장', '이름', '현재띠', '다음띠', '출석', '심사일정', '장소', '부서', '수업', '띠'],
+      text: '[{도장}] {이름} 관원이 승급심사 대상입니다.\n· 심사 구분: {현재띠} → {다음띠}\n· 누적 출석: {출석}회\n· 심사 일정: {심사일정}\n· 장소: {장소}\n참석이 어려우시면 미리 도장으로 알려 주세요.'
+    },
+    promotion: {
+      label: '승급 축하',
+      vars: ['도장', '이름', '새띠', '띠', '부서', '수업'],
+      text: '[{도장}] 축하합니다! {이름} 관원이 {새띠}로 승급하였습니다.\n그동안 열심히 수련한 만큼 멋진 성장이었어요.'
+    },
+    gukNotice: {
+      label: '국기원 심사 안내',
+      vars: ['도장', '이름', '응시구분', '심사일정', '장소', '준비물', '띠', '부서', '수업'],
+      text: '[{도장}] {이름} 관원이 국기원 승품·승단 심사 대상입니다.\n· 응시 구분: {응시구분}\n· 심사 일정: {심사일정}\n· 장소: {장소}\n· 준비물: {준비물}\n서류 접수는 도장에서 도와드립니다.'
+    },
+    gukPass: {
+      label: '국기원 합격 축하',
+      vars: ['도장', '이름', '합격급수', '띠', '부서', '수업'],
+      text: '[{도장}] 축하합니다! {이름} 관원이 국기원 {합격급수} 심사에 합격하였습니다.\n새로운 품·단을 받은 것을 진심으로 축하드려요.'
+    },
+    tuitionNotice: {
+      label: '원비 납부 안내',
+      vars: ['도장', '이름', '월', '금액', '차감', '차감사유', '차감줄', '납부기한', '계좌', '계좌줄', '부서', '수업', '띠'],
+      text: '[{도장}] {이름} 관원 {월} 원비 납부 안내입니다.\n· 원비: {금액}원\n{차감줄}· 납부 기한: {월} {납부기한}일까지\n{계좌줄}이미 납부하셨다면 이 문자는 넘겨 주세요.'
+    },
+    tuitionThanks: {
+      label: '원비 수납 감사',
+      vars: ['도장', '이름', '월', '금액', '수단', '수단줄', '납부일', '납부일줄', '부서', '수업', '띠'],
+      text: '[{도장}] {이름} 관원 {월} 원비 수납이 확인되었습니다. 감사합니다.\n· 원비: {금액}원\n{수단줄}{납부일줄}'
+    },
+    resume: {
+      label: '재원 복귀 안내',
+      vars: ['도장', '이름', '소속', '출석', '출석줄', '띠', '부서', '수업'],
+      text: '[{도장}] 재원 복귀 안내\n\n{이름} 관원 학부모님, 안녕하세요.\n{소속} 수업으로 다시 함께하게 되었습니다.\n{출석줄}수업 시간에 뵙겠습니다. 감사합니다.'
+    },
+    test: {
+      label: '테스트 문자',
+      vars: ['도장', '시간'],
+      text: '[{도장}] 테스트 문자입니다. 도장폰 무료문자 연동이 정상입니다. ({시간})'
+    }
+  };
+  var MSG_KINDS = ['attendanceIn', 'attendanceOut', 'exam', 'promotion', 'gukNotice', 'gukPass', 'tuitionNotice', 'tuitionThanks', 'resume', 'test'];
 
   var app = {
     students: [],
@@ -2356,6 +2466,7 @@
     tuitionUI: null,
     reportUI: null,
     bulkSms: null,
+    msgUI: null,
     smsTemplates: [],
     stuFilter: 'all',
     attFilter: 'all',
@@ -2501,6 +2612,8 @@
         status: (s.status === 'paused') ? 'paused' : 'active',
         pausedDate: isDateKey(s.pausedDate) ? String(s.pausedDate) : '',
         pauseReason: String(s.pauseReason || '').trim().slice(0, 60),
+        firstRegDate: isDateKey(s.firstRegDate) ? String(s.firstRegDate) : '',
+        tuitionDate: isDateKey(s.tuitionDate) ? String(s.tuitionDate) : '',
         monthlyFee: (function () {
           var v = parseInt(s.monthlyFee, 10);
           return (isNaN(v) || v < 0) ? null : v;
@@ -2522,6 +2635,8 @@
     app.settings = Object.assign({}, DEFAULT_SETTINGS, settings || {});
     app.settings.sms = Object.assign({}, DEFAULT_SETTINGS.sms, (settings && settings.sms) || {});
     app.settings.sms.method = app.settings.sms.method === 'json' ? 'json' : 'query';
+    // 문자 문구 (등원·하원·심사·원비·복귀 …) — 저장된 것만 쓰고 나머지는 기본값
+    app.settings.messages = sanitizeMessages(settings && settings.messages);
     if (!settings || !settings.dojoName || settings.dojoName === '우리 태권도장') {
       app.settings.dojoName = DEFAULT_SETTINGS.dojoName;
     }
@@ -3011,9 +3126,118 @@
   /* =========================================================
      7. 문자 발송 로그 + 무료문자(SMS) 자동 발송
      ========================================================= */
+  /* =========================================================
+     문자 문구 엔진 — 기본값 + 관장님이 저장한 문구 + {치환 변수}
+     ========================================================= */
+  function msgStore() {
+    if (!app.settings.messages || typeof app.settings.messages !== 'object' || Array.isArray(app.settings.messages)) {
+      app.settings.messages = {};
+    }
+    return app.settings.messages;
+  }
+  function sanitizeMessages(raw) {
+    var out = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { return out; }
+    MSG_KINDS.forEach(function (k) {
+      var v = raw[k];
+      if (typeof v === 'string' && v.trim()) { out[k] = v.replace(/\r\n/g, '\n').slice(0, 1200); }
+    });
+    return out;
+  }
+  function msgTemplate(kind) {
+    var m = (app.settings && app.settings.messages) || {};
+    var v = m[kind];
+    if (typeof v === 'string' && v.trim()) { return v; }
+    return (MSG_DEFAULTS[kind] && MSG_DEFAULTS[kind].text) || '';
+  }
+  function msgIsCustom(kind) {
+    var m = (app.settings && app.settings.messages) || {};
+    return typeof m[kind] === 'string' && !!m[kind].trim();
+  }
+  /* {도장} {이름} 같은 자리를 값으로 바꿔 넣는다. 값이 없는 변수는 그대로 둔다. */
+  function fillMsg(text, vars) {
+    var map = {
+      '도장': String((app.settings && app.settings.dojoName) || ''),
+      '도장명': String((app.settings && app.settings.dojoName) || ''),
+      '날짜': todayKey()
+    };
+    Object.keys(vars || {}).forEach(function (k) { map[k] = vars[k]; });
+    var out = String(text == null ? '' : text).replace(/\{([가-힣A-Za-z0-9_]+)\}/g, function (m, k) {
+      var v = map[k];
+      if (v === undefined || v === null) { return m; }
+      return String(v);
+    });
+    return out.replace(/[ \t]+$/gm, '').replace(/[\s]+$/, '');
+  }
+  function buildMsg(kind, vars) { return fillMsg(msgTemplate(kind), vars); }
+
+  function studentMsgVars(s) {
+    return {
+      '도장': String((app.settings && app.settings.dojoName) || ''),
+      '도장명': String((app.settings && app.settings.dojoName) || ''),
+      '이름': s ? String(s.name || '') : '',
+      '부서': s ? divisionOf(s) : '',
+      '수업': s ? (courseLabel(s.division, s.course) || '') : '',
+      '반': s ? studentLabel(s) : '',
+      '띠': s ? String(s.belt || '') : ''
+    };
+  }
+  /* 종류별로 실제 값을 채운 변수 묶음 — 문자 본문과 미리보기가 같은 값을 쓴다 */
+  function msgVarsFor(kind, s, opts) {
+    opts = opts || {};
+    var v = studentMsgVars(s);
+    var mk = opts.mk || (app.tuitionUI && app.tuitionUI.month) || monthKey(new Date());
+    if (kind === 'attendanceIn' || kind === 'attendanceOut') {
+      v['시간'] = opts.time || fmtTime();
+      v['상태'] = (opts.mode === 'out' || kind === 'attendanceOut') ? '하원' : '등원';
+    } else if (kind === 'exam') {
+      var st = promoState(s);
+      v['현재띠'] = st.belt || (s && s.belt) || '';
+      v['다음띠'] = opts.next || st.next || '다음 단계';
+      v['출석'] = st.count;
+      v['심사일정'] = examDateText();
+      v['장소'] = examPlace();
+    } else if (kind === 'promotion') {
+      v['새띠'] = opts.newBelt || '다음 띠';
+    } else if (kind === 'gukNotice') {
+      v['응시구분'] = (s && s.targetPoomDan && s.targetPoomDan !== '없음') ? s.targetPoomDan : '품·단';
+      v['심사일정'] = gkDateText();
+      v['장소'] = gkPlace();
+      v['준비물'] = opts.items || '응시원서, 도복, 수련복';
+    } else if (kind === 'gukPass') {
+      v['합격급수'] = opts.grade || ((s && s.targetPoomDan && s.targetPoomDan !== '없음') ? s.targetPoomDan : '품·단');
+    } else if (kind === 'tuitionNotice' || kind === 'tuitionThanks') {
+      var real = (s && s.id && byId(s.id)) || null;
+      var amount = real ? tuitionAmountOf(mk, real.id) : (s ? studentFee(s) : tuitionDefaultFee());
+      var ded = real ? tuitionDeduction(mk, real.id) : 0;
+      var dedReason = real ? tuitionDeductionReason(mk, real.id) : '';
+      var bank = tuitionBankAccount();
+      var rec = real ? (tuitionOf(mk, real.id) || {}) : {};
+      var pd = rec.paidDate || ((s && isDateKey(s.tuitionDate) && String(s.tuitionDate).slice(0, 7) === mk) ? s.tuitionDate : '');
+      v['월'] = tuitionMonthLabel(mk);
+      v['금액'] = fmtWon(amount);
+      v['차감'] = ded ? fmtWon(ded) : '0';
+      v['차감사유'] = dedReason;
+      v['차감줄'] = ded ? ('· 차감: ' + fmtWon(ded) + '원' + (dedReason ? ' (' + dedReason + ')' : '') + '\n') : '';
+      v['납부기한'] = String(tuitionDueDay());
+      v['계좌'] = bank;
+      v['계좌줄'] = bank ? ('· 입금 계좌: ' + bank + '\n') : '';
+      v['수단'] = rec.method || '';
+      v['수단줄'] = rec.method ? ('· 결제 수단: ' + rec.method + '\n') : '';
+      v['납부일'] = pd ? dateKo(pd) : '';
+      v['납부일줄'] = pd ? ('· 납부일: ' + dateKo(pd) + '\n') : '';
+    } else if (kind === 'resume') {
+      var hasCourse = !!(s && String(s.course || '').trim());
+      v['소속'] = s ? (hasCourse ? studentLabel(s) : divisionOf(s)) : '';
+      var cnt = s ? (Number(s.attendCount) || 0) : 0;
+      v['출석'] = cnt;
+      v['출석줄'] = cnt > 0 ? ('· 그동안의 누적 출석 ' + cnt + '회 · ' + ((s && s.belt) || '띠') + ' 과정은 그대로 이어집니다.\n') : '';
+    }
+    return v;
+  }
   function buildMessage(student, mode, timeStr) {
-    var label = mode === 'in' ? '등원' : '하원';
-    return '[' + app.settings.dojoName + '] ' + student.name + ' 관원이 ' + timeStr + ' ' + label + '하였습니다.';
+    var kind = mode === 'in' ? 'attendanceIn' : 'attendanceOut';
+    return buildMsg(kind, msgVarsFor(kind, student, { time: timeStr, mode: mode }));
   }
 
   var SMS_STATUS = {
@@ -4273,6 +4497,63 @@
       '<button class="btn btn-sm" data-face-reg="' + esc(s.id) + '">📸 얼굴 등록</button></div>';
   }
 
+  /* 관원의 첫 등록일 · 원비 날짜 (YYYY-MM-DD, 없으면 '') */
+  function firstRegOf(s) { return (s && isDateKey(s.firstRegDate)) ? String(s.firstRegDate) : ''; }
+  function tuitionDateOf(s) { return (s && isDateKey(s.tuitionDate)) ? String(s.tuitionDate) : ''; }
+  /* 원비 관리 표에 보여줄 납부일 — 그 달 기록에 없으면 관원의 원비 날짜가 같은 달일 때 맞춰 보여준다 */
+  function tuitionDateShown(mk, sid) {
+    var rec = tuitionOf(mk, sid);
+    if (rec && isDateKey(rec.paidDate)) { return String(rec.paidDate); }
+    var s = byId(sid);
+    if (s && isDateKey(s.tuitionDate) && String(s.tuitionDate).slice(0, 7) === mk) { return String(s.tuitionDate); }
+    return '';
+  }
+
+  /* 관원 관리의 「원비 날짜」 → 원비 관리(paidDate) 동기화
+     · 날짜를 고르면 그 달 기록을 완납 + 납부일로 저장(없으면 만듦)
+     · 날짜를 비우면 그 전 날짜가 있던 달의 납부일만 지운다(지난 달 납부 기록은 남긴다) */
+  function syncTuitionFromStudentDate(sid, oldDate, newDate) {
+    var s = byId(sid);
+    if (!s) { return false; }
+    var old = isDateKey(oldDate) ? String(oldDate) : '';
+    var neu = isDateKey(newDate) ? String(newDate) : '';
+    var changed = false;
+    if (neu) {
+      var mk = neu.slice(0, 7);
+      if (!app.tuition[mk]) { app.tuition[mk] = {}; }
+      var rec = app.tuition[mk][sid] || { status: 'unpaid' };
+      if (!TUITION_STATUS[rec.status]) { rec.status = 'unpaid'; }
+      rec.status = 'paid';
+      rec.paidDate = neu;
+      app.tuition[mk][sid] = rec;
+      changed = true;
+    } else if (old) {
+      var mkOld = old.slice(0, 7);
+      var prev = app.tuition[mkOld] && app.tuition[mkOld][sid];
+      if (prev && prev.paidDate === old) {
+        delete prev.paidDate;
+        changed = true;
+      }
+    }
+    if (changed) { saveTuition(); }
+    return changed;
+  }
+  /* 원비 관리의 납부일 → 관원의 「원비 날짜」 (setTuition 안에서만 부른다) */
+  function syncStudentDateFromTuition(sid, prevPaid, nextPaid) {
+    var s = byId(sid);
+    if (!s) { return; }
+    var prev = isDateKey(prevPaid) ? String(prevPaid) : '';
+    var next = isDateKey(nextPaid) ? String(nextPaid) : '';
+    if (prev === next) { return; }
+    if (next) {
+      if (s.tuitionDate !== next) { s.tuitionDate = next; saveStudents(); }
+    } else if (prev && s.tuitionDate === prev) {
+      s.tuitionDate = '';
+      saveStudents();
+    }
+    if (el('stu-table')) { renderStudentsTable(); }
+  }
+
   function renderStudentsTable() {
     var filter = app.stuFilter || 'all';
     var counts2 = { all: app.students.length, active: activeStudents().length, paused: pausedStudents().length };
@@ -4297,7 +4578,7 @@
 
     var tbody = el('stu-table');
     if (!list.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">' +
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="8">' +
         (app.students.length ? '이 상태의 관원이 없어요.' : '관원이 없습니다') + '</td></tr>';
       return;
     }
@@ -4309,6 +4590,12 @@
         '<td><div class="sub">' + esc(studentLabel(s)) + '</div>' + siblingBadge(s) + '</td>' +
         '<td><span class="chip belt-chip-cell">' + beltSwatchHtml(s.belt) + esc(s.belt || '-') + (studentGrade(s) ? ' · ' + esc(studentGrade(s)) : '') + '</span></td>' +
         '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
+        '<td><input class="input mini stu-tdate" type="date" value="' + esc(firstRegOf(s)) + '"' +
+        ' data-stufirst="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 첫 등록일') + '"' +
+        ' title="첫 등록일"></td>' +
+        '<td><input class="input mini stu-tdate" type="date" value="' + esc(tuitionDateOf(s)) + '"' +
+        ' data-stutdate="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 원비 날짜') + '"' +
+        ' title="원비 날짜 · 원비 관리와 연동"></td>' +
         '<td>' + faceCell(s) + '</td>' +
         '<td style="white-space:nowrap">' +
         '<button class="btn btn-sm" data-edit="' + esc(s.id) + '">편집</button> ' +
@@ -4381,7 +4668,7 @@
     box.innerHTML = html;
   }
   function testSmsText() {
-    return '[' + app.settings.dojoName + '] 테스트 문자입니다. 도장폰 무료문자 연동이 정상입니다. (' + fmtTime() + ')';
+    return buildMsg('test', { '시간': fmtTime() });
   }
   function sendTestSms() {
     var conf = readSmsForm();
@@ -4474,7 +4761,8 @@
     if (el('f-division')) { el('f-division').value = '초등부'; }
     if (el('f-course')) { el('f-course').value = ''; }
     if (el('f-sibling')) { el('f-sibling').checked = false; }
-    el('f-count').value = '0';
+    if (el('f-firstreg')) { el('f-firstreg').value = todayKey(); }
+    if (el('f-tuitiondate')) { el('f-tuitiondate').value = ''; }
     el('f-grade').value = '';
     el('f-fee').value = '';
     el('f-fee').setAttribute('data-auto', '1');
@@ -4498,7 +4786,8 @@
     if (el('f-division')) { el('f-division').value = divisionOf(s); }
     if (el('f-course')) { el('f-course').value = courseOf(s); }
     if (el('f-sibling')) { el('f-sibling').checked = siblingOf(s); }
-    el('f-count').value = String(Number(s.attendCount) || 0);
+    if (el('f-firstreg')) { el('f-firstreg').value = firstRegOf(s); }
+    if (el('f-tuitiondate')) { el('f-tuitiondate').value = tuitionDateOf(s); }
     el('f-grade').value = s.grade || '';
     el('f-fee').value = (s.monthlyFee == null ? '' : String(s.monthlyFee));
     el('f-fee').setAttribute('data-auto', s.monthlyFee == null ? '1' : '0');
@@ -4521,7 +4810,6 @@
     var course = normalizeCourse(el('f-course') ? el('f-course').value : '');
     var siblingDiscount = !!(el('f-sibling') && el('f-sibling').checked);
     var belt = el('f-belt').value;
-    var attendCount = Math.max(0, parseInt(el('f-count').value, 10) || 0);
     var grade = el('f-grade').value.trim();
     var poomDan = el('f-poomdan').value || '없음';
     var feeRaw = String(el('f-fee').value == null ? '' : el('f-fee').value).trim();
@@ -4543,6 +4831,10 @@
     if (phone && digitsOnly(phone).length < 4) { toast('보호자 연락처를 다시 확인해 주세요.'); return; }
 
     var status = (el('f-status') && el('f-status').value === 'paused') ? 'paused' : 'active';
+    var firstRegRaw = String(el('f-firstreg') ? el('f-firstreg').value : '').trim();
+    var firstRegDate = isDateKey(firstRegRaw) ? firstRegRaw : '';
+    var tuitionRaw = String(el('f-tuitiondate') ? el('f-tuitiondate').value : '').trim();
+    var tuitionDate = isDateKey(tuitionRaw) ? tuitionRaw : '';
     var pausedDateRaw = String(el('f-paused-date') ? el('f-paused-date').value : '').trim();
     var pauseReason = String(el('f-pause-reason') ? el('f-pause-reason').value : '').trim().slice(0, 60);
     var pausedDate = (status === 'paused') ? (isDateKey(pausedDateRaw) ? pausedDateRaw : todayKey()) : '';
@@ -4551,23 +4843,30 @@
     if (app.editingId) {
       var s = app.students.filter(function (x) { return x.id === app.editingId; })[0];
       if (s) {
+        var prevTuitionDate = tuitionDateOf(s);
         s.name = name; s.phone = phone; s.belt = belt;
         s.className = ''; s.division = division; s.course = course; s.siblingDiscount = siblingDiscount;
-        s.attendCount = attendCount; s.grade = grade; s.poomDan = poomDan;
+        s.grade = grade; s.poomDan = poomDan;
         s.monthlyFee = monthlyFee;
         s.status = status;
         s.pausedDate = pausedDate;
         s.pauseReason = pauseReason;
+        s.firstRegDate = firstRegDate;
+        s.tuitionDate = tuitionDate;
+        if (prevTuitionDate !== tuitionDate) { syncTuitionFromStudentDate(s.id, prevTuitionDate, tuitionDate); }
       }
       toast(name + ' 관원 정보를 수정했어요.' + (status === 'paused' ? ' (휴관생)' : ''));
     } else {
-      app.students.push({
+      var fresh = {
         id: uid('stu'), name: name, phone: phone, className: '', belt: belt,
         division: division, course: course, siblingDiscount: siblingDiscount, lastAttendanceDate: '',
-        attendCount: attendCount, grade: grade, poomDan: poomDan,
+        attendCount: 0, grade: grade, poomDan: poomDan,
         targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '', monthlyFee: monthlyFee,
-        status: status, pausedDate: pausedDate, pauseReason: pauseReason
-      });
+        status: status, pausedDate: pausedDate, pauseReason: pauseReason,
+        firstRegDate: firstRegDate || todayKey(), tuitionDate: tuitionDate
+      };
+      app.students.push(fresh);
+      if (tuitionDate) { syncTuitionFromStudentDate(fresh.id, '', tuitionDate); }
       toast(name + ' 관원을 추가했어요.' + (status === 'paused' ? ' (휴관생)' : ''));
     }
     saveStudents();
@@ -5715,17 +6014,12 @@
     saveSettings();
   }
   function buildExamMessage(student) {
-    var st = promoState(student);
-    return '[' + app.settings.dojoName + '] ' + student.name + ' 관원이 승급심사 대상입니다.\n' +
-      '· 심사 구분: ' + (st.belt || student.belt) + ' → ' + (st.next || '다음 단계') + '\n' +
-      '· 누적 출석: ' + st.count + '회\n' +
-      '· 심사 일정: ' + examDateText() + '\n' +
-      '· 장소: ' + examPlace() + '\n' +
-      '참석이 어려우시면 미리 도장으로 알려 주세요.';
+    return buildMsg('exam', msgVarsFor('exam', student));
   }
-  function buildPromotionMessage(name, newBelt) {
-    return '[' + app.settings.dojoName + '] 축하합니다! ' + name + ' 관원이 ' + newBelt + '로 승급하였습니다.\n' +
-      '그동안 열심히 수련한 만큼 멋진 성장이었어요.';
+  function buildPromotionMessage(name, newBelt, student) {
+    var v = msgVarsFor('promotion', student || null, { newBelt: newBelt });
+    v['이름'] = String(name == null ? '' : name);
+    return buildMsg('promotion', v);
   }
   function sendExamNotice(student, silent) {
     addLog(student, 'in', fmtTime(), { kind: 'exam', text: buildExamMessage(student) });
@@ -5736,7 +6030,7 @@
   function promoteStudent(student) {
     var st = promoState(student);
     if (!st.next) { toast('이미 최고 띠예요.'); return; }
-    var message = buildPromotionMessage(student.name, st.next);
+    var message = buildPromotionMessage(student.name, st.next, student);
     openModal({
       title: student.name + ' 관원을 승급 처리할까요?',
       sub: (student.belt || '') + ' → ' + st.next + ' · 누적 출석 ' + st.count + '회가 0으로 초기화됩니다.',
@@ -5817,7 +6111,7 @@
       if (!ok) { return; }
       list.forEach(function (s) {
         var st = promoState(s);
-        var msg = buildPromotionMessage(s.name, st.next);
+        var msg = buildPromotionMessage(s.name, st.next, s);
         s.belt = st.next;
         s.attendCount = 0;
         addLog(s, 'in', fmtTime(), { kind: 'promotion', text: msg });
@@ -5921,17 +6215,10 @@
     saveSettings();
   }
   function buildGukNotice(s) {
-    var target = (s.targetPoomDan && s.targetPoomDan !== '없음') ? s.targetPoomDan : '품·단';
-    return '[' + app.settings.dojoName + '] ' + s.name + ' 관원이 국기원 승품·승단 심사 대상입니다.\n' +
-      '· 응시 구분: ' + target + '\n' +
-      '· 심사 일정: ' + gkDateText() + '\n' +
-      '· 장소: ' + gkPlace() + '\n' +
-      '· 준비물: 응시원서, 도복, 수련복\n' +
-      '서류 접수는 도장에서 도와드립니다.';
+    return buildMsg('gukNotice', msgVarsFor('gukNotice', s));
   }
   function buildGukPass(s, grade) {
-    return '[' + app.settings.dojoName + '] 축하합니다! ' + s.name + ' 관원이 국기원 ' + grade + ' 심사에 합격하였습니다.\n' +
-      '새로운 품·단을 받은 것을 진심으로 축하드려요.';
+    return buildMsg('gukPass', msgVarsFor('gukPass', s, { grade: grade }));
   }
   function sendGukNotice(s) {
     if (!gkActive(s)) {
@@ -6097,7 +6384,7 @@
   }
 
   function setAdminTab(tab) {
-    var tabs = ['overview', 'students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'counsel', 'report'];
+    var tabs = ['overview', 'students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'counsel', 'report', 'settings'];
     if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
     app.adminTab = tab;
     tabs.forEach(function (t) {
@@ -6122,6 +6409,8 @@
     el('admin-paused').style.display = tab === 'paused' ? 'block' : 'none';
     el('admin-counsel').style.display = tab === 'counsel' ? 'block' : 'none';
     el('admin-report').style.display = tab === 'report' ? 'block' : 'none';
+    el('admin-settings').style.display = tab === 'settings' ? 'block' : 'none';
+    if (tab === 'settings') { renderAdminAccountState(); renderDriveState(); renderVisibility(); }
     if (tab === 'promotion') { renderPromotion(); }
     if (tab === 'gukgiwon') { renderGukgiwon(); }
     if (tab === 'monthly') { renderMonthly(); }
@@ -7080,6 +7369,7 @@
     if (!app.tuition[mk]) { app.tuition[mk] = {}; }
     var cur = app.tuition[mk][sid] || { status: 'unpaid' };
     if (!TUITION_STATUS[cur.status]) { cur.status = 'unpaid'; }
+    var prevPaid = isDateKey(cur.paidDate) ? String(cur.paidDate) : '';
     Object.keys(patch || {}).forEach(function (k) {
       if (patch[k] === undefined || patch[k] === null || patch[k] === '') { delete cur[k]; }
       else { cur[k] = patch[k]; }
@@ -7088,6 +7378,8 @@
     if (cur.status !== 'paid') { delete cur.paidDate; delete cur.method; }
     app.tuition[mk][sid] = cur;
     saveTuition();
+    // 원비 관리의 납부일 → 「🥋 원생 관리」의 원비 날짜
+    syncStudentDateFromTuition(sid, prevPaid, cur.paidDate);
     return cur;
   }
 
@@ -7269,7 +7561,7 @@
           '<option value="unpaid"' + (st === 'unpaid' ? ' selected' : '') + '>미납</option>' +
           '<option value="paid"' + (st === 'paid' ? ' selected' : '') + '>완납</option>' +
           '<option value="exempt"' + (st === 'exempt' ? ' selected' : '') + '>면제·휴원</option></select></td>' +
-          '<td><input class="input mini tu-date" type="date" value="' + esc(rec.paidDate || '') + '"' +
+          '<td><input class="input mini tu-date" type="date" value="' + esc(tuitionDateShown(mk, s.id)) + '"' +
           ' data-tdate="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 납부일') + '"></td>' +
           '<td><div class="tu-mgroup">' + methods + '</div></td>' +
           '<td><input class="input mini tu-memo" type="text" maxlength="40" value="' + esc(rec.memo || '') + '"' +
@@ -7327,25 +7619,10 @@
   }
 
   function tuitionNoticeMessage(s, mk) {
-    var bank = tuitionBankAccount();
-    var ded = tuitionDeduction(mk, s.id);
-    var dedReason = tuitionDeductionReason(mk, s.id);
-    return '[' + app.settings.dojoName + '] ' + s.name + ' 관원 ' + tuitionMonthLabel(mk) + ' 원비 납부 안내입니다.\n' +
-      '· 원비: ' + fmtWon(tuitionAmountOf(mk, s.id)) + '원\n' +
-      (ded ? '· 차감: ' + fmtWon(ded) + '원' + (dedReason ? ' (' + dedReason + ')' : '') + '\n' : '') +
-      '· 납부 기한: ' + tuitionMonthLabel(mk) + ' ' + tuitionDueDay() + '일까지\n' +
-      (bank ? '· 입금 계좌: ' + bank + '\n' : '') +
-      '이미 납부하셨다면 이 문자는 넘겨 주세요.';
+    return buildMsg('tuitionNotice', msgVarsFor('tuitionNotice', s, { mk: mk }));
   }
   function tuitionThanksMessage(s, mk) {
-    var rec = tuitionOf(mk, s.id) || {};
-    var lines = [
-      '[' + app.settings.dojoName + '] ' + s.name + ' 관원 ' + tuitionMonthLabel(mk) + ' 원비 수납이 확인되었습니다. 감사합니다.',
-      '· 원비: ' + fmtWon(tuitionAmountOf(mk, s.id)) + '원'
-    ];
-    if (rec.method) { lines.push('· 결제 수단: ' + rec.method); }
-    if (rec.paidDate) { lines.push('· 납부일: ' + dateKo(rec.paidDate)); }
-    return lines.join('\n');
+    return buildMsg('tuitionThanks', msgVarsFor('tuitionThanks', s, { mk: mk }));
   }
   /* 'sent' | 'skipped' */
   function sendTuitionSms(sid, silent) {
@@ -8413,6 +8690,102 @@
     }
   }
 
+  /* =========================================================
+     11-G-2. 문자 문구 설정 (등원·하원·심사·원비·복귀 …)
+     저장: app.settings.messages[kind] → tdk.settings.v1
+     ========================================================= */
+  function ensureMsgUI() {
+    if (!app.msgUI || typeof app.msgUI !== 'object') { app.msgUI = { kind: 'attendanceIn' }; }
+    if (MSG_KINDS.indexOf(app.msgUI.kind) === -1) { app.msgUI.kind = 'attendanceIn'; }
+    return app.msgUI;
+  }
+  function msgSampleStudent() {
+    return {
+      id: '__msg_preview', name: '김민준', division: '초등부', course: '16회', siblingDiscount: false,
+      belt: '파란띠', phone: '010-2345-6789', attendCount: 22, status: 'active',
+      poomDan: '1품', targetPoomDan: '1품', gukStatus: 'target'
+    };
+  }
+  function msgKindLabel(kind) {
+    return (MSG_DEFAULTS[kind] && MSG_DEFAULTS[kind].label) || String(kind || '');
+  }
+  function renderMsgSettings(force) {
+    var row = el('msg-kind-row');
+    if (!row) { return; }
+    var u = ensureMsgUI();
+    row.innerHTML = MSG_KINDS.map(function (k) {
+      return '<button type="button" class="bs-tpl-chip' + (u.kind === k ? ' active' : '') + '"' +
+        ' data-msgkind="' + esc(k) + '" title="' + esc(msgKindLabel(k) + ' 문구 고치기') + '">' +
+        esc(msgKindLabel(k)) + (msgIsCustom(k) ? ' · 내 문구' : '') + '</button>';
+    }).join('');
+    var def = MSG_DEFAULTS[u.kind] || { label: '', vars: [] };
+    if (el('msg-kind-label')) { el('msg-kind-label').textContent = def.label + ' 문구'; }
+    var ta = el('msg-text');
+    if (ta && (force || document.activeElement !== ta)) { ta.value = msgTemplate(u.kind); }
+    if (el('msg-saved-note')) {
+      el('msg-saved-note').textContent = msgIsCustom(u.kind) ? '✍️ 내가 고친 문구 사용 중' : '기본 문구 사용 중';
+    }
+    if (el('msg-vars')) {
+      el('msg-vars').textContent = '치환 변수 · ' + (def.vars || []).map(function (v) { return '{' + v + '}'; }).join(' ');
+    }
+    renderMsgPreview();
+  }
+  function renderMsgPreview() {
+    var u = ensureMsgUI();
+    var ta = el('msg-text');
+    var raw = ta ? String(ta.value || '') : msgTemplate(u.kind);
+    var mk = (app.tuitionUI && app.tuitionUI.month) || monthKey(new Date());
+    var value = fillMsg(raw, msgVarsFor(u.kind, msgSampleStudent(), { mk: mk }));
+    var bytes = smsBytes(value);
+    if (el('msg-bytes')) {
+      el('msg-bytes').textContent = bytes + ' B · ' + smsKindLabel(bytes);
+      el('msg-bytes').className = 'bs-badge' + (smsKindOf(bytes) === 'lms' ? ' lms' : '');
+    }
+    var box = el('msg-preview');
+    if (!box) { return; }
+    box.innerHTML = '<div class="bs-preview-head"><b>미리보기</b><span>김민준 관원 기준</span></div>' +
+      '<div class="bs-bubble' + (value ? '' : ' empty') + '">' + (value ? esc(value) : '문구를 입력하면 여기에 보입니다.') + '</div>';
+  }
+  function selectMsgKind(kind) {
+    if (MSG_KINDS.indexOf(kind) === -1) { return null; }
+    ensureMsgUI().kind = kind;
+    renderMsgSettings(true);
+    return kind;
+  }
+  function saveMsgTemplate() {
+    var u = ensureMsgUI();
+    var ta = el('msg-text');
+    var text = ta ? String(ta.value || '').replace(/\r\n/g, '\n').trim() : '';
+    if (!text) {
+      toast('문구를 비우면 저장할 수 없어요. 기본 문구로 되돌리려면 「이 문구 기본값으로」를 눌러 주세요.');
+      if (ta) { ta.focus(); }
+      return null;
+    }
+    msgStore()[u.kind] = text.slice(0, 1200);
+    saveSettings();
+    renderMsgSettings(true);
+    toast('「' + msgKindLabel(u.kind) + '」 문구를 저장했어요 · 이제 이 문구로 문자가 나가요');
+    return msgStore()[u.kind];
+  }
+  function resetMsgTemplate() {
+    var u = ensureMsgUI();
+    var store = msgStore();
+    if (store[u.kind]) {
+      delete store[u.kind];
+      saveSettings();
+    }
+    renderMsgSettings(true);
+    toast('「' + msgKindLabel(u.kind) + '」 문구를 기본값으로 되돌렸어요');
+    return null;
+  }
+  function resetAllMsgTemplates() {
+    app.settings.messages = {};
+    saveSettings();
+    renderMsgSettings(true);
+    toast('모든 문자 문구를 기본값으로 되돌렸어요');
+    return true;
+  }
+
   function renderBulkTplChips() {
     var u = ensureBulkSms();
     var row = el('bs-tpl-row');
@@ -8505,6 +8878,7 @@
     renderBulkTplChips();
     renderBulkSmsPreview();
     renderBulkSmsHistory();
+    renderMsgSettings(force);
   }
 
   /* 확인 모달 → 확인 시에만 발송 (기존 addLog → enqueueSms → pumpSms 경로 그대로) */
@@ -8580,17 +8954,7 @@
 
   /* 복귀 안내 문자 (MacroDroid 무료문자 · addLog 경로 그대로) */
   function resumeNoticeMessage(s) {
-    var lines = [
-      '[' + app.settings.dojoName + '] 재원 복귀 안내',
-      '',
-      s.name + ' 관원 학부모님, 안녕하세요.',
-      (String(s.course || '').trim() ? studentLabel(s) + ' 수업으로 다시 함께하게 되었습니다.' : divisionOf(s) + ' 수업으로 다시 함께하게 되었습니다.')
-    ];
-    if (Number(s.attendCount) > 0) {
-      lines.push('· 그동안의 누적 출석 ' + Number(s.attendCount) + '회 · ' + (s.belt || '띠') + ' 과정은 그대로 이어집니다.');
-    }
-    lines.push('수업 시간에 뵙겠습니다. 감사합니다.');
-    return lines.join('\n');
+    return buildMsg('resume', msgVarsFor('resume', s));
   }
   function sendResumeSms(id, silent) {
     var s = byId(id);
@@ -9328,6 +9692,8 @@
     belt: ['띠', '급', '벨트', '품', 'belt', 'rank'],
     phone: ['연락처', '전화', '휴대폰', '핸드폰', '보호자', '학부모', '부모', 'phone', 'tel', 'mobile', 'contact'],
     attendCount: ['누적출석', '출석일수', '출석횟수', '승급출석', '총출석', '출석', 'attend', 'count'],
+    firstRegDate: ['첫등록일', '등록일', '가입일', '등록날짜', 'firstreg', 'regdate'],
+    tuitionDate: ['원비날짜', '원비 납부일', '원비납부일', '납부일', '수납일', 'tuitiondate', 'paiddate'],
     pausedDate: ['휴관일', '휴관시작', '휴관날짜', 'pausedate', 'pause_date'],
     pauseReason: ['휴관사유', '사유', '비고', 'reason'],
     status: ['상태', '구분', 'status', 'state']
@@ -9359,7 +9725,7 @@
   function matchField(text) {
     var t = String(text || '').toLowerCase().replace(/\s+/g, '');
     if (!t) { return null; }
-    var fields = ['name', 'phone', 'division', 'course', 'siblingDiscount', 'className', 'attendCount', 'belt', 'pausedDate', 'pauseReason', 'status'];
+    var fields = ['name', 'phone', 'division', 'course', 'siblingDiscount', 'className', 'attendCount', 'firstRegDate', 'tuitionDate', 'belt', 'pausedDate', 'pauseReason', 'status'];
     for (var i = 0; i < fields.length; i++) {
       var f = fields[i];
       var keys = HEADER_KEYS[f];
@@ -9441,7 +9807,9 @@
         gukExamDate: '',
         status: status || 'active',
         pausedDate: normalizeImportDate(pausedRaw) || (status === 'paused' ? todayKey() : ''),
-        pauseReason: reasonRaw.trim().slice(0, 60)
+        pauseReason: reasonRaw.trim().slice(0, 60),
+        firstRegDate: normalizeImportDate(cellOf('firstRegDate')),
+        tuitionDate: normalizeImportDate(cellOf('tuitionDate'))
       });
     }
     return out;
@@ -9552,9 +9920,24 @@
             else if (!isDateKey(hit.pausedDate)) { hit.pausedDate = todayKey(); }
             if (s.pauseReason) { hit.pauseReason = s.pauseReason; }
           }
+          // 첫 등록일·원비 날짜는 비어 있을 때만 채운다(직접 고친 값을 덮지 않음)
+          if (!isDateKey(hit.firstRegDate) && isDateKey(s.firstRegDate)) {
+            hit.firstRegDate = s.firstRegDate;
+          }
+          if (!isDateKey(hit.tuitionDate) && isDateKey(s.tuitionDate)) {
+            hit.tuitionDate = s.tuitionDate;
+          }
         });
       }
       saveStudents();
+      // 파일에 적힌 「원비 날짜」는 원비 관리 납부일로도 넣어 둔다
+      students.forEach(function (s) {
+        if (!isDateKey(s.tuitionDate)) { return; }
+        var key = s.name + '|' + digitsOnly(s.phone);
+        var hit = null;
+        app.students.forEach(function (x) { if (x.name + '|' + digitsOnly(x.phone) === key) { hit = x; } });
+        if (hit) { syncTuitionFromStudentDate(hit.id, '', hit.tuitionDate); }
+      });
       renderAll();
       resetStudentForm();
       toast('관원 ' + app.students.length + '명으로 명단을 저장했어요.');
@@ -9563,10 +9946,10 @@
   }
 
   function downloadSampleCSV() {
-    var lines = ['이름,부서,수업,띠,보호자 연락처,누적 출석,형제할인'];
+    var lines = ['이름,부서,수업,띠,보호자 연락처,누적 출석,첫 등록일,원비 날짜,형제할인'];
     SAMPLE_STUDENTS.forEach(function (s) {
       lines.push([s.name, s.division || '', s.course || '', s.belt, s.phone, s.attendCount || 0,
-        s.siblingDiscount ? 'Y' : ''].join(','));
+        s.firstRegDate || '', s.tuitionDate || '', s.siblingDiscount ? 'Y' : ''].join(','));
     });
     var csv = '\uFEFF' + lines.join('\r\n');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -9613,6 +9996,7 @@
       } : null,
       logs: app.logs,
       settings: app.settings,
+      messages: (app.settings && app.settings.messages) || {},
       driveWebhookUrl: driveConf().webhookUrl,
       driveAutoBackup: driveConf().autoBackup === true,
       lastDriveBackupAt: driveConf().lastBackupAt || ''
@@ -9684,6 +10068,9 @@
     if (data.feeTable != null && (typeof data.feeTable !== 'object' || Array.isArray(data.feeTable))) {
       return { ok: false, reason: '원비 단가표 형식이 올바르지 않아요.' };
     }
+    if (data.messages != null && (typeof data.messages !== 'object' || Array.isArray(data.messages))) {
+      return { ok: false, reason: '문자 문구 설정 형식이 올바르지 않아요.' };
+    }
     return { ok: true };
   }
 
@@ -9741,6 +10128,12 @@
         lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(inLast) ? inLast : String(prevDrive.lastBackupAt || '')
       };
       writeJSON(LS.settings, inSettings);
+    }
+    // 문자 문구 (예전 백업에는 없을 수 있으니 있을 때만 덮어쓴다)
+    if (data.messages != null) {
+      var msgBase = readJSON(LS.settings, {}) || {};
+      msgBase.messages = sanitizeMessages(data.messages);
+      writeJSON(LS.settings, msgBase);
     }
 
     loadState();
@@ -10345,6 +10738,48 @@
       var del = e.target.closest('[data-del]');
       if (del) { deleteStudent(del.getAttribute('data-del')); }
     });
+    /* 명단 안에서 바로 고치는 첫 등록일 · 원비 날짜 */
+    el('stu-table').addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) { return; }
+      var fr = t.closest('[data-stufirst]');
+      if (fr) {
+        var fs = byId(fr.getAttribute('data-stufirst'));
+        if (!fs) { return; }
+        var fv = String(fr.value || '').trim();
+        if (!fv) {
+          renderStudentsTable();
+          toast(fs.name + ' 관원 첫 등록일은 비워 둘 수 없어요. 다시 날짜를 골라 주세요.');
+          return;
+        }
+        if (!isDateKey(fv)) { renderStudentsTable(); toast('첫 등록일은 날짜로 골라 주세요.'); return; }
+        fs.firstRegDate = fv;
+        saveStudents();
+        renderStudentsTable();
+        toast(fs.name + ' · 첫 등록일 ' + fs.firstRegDate + ' 저장');
+        return;
+      }
+      var td = t.closest('[data-stutdate]');
+      if (td) {
+        var ts = byId(td.getAttribute('data-stutdate'));
+        if (!ts) { return; }
+        var tv = String(td.value || '').trim();
+        var before = tuitionDateOf(ts);
+        if (tv && !isDateKey(tv)) { renderStudentsTable(); toast('원비 날짜는 날짜로 골라 주세요.'); return; }
+        ts.tuitionDate = tv || '';
+        saveStudents();
+        syncTuitionFromStudentDate(ts.id, before, ts.tuitionDate);
+        renderStudentsTable();
+        renderTuition(true);
+        if (ts.tuitionDate) {
+          toast(ts.name + ' · 원비 날짜 ' + dateKo(ts.tuitionDate) + ' → 원비 관리 ' +
+            tuitionMonthLabel(ts.tuitionDate.slice(0, 7)) + ' 납부일로 저장했어요');
+        } else {
+          toast(ts.name + ' · 원비 날짜를 비웠어요' + (before ? ' (' + dateKo(before) + ' 납부 기록도 지웠습니다)' : ''));
+        }
+        return;
+      }
+    });
     if (el('stu-filters')) {
       el('stu-filters').addEventListener('click', function (e) {
         var b = e.target.closest('[data-sfilter]');
@@ -10412,6 +10847,7 @@
     // 관리자: 승급심사 관리
     el('atab-overview').addEventListener('click', function () { setAdminTab('overview'); });
     el('atab-students').addEventListener('click', function () { setAdminTab('students'); });
+    el('atab-settings').addEventListener('click', function () { setAdminTab('settings'); });
     el('atab-promotion').addEventListener('click', function () { setAdminTab('promotion'); });
     el('promo-filters').addEventListener('click', function (e) {
       var b = e.target.closest('[data-pfilter]');
@@ -11092,11 +11528,24 @@
     el('btn-admin-face-open').addEventListener('click', openAdminFaceRegister);
     el('btn-admin-face-del').addEventListener('click', confirmRemoveAdminFace);
     el('btn-goto-account').addEventListener('click', function () {
-      setAdminTab('students');
+      setAdminTab('settings');
       var p = el('admin-account-panel');
       if (p && p.scrollIntoView) { p.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
       var f = el('adm-cur-pw');
       if (f) { setTimeout(function () { try { f.focus(); } catch (e) {} }, 250); }
+    });
+    el('msg-kind-row').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-msgkind]');
+      if (b) { selectMsgKind(b.getAttribute('data-msgkind')); }
+    });
+    el('msg-text').addEventListener('input', renderMsgPreview);
+    el('btn-msg-save').addEventListener('click', saveMsgTemplate);
+    el('btn-msg-reset').addEventListener('click', resetMsgTemplate);
+    el('btn-msg-reset-all').addEventListener('click', resetAllMsgTemplates);
+    el('btn-sms-templates').addEventListener('click', function () {
+      setAdminTab('sms');
+      var p = el('msg-tpl-panel');
+      if (p && p.scrollIntoView) { p.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     });
   }
 
@@ -11312,6 +11761,47 @@
       monthKey: monthKey,
       shiftMonth: shiftMonth
     },
+    messages: {
+      kinds: MSG_KINDS,
+      defaults: function () { return MSG_DEFAULTS; },
+      label: msgKindLabel,
+      template: msgTemplate,
+      isCustom: msgIsCustom,
+      fill: fillMsg,
+      build: buildMsg,
+      varsFor: msgVarsFor,
+      sanitize: sanitizeMessages,
+      store: msgStore,
+      ui: ensureMsgUI,
+      sample: msgSampleStudent,
+      select: selectMsgKind,
+      render: renderMsgSettings,
+      preview: renderMsgPreview,
+      save: saveMsgTemplate,
+      reset: resetMsgTemplate,
+      resetAll: resetAllMsgTemplates,
+      attendance: buildMessage,
+      exam: buildExamMessage,
+      promotion: buildPromotionMessage,
+      gukNotice: buildGukNotice,
+      gukPass: buildGukPass,
+      tuitionNotice: tuitionNoticeMessage,
+      tuitionThanks: tuitionThanksMessage,
+      resume: resumeNoticeMessage,
+      test: testSmsText
+    },
+    studentInfo: {
+      firstReg: firstRegOf,
+      tuitionDate: tuitionDateOf,
+      tuitionDateShown: tuitionDateShown,
+      syncFromStudent: syncTuitionFromStudentDate,
+      syncFromTuition: syncStudentDateFromTuition,
+      save: saveStudent,
+      edit: startEdit,
+      reset: resetStudentForm,
+      render: renderStudentsTable
+    },
+    tab: setAdminTab,
     report: {
       ui: ensureReport,
       compute: reportMonth,
