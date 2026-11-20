@@ -2401,6 +2401,7 @@
         : l.kind === 'exam' ? '심사 안내'
         : l.kind === 'guk_notice' ? '국기원 안내'
         : l.kind === 'guk_pass' ? '국기원 합격'
+        : l.kind === 'resume' ? '복귀 안내'
         : '출석 안내';
       return '<div class="sms-msg">' +
         '<div class="sms-head">' +
@@ -3335,6 +3336,7 @@
         : l.kind === 'guk_notice' ? '국기원' : l.kind === 'guk_pass' ? '합격'
         : l.kind === 'tuition' ? '원비'
         : l.kind === 'bulk_sms' ? '단체문자'
+        : l.kind === 'resume' ? '복귀'
         : (l.kind === 'test' || l.status === 'test') ? '테스트' : '출석';
       var text = l.text.length > 40 ? l.text.slice(0, 40) + '…' : l.text;
       return '<tr>' +
@@ -3831,7 +3833,7 @@
     var was = app.adminAuthed;
     app.adminAuthed = false;
     renderAdminAccountState();
-    if (!silent && was) { toast('관리자 화면을 잠쉈어요 🔒'); }
+    if (!silent && was) { toast('관리자 화면을 잠갔어요 🔒'); }
   }
   function requestAdmin() {
     if (app.adminAuthed) { setView('admin'); return; }
@@ -3929,7 +3931,7 @@
         saveAdminAccount();
         clearAdminForm();
         renderAdminAccountState();
-        toast('관리자 계정을 바쉈어요 · 아이디 ' + newId + ' (SHA-256 해시 저장)');
+        toast('관리자 계정을 바꿨어요 · 아이디 ' + newId + ' (SHA-256 해시 저장)');
       });
     });
   }
@@ -4057,7 +4059,7 @@
     }).then(function (ok) {
       if (!ok) { return; }
       setStudentStatus(id, 'paused', { pausedDate: isDateKey(draft.date) ? draft.date : todayKey(), pauseReason: draft.reason });
-      toast(s.name + ' 관원을 휴관생으로 바쇠어요 · 복귀하면 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로 이어집니다');
+      toast(s.name + ' 관원을 휴관생으로 바꿨어요 · 복귀하면 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로 이어집니다');
     });
   }
   function resumeStudentPrompt(id) {
@@ -6027,10 +6029,12 @@
       var days = pausedDays(s);
       var grade = studentGrade(s);
       var ready = days >= PAUSED_READY_DAYS;
+      var dayTxt = !isDateKey(s.pausedDate) ? '휴관일 미기록'
+        : (days <= 0 ? '오늘부터 휴관' : '휴관 ' + days + '일째');
       return '<tr>' +
         '<td class="nm"><div class="nm-line">' + esc(s.name) + '<span class="chip pause">휴관</span>' +
         (app.faces[s.id] ? '<span class="face-badge on">얼굴 보관</span>' : '') + '</div>' +
-        '<div class="pz-days' + (ready ? ' ready' : '') + '">' + (days ? '휴관 ' + days + '일째' : '휴관일 미기록') + '</div></td>' +
+        '<div class="pz-days' + (ready ? ' ready' : '') + '">' + esc(dayTxt) + '</div></td>' +
         '<td class="sub">' + esc(s.className || '-') + '</td>' +
         '<td><span class="belt-badge"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span>' +
         (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
