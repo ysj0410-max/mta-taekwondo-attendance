@@ -241,7 +241,8 @@
     border:1px solid #e8ecf4; border-radius:12px; padding:9px 11px; transition:background .12s,border-color .12s;
   }
   .stu-row:hover{background:#f6f9ff; border-color:#cfdbf2}
-  .stu-belt{width:9px; height:34px; border-radius:5px; flex:0 0 auto}
+  .stu-belt{width:9px; height:34px; border-radius:5px; flex:0 0 auto; display:inline-flex; flex-direction:column; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(0,0,0,.08); background:#eef1f6}
+  .stu-belt i{flex:1 1 0; display:block}
   .stu-main{min-width:0; flex:1}
   .stu-name{font-size:14px; font-weight:800; letter-spacing:-.2px; color:var(--ink)}
   .stu-name .badge{font-size:10px; font-weight:800; padding:2px 6px; border-radius:6px; margin-left:5px; vertical-align:1px}
@@ -318,6 +319,8 @@
   .chip.wait{background:#fff4e6; color:#a35b00}
   .chip.off{background:#fdecec; color:#c0392b}
   .chip.pause{background:#f1ecfb; color:#6b4fa8}
+  .belt-chip-cell{display:inline-flex; align-items:center; gap:5px}
+  .belt-chip-cell .belt-swatch{width:16px; height:10px}
   .chip.sib{background:#eaf3ff; color:#155e9c}
   .sib-check{display:flex; align-items:center; gap:8px; height:42px; border:1.5px solid #dde3ee; border-radius:11px; padding:0 12px; background:#fbfcfe; font-size:12.5px; font-weight:800; color:#33405a; cursor:pointer; user-select:none; white-space:nowrap}
   .sib-check input{width:17px; height:17px; accent-color:var(--navy); margin:0; flex:0 0 auto}
@@ -418,7 +421,8 @@
   .admin-tab.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.10)}
   #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov, #view-admin.sms-mode .ov, #view-admin.paused-mode .ov, #view-admin.report-mode .ov, #view-admin.cs-mode .ov{display:none}
   .belt-badge{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:800; background:#f6f8fc; border:1px solid #e6ebf4; padding:4px 9px 4px 6px; border-radius:999px; white-space:nowrap}
-  .belt-badge i{width:12px; height:12px; border-radius:3px; display:inline-block; box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
+  .belt-swatch{display:inline-flex; width:20px; height:12px; border-radius:3px; overflow:hidden; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(0,0,0,.14); vertical-align:-1px; background:#eef1f6}
+  .belt-swatch i{flex:1 1 0; display:block}
   .bar{width:104px; height:7px; background:#edf0f7; border-radius:6px; overflow:hidden; margin-bottom:4px}
   .bar > i{display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,#31c48d,#0ca678)}
   .bar.full > i{background:linear-gradient(90deg,#f6a623,#f0803c)}
@@ -426,12 +430,16 @@
   .att-filters .input{height:34px; flex:0 1 190px; min-width:140px; padding:0 11px; font-size:12px; border-radius:10px}
   .pchip{border:1px solid #e3e8f2; background:#f8fafd; color:#5b6b85; font-weight:800; font-size:11.5px; padding:7px 12px; border-radius:999px; cursor:pointer}
   .pchip.active{background:var(--navy); border-color:var(--navy); color:#fff}
-  .belt-head, .belt-row{display:grid; grid-template-columns:20px 34px minmax(56px,1fr) 54px 62px 26px 26px 26px; gap:5px; align-items:center}
+  .belt-head, .belt-row{display:grid; grid-template-columns:20px 106px minmax(56px,1fr) 54px 26px 26px 26px; gap:5px; align-items:center}
   .belt-head{font-size:9.5px; font-weight:800; color:var(--muted); padding:0 1px 7px; text-align:center}
   .belt-head span:nth-child(3){text-align:left}
-  .belt-row{padding:5px 0; border-top:1px solid #f1f4f9}
+  .belt-row{padding:6px 0; border-top:1px solid #f1f4f9}
   .belt-order{font-size:12px; font-weight:800; color:#98a2b3; text-align:center}
-  .belt-color{width:32px; height:34px; padding:2px; border:1px solid #dde3ee; border-radius:9px; background:#fff; cursor:pointer}
+  .belt-colors{display:flex; flex-direction:column; gap:3px; min-width:0}
+  .belt-color-set{display:flex; gap:2px; align-items:center}
+  .belt-color{width:32px; height:28px; padding:1px; border:1px solid #dde3ee; border-radius:8px; background:#fff; cursor:pointer; flex:0 0 auto}
+  .belt-preview{display:flex; height:8px; border-radius:3px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(0,0,0,.10); background:#eef1f6}
+  .belt-preview i{flex:1 1 0; display:block}
   .belt-row .input{height:34px; font-size:12px; padding:0 6px}
   .belt-th{display:flex; align-items:center; gap:3px}
   .belt-th .input{width:44px; text-align:center; padding:0 2px}
@@ -446,7 +454,7 @@
   .ki-label{font-size:10.5px; font-weight:800; color:var(--muted); white-space:nowrap; letter-spacing:-.2px}
   .ki-body{display:flex; gap:6px; align-items:center; min-width:0; overflow-x:auto}
   .ki-chip{font-size:11px; font-weight:800; padding:4px 8px; border-radius:999px; background:#f4f7fd; color:#3b4a63; white-space:nowrap; display:inline-flex; align-items:center; gap:5px}
-  .ki-chip i{width:9px; height:9px; border-radius:3px; display:inline-block; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+  .ki-chip .belt-swatch{width:14px; height:9px; border-radius:2px}
   .ki-num{font-size:16px; font-weight:900; color:var(--navy); font-variant-numeric:tabular-nums}
 
   /* 공개/비공개 토글 */
@@ -464,21 +472,32 @@
 
   /* 표 안 작은 컨트롤 */
   .input.mini{height:30px; font-size:11.5px; padding:0 6px; border-radius:9px; background:#fff}
+  input.gk-grade-input{width:86px; text-align:center; font-weight:800; color:var(--navy)}
+  input.gk-grade-input::placeholder{font-weight:600; color:#a9b3c4}
   .ck{width:17px; height:17px; accent-color:#16294f; cursor:pointer; vertical-align:middle}
   .grade-chip{font-size:10px; font-weight:800; color:#475467; background:#eef2f9; padding:2px 6px; border-radius:6px; margin-left:4px}
   .bulk-bar{display:flex; align-items:center; gap:8px; background:#eef4ff; border:1px solid #d3e0f7; border-radius:12px; padding:8px 11px; margin:0 0 10px; flex-wrap:wrap}
   .bulk-bar b{font-size:12px; color:var(--navy)}
 
   /* ---------- 월간 출석부 ---------- */
-  .mon-bar{display:flex; align-items:center; gap:9px; margin-bottom:13px; flex-wrap:wrap}
-  .mon-nav{display:flex; align-items:center; gap:6px}
-  .mon-label{font-size:17px; font-weight:900; letter-spacing:-.5px; min-width:118px; text-align:center; font-variant-numeric:tabular-nums; color:var(--navy)}
+  .mon-bar{display:flex; align-items:center; gap:9px; margin-bottom:10px; flex-wrap:wrap}
+  .mon-nav{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .mon-nav .mon-step{height:38px; padding:0 13px; font-size:12.5px; font-weight:800; border-radius:11px; display:inline-flex; align-items:center; gap:5px}
+  .mon-nav .mon-step .mon-arrow{font-size:9.5px; color:#5b6b85; line-height:1}
+  .mon-nav .mon-step:hover .mon-arrow{color:var(--navy)}
+  .mon-label{font-size:18px; font-weight:900; letter-spacing:-.5px; min-width:132px; text-align:center; font-variant-numeric:tabular-nums; color:var(--navy)}
+  input.mon-pick{height:38px; width:132px; font-size:12px; font-weight:700; border-radius:11px}
+  .mon-quick{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:0 0 13px}
+  .mon-quick .mq-label{font-size:10.5px; font-weight:800; color:#98a2b3; margin-right:2px}
+  .mon-chip{border:1px solid #e3e8f2; background:#fff; color:#475467; font-weight:800; font-size:11.5px; padding:7px 12px; border-radius:999px; cursor:pointer; white-space:nowrap; min-height:34px}
+  .mon-chip:hover{border-color:#c6d5ef; background:#f4f8ff}
+  .mon-chip.now{border-color:#bfe9d4; color:#0b7a55}
+  .mon-chip.active{background:var(--navy); border-color:var(--navy); color:#fff}
   select.input.mon-select{width:auto; min-width:172px; height:38px; padding:0 10px}
   .mon-search{width:206px; height:38px}
   .mon-stats{margin-bottom:13px}
+  .stats.mon-stats{grid-template-columns:repeat(3,1fr)}
   .mon-stats .stat-val{font-size:27px}
-  .mon-stats .mon-top-name{font-size:19px; letter-spacing:-.6px; line-height:1.5; padding-top:2px}
-  .mon-stats .mon-top-name small{font-size:11.5px}
   .mon-tablewrap{max-height:min(60vh,620px); overflow:auto}
   table.mtb{width:auto; min-width:100%; border-collapse:separate; border-spacing:0; font-size:12px}
   table.mtb th, table.mtb td{padding:0; text-align:center; border-bottom:1px solid #f1f4f9}
@@ -541,6 +560,28 @@
   .face-preview:empty{display:none}
   .face-preview img{width:64px; height:64px; border-radius:12px; object-fit:cover; border:1px solid #dbe3f0}
   .face-preview .face-preview-txt{font-size:11px; color:#667085; font-weight:700; line-height:1.5}
+  /* 관리자(관장님) 얼굴 등록 · 얼굴 로그인 */
+  .admin-face-block{margin-top:15px; padding-top:13px; border-top:1px dashed #e3e8f2}
+  .admin-face-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:9px}
+  .admin-face-head b{font-size:12.5px; color:var(--navy); letter-spacing:-.2px}
+  .admin-face-body{display:flex; align-items:center; gap:11px; margin-bottom:10px; flex-wrap:wrap}
+  .admin-face-thumb{width:58px; height:58px; border-radius:14px; border:1px solid #dbe3f0; background:#f4f7fc; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:23px; color:#9aa6bb; flex:0 0 auto}
+  .admin-face-thumb img{width:100%; height:100%; object-fit:cover; display:block}
+  .admin-face-meta{flex:1 1 190px; min-width:0; font-size:11px; font-weight:700; color:#667085; line-height:1.6}
+  .admin-face-meta b{color:var(--navy)}
+  .adm-face-login{border-bottom:1px dashed #e3e8f2; padding-bottom:13px; margin-bottom:13px}
+  .adm-face-login > .btn{width:100%}
+  .adm-face-login .tiny-note{display:block; margin-top:7px; text-align:center; line-height:1.55}
+  .adm-face-live{margin-top:11px}
+  .adm-or{display:flex; align-items:center; gap:9px; color:#98a2b3; font-size:10.5px; font-weight:800; margin:0 0 12px}
+  .adm-or::before, .adm-or::after{content:""; flex:1; height:1px; background:#e6ebf4}
+  .face-cam.sm{aspect-ratio:1/1; max-width:270px; margin:0 auto 9px; border-radius:14px}
+  /* 재원생 전체 명단: 화면 가로 전체 · 넉넉한 높이 */
+  .stu-wide-panel{margin-bottom:15px}
+  .stu-tablewrap{max-height:min(62vh,680px); overflow:auto; border:1px solid #eef2f8; border-radius:12px; -webkit-overflow-scrolling:touch}
+  table.stu-tb{min-width:660px}
+  table.stu-tb th{position:sticky; top:0; z-index:2; font-size:11.5px; padding:10px 12px}
+  table.stu-tb td{padding:11px 12px; font-size:13px}
   .range-row{display:flex; align-items:center; gap:10px}
   .range-row input[type="range"]{flex:1; accent-color:var(--navy); height:26px}
   .range-row b{font-size:13px; font-variant-numeric:tabular-nums; color:var(--navy); min-width:38px; text-align:right}
@@ -592,7 +633,8 @@
   .bs-row:hover{background:#f6faff}
   .bs-row.sel{background:#eef4ff}
   .bs-row.nophone{opacity:.6; cursor:not-allowed}
-  .bs-belt{width:11px; height:26px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(0,0,0,.13)}
+  .bs-belt{width:11px; height:26px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(0,0,0,.13); display:inline-flex; flex-direction:column; overflow:hidden; background:#eef1f6}
+  .bs-belt i{flex:1 1 0; display:block}
   .bs-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:1px}
   .bs-name{font-size:13px; font-weight:800; letter-spacing:-.2px}
   .bs-sub{font-size:11px; color:var(--muted); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -730,7 +772,7 @@
   .rp-ymethods b{color:var(--navy)}
   .rp-print-head{display:none}
   @media print{
-    .topbar, .tabs, .admin-tabs, .admin-lockbar, .admin-pw-banner, .btn, .help, .tab-btn, .icon-btn, .mon-nav .btn, select.mon-select{display:none !important}
+    .topbar, .tabs, .admin-tabs, .admin-lockbar, .admin-pw-banner, .btn, .help, .tab-btn, .icon-btn, .mon-nav .btn, select.mon-select, input.mon-pick, .mon-quick{display:none !important}
     #view-admin{padding:0; overflow:visible}
     .panel{box-shadow:none !important; border:1px solid #c9d3e4 !important; break-inside:avoid; page-break-inside:avoid}
     .admin-grid{grid-template-columns:1fr 1fr}
@@ -859,17 +901,34 @@
     .row2, .row3{grid-template-columns:1fr 1fr; gap:8px}
     .field label{font-size:11px}
     .help{font-size:11px; padding:10px 11px}
-    .modal{padding:18px 16px 14px; border-radius:16px; width:min(520px,92vw)}
+    .modal{padding:18px 16px 14px; border-radius:16px; width:min(520px,92vw); max-height:88dvh; overflow-y:auto}
+    .face-cam.sm{max-width:230px}
+    .admin-face-thumb{width:52px; height:52px; border-radius:12px; font-size:21px}
+    .admin-face-body{gap:9px}
+    .stu-wide-panel{margin-bottom:10px}
+    .stu-tablewrap{max-height:min(56vh,440px); border-radius:10px}
+    table.stu-tb{min-width:560px}
+    table.stu-tb td{padding:10px 9px; font-size:12.5px}
     .pick-grid{grid-template-columns:repeat(2,1fr); max-height:52vh}
     .banner-card{width:min(560px,92vw); padding:24px 20px 22px}
     .banner-name{font-size:26px}
-    .belt-head, .belt-row{grid-template-columns:16px 30px minmax(44px,1fr) 42px 48px 24px 24px 24px; gap:3px}
+    .belt-head, .belt-row{grid-template-columns:16px 96px minmax(44px,1fr) 40px 22px 22px 22px; gap:3px}
+    .belt-color{width:30px; height:26px}
+    .belt-row .input{height:32px; font-size:11.5px}
     /* 표는 칸을 눌러 담지 말고 표 안에서 옆으로 넘겨 봄 */
     #view-admin .tablewrap > table.tb{min-width:540px}
     .tablewrap{-webkit-overflow-scrolling:touch}
     .mon-tablewrap{max-height:min(58vh,520px)}
     table.mtb .c-name{width:112px; min-width:112px; max-width:112px; padding:6px 7px}
-    .mon-label{font-size:15px; min-width:96px}
+    .mon-label{font-size:16px; min-width:112px}
+    .mon-nav{width:100%; gap:5px; flex-wrap:wrap}
+    .mon-nav .mon-step{padding:0 9px; font-size:11.5px; flex:0 0 auto; height:36px}
+    .mon-nav #mon-this{margin-left:0 !important; flex:1 1 auto; min-width:72px}
+    input.mon-pick{flex:1 1 130px; width:auto; min-width:0; height:36px}
+    .mon-quick{gap:5px; margin-bottom:10px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; padding-bottom:2px}
+    .mon-quick::-webkit-scrollbar{display:none}
+    .mon-quick .mq-label{display:none}
+    .mon-chip{flex:0 0 auto; min-height:34px; padding:7px 11px}
     select.input.mon-select{min-width:140px}
     .mon-search, input.input.pz-search{width:100%}
     .cs-list{max-height:60vh}
@@ -1159,10 +1218,33 @@
         </div>
 
         <div id="admin-students" class="ov" style="display:none">
+          <!-- 재원생 전체 명단: 폼과 분리해 화면 가로 전체 폭 · 넉넉한 높이로 보여준다 -->
+          <div class="panel stu-wide-panel" id="stu-roster-panel">
+            <div class="panel-head">
+              <h3>📋 재원생 전체 명단</h3>
+              <div class="spacer"></div>
+              <span class="tiny-note" id="stu-count">0명</span>
+            </div>
+            <div class="panel-body">
+              <div class="promo-filters" id="stu-filters" style="margin:-2px 0 9px">
+                <button class="pchip active" data-sfilter="all" id="sf-all">전체</button>
+                <button class="pchip" data-sfilter="active" id="sf-active">재원생</button>
+                <button class="pchip" data-sfilter="paused" id="sf-paused">휴관생</button>
+                <div class="spacer"></div>
+                <span class="tiny-note" id="stu-filter-note"></span>
+              </div>
+              <div class="tablewrap stu-tablewrap">
+                <table class="tb stu-tb">
+                  <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>보호자</th><th>얼굴</th><th style="width:150px"></th></tr></thead>
+                  <tbody id="stu-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
           <div class="admin-grid">
             <div class="admin-col">
               <div class="panel">
-                <div class="panel-head"><h3>👥 관원 명단 관리</h3><div class="spacer"></div><span class="tiny-note" id="stu-count">0명</span></div>
+                <div class="panel-head"><h3>👥 관원 명단 관리</h3><div class="spacer"></div><span class="tiny-note">추가 · 수정 · 휴관</span></div>
                 <div class="panel-body">
                   <input type="hidden" id="edit-id" value="">
                   <div class="row2">
@@ -1218,19 +1300,6 @@
                     <button class="btn btn-ghost" id="btn-cancel-edit" style="display:none">취소</button>
                     <div class="spacer"></div>
                     <button class="btn btn-sm btn-danger" id="btn-sample">샘플 6명으로 복원</button>
-                  </div>
-                  <div class="tablewrap" style="margin-top:13px; max-height:330px; overflow:auto">
-                    <div class="promo-filters" id="stu-filters" style="margin:-2px 0 9px">
-                      <button class="pchip active" data-sfilter="all" id="sf-all">전체</button>
-                      <button class="pchip" data-sfilter="active" id="sf-active">재원생</button>
-                      <button class="pchip" data-sfilter="paused" id="sf-paused">휴관생</button>
-                      <div class="spacer"></div>
-                      <span class="tiny-note" id="stu-filter-note"></span>
-                    </div>
-                    <table class="tb">
-                      <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>보호자</th><th>얼굴</th><th style="width:132px"></th></tr></thead>
-                      <tbody id="stu-table"></tbody>
-                    </table>
                   </div>
                 </div>
               </div>
@@ -1298,7 +1367,7 @@
               </div>
 
               <div class="panel" id="admin-account-panel">
-                <div class="panel-head"><h3>🔐 관리자 계정 (ID · 비밀번호)</h3><div class="spacer"></div><span class="tiny-note" id="adm-state">-</span></div>
+                <div class="panel-head"><h3>🔐 관리자 계정 (ID · 비밀번호 · 얼굴)</h3><div class="spacer"></div><span class="tiny-note" id="adm-state">-</span></div>
                 <div class="panel-body">
                   <div class="row3">
                     <div class="field"><label>현재 비밀번호</label><input class="input" id="adm-cur-pw" type="password" autocomplete="current-password" placeholder="현재 비밀번호"></div>
@@ -1319,6 +1388,23 @@
                     <button class="btn btn-sm" id="btn-admin-lock2">🔒 지금 잠그기</button>
                     <div class="spacer"></div>
                     <span class="tiny-note">비밀번호는 Web Crypto(SHA-256) 해시로만 저장되고 평문은 남지 않아요.</span>
+                  </div>
+
+                  <div class="admin-face-block" id="admin-face-block">
+                    <div class="admin-face-head">
+                      <b>📷 관장님(관리자) 얼굴 등록</b>
+                      <span class="face-badge" id="admin-face-badge">미등록</span>
+                    </div>
+                    <div class="admin-face-body">
+                      <div class="admin-face-thumb" id="admin-face-thumb">👤</div>
+                      <div class="admin-face-meta" id="admin-face-meta">아직 등록된 얼굴이 없어요. 등록하면 아이디·비밀번호 없이 <b>얼굴로</b> 관리자 화면에 들어올 수 있어요.</div>
+                    </div>
+                    <div class="form-actions" style="flex-wrap:wrap">
+                      <button class="btn btn-mint" id="btn-admin-face-open">📷 얼굴 등록</button>
+                      <button class="btn btn-sm" id="btn-admin-face-del" disabled>🗑️ 얼굴 등록 삭제</button>
+                      <div class="spacer"></div>
+                      <span class="tiny-note">얼굴 특징값(128개 숫자)은 이 기기 안에만 저장돼요.</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1368,7 +1454,7 @@
         <div id="admin-promotion" style="display:none">
           <div class="stats">
             <div class="stat"><div class="stat-label">🎖️ 심사 대상</div><div class="stat-val" id="ps-target">0<small>명</small></div></div>
-            <div class="stat"><div class="stat-label">📈 새 띠 기본 기준</div><div class="stat-val" id="ps-threshold">20<small>회</small></div></div>
+            <div class="stat"><div class="stat-label">🎗️ 띠 단계</div><div class="stat-val" id="ps-belts">10<small>단계</small></div></div>
             <div class="stat in"><div class="stat-label">🏅 이번 달 승급</div><div class="stat-val" id="ps-promoted">0<small>명</small></div></div>
             <div class="stat"><div class="stat-label">👥 전체 관원</div><div class="stat-val" id="ps-total">0<small>명</small></div></div>
           </div>
@@ -1384,7 +1470,7 @@
                   <div class="promo-filters" id="promo-filters">
                     <button class="pchip active" data-pfilter="all">전체</button>
                     <button class="pchip" data-pfilter="target">심사 대상</button>
-                    <button class="pchip" data-pfilter="waiting">아직 여유</button>
+                    <button class="pchip" data-pfilter="waiting">최고 띠</button>
                   </div>
                   <div class="bulk-bar" id="promo-bulk" style="display:none">
                     <b id="promo-bulk-count">0명 선택</b>
@@ -1407,19 +1493,17 @@
               <div class="panel">
                 <div class="panel-head"><h3>🎗️ 우리 도장 띠 체계 설정</h3><div class="spacer"></div><span class="tiny-note">위가 첫 번째 띠</span></div>
                 <div class="panel-body" style="padding-bottom:10px">
-                  <div class="belt-head"><span>#</span><span>색</span><span>띠 이름</span><span>급수</span><span>기준</span><span></span><span></span><span></span></div>
+                  <div class="belt-head"><span>#</span><span>색 1 · 2 · 3</span><span>띠 이름</span><span>급수</span><span></span><span></span><span></span></div>
                   <div id="belt-rows"></div>
                   <div class="form-actions" style="margin-top:10px; flex-wrap:wrap">
-                    <button class="btn btn-sm" id="btn-belt-add">＋ 띠 추기</button>
-                    <span class="tiny-note" style="margin-left:2px">새 띠 기준</span>
-                    <input class="input" id="p-threshold" type="number" min="1" step="1" value="20" inputmode="numeric" style="width:64px;height:30px;padding:0 6px;text-align:center">
+                    <button class="btn btn-sm" id="btn-belt-add">＋ 띠 추가</button>
                     <button class="btn btn-primary btn-sm" id="btn-belt-save">띠 체계 저장</button>
                     <div class="spacer"></div>
                     <button class="btn btn-sm btn-danger" id="btn-belt-reset">기본값</button>
                   </div>
                   <div class="help">
-                    위에서 아래로 갈수록 높은 띠예요. <b>승급 기준</b>은 그 띠를 차고 승급심사까지 채워야 하는 <b>등원 일수</b>입니다.
-                    이름·색상·기준을 바꾸거나 띠를 추가·삭제하고 ▲▼로 순서를 바꾼 뒤 <b>띠 체계 저장</b>을 눌러 주세요. 저장하면 심사 대상 판정과 승급 처리도 이 순서를 그대로 따릅니다.
+                    위에서 아래로 갈수록 높은 띠예요. 띠마다 <b>색 3개</b>를 고를 수 있어요. 세 칸을 같은 색으로 두면 단색 띠, 다르게 고르면 <b>3색(줄무늬) 띠</b>로 명단·승급심사·키오스크에 함께 보입니다.<br>
+                    이름·색·급수를 바꾸거나 띠를 추가·삭제하고 ▲▼로 순서를 바꾼 뒤 <b>띠 체계 저장</b>을 눌러 주세요. 최고 띠가 아닌 재원생은 <b>누적 출석과 관계없이 모두 승급심사 대상</b>으로 올라옵니다.
                   </div>
                 </div>
               </div>
@@ -1456,10 +1540,10 @@
           <div class="admin-grid">
             <div class="admin-col">
               <div class="panel">
-                <div class="panel-head"><h3>🏅 국기원 승품·승단 심사</h3><div class="spacer"></div><span class="tiny-note" id="gk-note">-</span></div>
+                <div class="panel-head"><h3>🏅 국기원 승품·승단 심사</h3><div class="spacer"></div><span class="tiny-note" id="gk-note">-</span><button class="btn btn-sm" id="btn-gk-csv">📥 심사 명단 CSV</button></div>
                 <div class="tablewrap">
                   <table class="tb">
-                    <thead><tr><th>관원</th><th>현재 품·단</th><th>목표</th><th>응시 상태</th><th>심사일</th><th style="width:132px"></th></tr></thead>
+                    <thead><tr><th>관원</th><th>현재 품·단</th><th>급수</th><th>목표</th><th>응시 상태</th><th>심사일</th><th style="width:132px"></th></tr></thead>
                     <tbody id="gk-table"></tbody>
                   </table>
                 </div>
@@ -1502,10 +1586,11 @@
         <div id="admin-monthly" style="display:none">
           <div class="mon-bar">
             <div class="mon-nav">
-              <button class="btn" id="mon-prev" title="이전 달" aria-label="이전 달">◀</button>
+              <button class="btn mon-step" id="mon-prev" title="이전 달" aria-label="이전 달"><span class="mon-arrow">◀</span> 이전 달</button>
               <div class="mon-label" id="mon-label">-</div>
-              <button class="btn" id="mon-next" title="다음 달" aria-label="다음 달">▶</button>
-              <button class="btn btn-ghost btn-sm" id="mon-this" style="margin-left:4px">이번 달</button>
+              <button class="btn mon-step" id="mon-next" title="다음 달" aria-label="다음 달">다음 달 <span class="mon-arrow">▶</span></button>
+              <button class="btn btn-ghost btn-sm" id="mon-this">이번 달</button>
+              <input type="month" class="input mon-pick" id="mon-pick" aria-label="월 직접 선택">
             </div>
             <div class="spacer"></div>
             <select class="input mon-select" id="mon-class" aria-label="부서 필터"><option value="all">전체 부서</option></select>
@@ -1515,12 +1600,12 @@
             <button class="btn btn-ghost" id="btn-att-template">📄 출결 양식 CSV</button>
             <input type="file" id="att-import-file" accept=".csv,.xlsx,.xls,text/csv" style="display:none" aria-label="출결기록 파일 선택">
           </div>
+          <div class="mon-quick" id="mon-quick" role="group" aria-label="빠른 월 이동"></div>
 
           <div class="stats mon-stats">
             <div class="stat"><div class="stat-label">📊 총 출석</div><div class="stat-val" id="mon-total">0<small>일</small></div></div>
             <div class="stat in"><div class="stat-label">🙋 참여 관원</div><div class="stat-val" id="mon-people">0<small>명</small></div></div>
             <div class="stat"><div class="stat-label">📈 평균 출석</div><div class="stat-val" id="mon-avg">0<small>일</small></div></div>
-            <div class="stat out"><div class="stat-label">🏅 최다 출석</div><div class="stat-val mon-top-name" id="mon-top">-</div></div>
           </div>
 
           <div class="panel">
@@ -1964,6 +2049,7 @@
     feeTable: 'tdk.feeTable.v1',
     smsTemplates: 'tdk.smsTemplates.v1',
     admin: 'tdk.admin.v1',
+    adminFace: 'tdk.adminFace.v1',
     counsel: 'tdk.counsel.v1'
   };
 
@@ -2137,10 +2223,31 @@
     };
   }
 
-  function defaultBelts(th) {
-    var t = Math.max(1, parseInt(th, 10) || 20);
+  /* 띠 색상: 한 띠당 3색(colors) — 구버전 단일 color 도 같은 3색으로 호환 */
+  function normalizeBeltColors(raw) {
+    var arr = (raw && Array.isArray(raw.colors)) ? raw.colors : null;
+    var one = (raw && typeof raw.color === 'string') ? String(raw.color) : '';
+    var hex = /^#[0-9a-fA-F]{6}$/;
+    var base = '';
+    if (arr) {
+      for (var k = 0; k < 3; k++) {
+        if (hex.test(String(arr[k] || ''))) { base = String(arr[k]); break; }
+      }
+    }
+    if (!base && hex.test(one)) { base = one; }
+    if (!base) { base = '#9aa4b5'; }
+    var out = [];
+    for (var i = 0; i < 3; i++) {
+      var c = arr ? String(arr[i] || '') : (i === 0 ? one : '');
+      out.push(hex.test(c) ? c.toLowerCase() : base.toLowerCase());
+    }
+    return out;
+  }
+
+  function defaultBelts() {
     return BELT_ORDER.map(function (name) {
-      return { name: name, color: BELT_COLORS[name] || '#9aa4b5', grade: BELT_GRADES[name] || '', threshold: t };
+      var c = BELT_COLORS[name] || '#9aa4b5';
+      return { name: name, colors: [c, c, c], grade: BELT_GRADES[name] || '' };
     });
   }
 
@@ -2192,6 +2299,7 @@
     counsel: [],
     counselUI: null,
     admin: null,
+    adminFace: null,
     adminAuthed: false
   };
 
@@ -2361,17 +2469,15 @@
     var rawBelts = (settings && Array.isArray(settings.belts)) ? settings.belts : null;
     if (rawBelts && rawBelts.length) {
       app.settings.belts = rawBelts.map(function (b, i) {
-        var c = String((b && b.color) || '');
         return {
           name: String((b && b.name) || ('띠' + (i + 1))).trim(),
-          color: /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#9aa4b5',
-          grade: String((b && b.grade) || '').trim(),
-          threshold: Math.max(1, parseInt(b && b.threshold, 10) || app.settings.promotionThreshold)
+          colors: normalizeBeltColors(b),
+          grade: String((b && b.grade) || '').trim()
         };
       }).filter(function (b) { return b.name; });
     }
     if (!rawBelts || !app.settings.belts || !app.settings.belts.length) {
-      app.settings.belts = defaultBelts(app.settings.promotionThreshold);
+      app.settings.belts = defaultBelts();
     }
     app.settings.visibility = Object.assign(
       { beltSystem: true, promotion: true, gukgiwon: false },
@@ -2423,6 +2529,7 @@
     app.counsel = loadCounsel();
     app.counselUI = null;
     app.admin = loadAdminAccount();
+    app.adminFace = loadAdminFace();
     app.adminAuthed = false;
 
     var logs = readJSON(LS.logs, []);
@@ -2476,6 +2583,19 @@
       });
     }
     return out;
+  }
+
+  /* 관리자(관장님) 얼굴 특징값 — 관원 얼굴과 분리해 tdk.adminFace.v1 에 저장
+     구조: { descriptor:[128 floats], thumb:'data:image/jpeg;…', at:ISO } */
+  function sanitizeAdminFace(f) {
+    return sanitizeFace(f);
+  }
+  function loadAdminFace() {
+    return sanitizeAdminFace(readJSON(LS.adminFace, null));
+  }
+  function saveAdminFaceData() {
+    if (app.adminFace) { writeJSON(LS.adminFace, app.adminFace); }
+    else { try { localStorage.removeItem(LS.adminFace); } catch (e) {} }
   }
 
   /* =========================================================
@@ -2685,11 +2805,19 @@
       root.classList.add('open');
 
       function close(value) {
+        // 다른 모달이 이미 이 자리를 차지했으면 옛 모달의 닫기 요청은 무시한다
+        if (activeModalClose !== close) { return; }
+        activeModalClose = null;
         root.classList.remove('open');
         root.innerHTML = '';
         root.onclick = null;
+        // 모달을 닫을 때 카메라 스트림 정리 같은 뒷정리를 할 수 있게 하는 훅
+        if (typeof opts.onClose === 'function') {
+          try { opts.onClose(value); } catch (err) {}
+        }
         resolve(value);
       }
+      activeModalClose = close;
       root.onclick = function (e) {
         var btn = e.target.closest('[data-idx]');
         if (btn) {
@@ -2706,6 +2834,11 @@
         if (e.target.classList.contains('modal-backdrop')) { close(null); }
       };
     });
+  }
+
+  var activeModalClose = null;
+  function closeActiveModal(value) {
+    if (activeModalClose) { activeModalClose(value); }
   }
 
   var bannerTimer = null;
@@ -3103,7 +3236,7 @@
     }
     wrap.innerHTML = list.map(function (s) {
       return '<button class="stu-row" data-student="' + esc(s.id) + '">' +
-        '<span class="stu-belt" style="background:' + beltColor(s.belt) + '"></span>' +
+        '<span class="stu-belt">' + beltColors(s.belt).map(function (c) { return '<i style="background:' + esc(c) + '"></i>'; }).join('') + '</span>' +
         '<span class="stu-main">' +
         '<span class="stu-name">' + esc(s.name) + statusBadge(s) + '</span>' +
         '<span class="stu-sub">' + esc(studentLabel(s)) + (s.belt ? ' · ' + esc(s.belt) : '') + '</span>' +
@@ -3227,14 +3360,6 @@
     playSuccess();
     showBanner(student, mode, timeStr, logEntry);
     renderAll();
-    if (mode === 'in') {
-      var st = promoState(student);
-      if (st.target && Number(student.attendCount) === st.threshold) {
-        setTimeout(function () {
-          toast('🎖️ ' + student.name + ' 관원이 심사 대상이 되었어요 (' + st.count + '/' + st.threshold + '회)');
-        }, 700);
-      }
-    }
   }
 
   function flushToday() { saveRecords(); renderAll(); }
@@ -4116,7 +4241,7 @@
         '<td class="nm">' + esc(s.name) +
         (paused ? ' <span class="chip pause">휴관</span>' : '') + '</td>' +
         '<td><div class="sub">' + esc(studentLabel(s)) + '</div>' + siblingBadge(s) + '</td>' +
-        '<td><span class="chip">' + esc(s.belt || '-') + (studentGrade(s) ? ' · ' + esc(studentGrade(s)) : '') + '</span></td>' +
+        '<td><span class="chip belt-chip-cell">' + beltSwatchHtml(s.belt) + esc(s.belt || '-') + (studentGrade(s) ? ' · ' + esc(studentGrade(s)) : '') + '</span></td>' +
         '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
         '<td>' + faceCell(s) + '</td>' +
         '<td style="white-space:nowrap">' +
@@ -4587,10 +4712,30 @@
     var acc = adminAccount();
     var isDefault = !acc || acc.mustChange;
     var draft = { id: acc ? acc.id : DEFAULT_ADMIN_ID, pw: '' };
-    openModal({
+    var hasFace = adminFaceRegistered();
+    var faceBlock =
+      '<div class="adm-face-login">' +
+      '<button class="btn btn-mint" id="adm-face-login"' + (hasFace ? '' : ' disabled') + '>📷 얼굴 인식으로 로그인</button>' +
+      '<div class="tiny-note">' + (hasFace
+        ? '등록된 관장님 얼굴(' + esc(adminFaceAtText()) + ')을 비추면 바로 들어갈 수 있어요.'
+        : '아직 등록된 얼굴이 없어요 · 「🔐 관리자 계정」에서 관장님 얼굴을 먼저 등록해 주세요.') +
+      '</div>' +
+      '<div class="tiny-note" id="adm-face-stopped" style="display:none">얼굴 로그인을 멈췄습니다.</div>' +
+      '<div class="adm-face-live" id="adm-face-live" style="display:none">' +
+      '<div class="face-cam sm"><video id="adm-face-video" autoplay muted playsinline></video><div class="face-frame"></div></div>' +
+      '<div class="face-status wait" id="adm-face-status">카메라를 준비하고 있어요…</div>' +
+      '<div class="form-actions" style="margin-top:0"><button class="btn btn-sm" id="adm-face-cancel">취소하고 아이디·비밀번호로</button></div>' +
+      '</div>' +
+      '</div>' +
+      '<div class="adm-or"><span>또는 아이디 · 비밀번호</span></div>';
+
+    var done = openModal({
       title: '🔒 관리자 로그인',
-      sub: '도장 관리자만 들어갈 수 있어요. 아이디와 비밀번호를 입력해 주세요.',
-      body: '<div class="row2">' +
+      sub: hasFace
+        ? '얼굴을 비추면 바로 들어가고, 아이디·비밀번호도 그대로 쓸 수 있어요.'
+        : '도장 관리자만 들어갈 수 있어요. 아이디와 비밀번호를 입력해 주세요.',
+      body: faceBlock +
+        '<div class="row2">' +
         '<div class="field"><label>아이디</label><input class="input" id="adm-id" autocomplete="username" value="' + esc(draft.id) + '"></div>' +
         '<div class="field"><label>비밀번호</label><input class="input" id="adm-pw" type="password" autocomplete="current-password" placeholder="••••"></div>' +
         '</div>' +
@@ -4604,8 +4749,26 @@
       onAction: function () {
         if (el('adm-id')) { draft.id = String(el('adm-id').value || '').trim(); }
         if (el('adm-pw')) { draft.pw = String(el('adm-pw').value || ''); }
-      }
-    }).then(function (v) {
+      },
+      onClose: function () { stopAdminFaceLoginCamera(); }
+    });
+
+    var faceBtn = el('adm-face-login');
+    if (faceBtn) {
+      faceBtn.addEventListener('click', function () {
+        if (!adminFaceRegistered()) {
+          toast('먼저 「🔐 관리자 계정」에서 관장님 얼굴을 등록해 주세요.');
+          return;
+        }
+        startAdminFaceLogin();
+      });
+    }
+    var cancelBtn = el('adm-face-cancel');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () { stopAdminFaceLoginCamera(true); });
+    }
+
+    done.then(function (v) {
       if (v !== 'login') { return; }
       adminVerify(draft.id, draft.pw).then(function (r) {
         if (!r.ok) {
@@ -4617,6 +4780,7 @@
         setView('admin');
         setAdminTab('overview');
         renderAdminAccountState();
+        renderAdminFaceState();
         toast('관리자로 들어왔어요' + (r.mustChange ? ' · 초기 비밀번호를 꼭 바꿔 주세요' : ''));
       });
     });
@@ -4681,11 +4845,427 @@
   }
 
   /* =========================================================
+     3-E. 관리자(관장님) 얼굴 등록 · 얼굴 로그인
+     · 저장: tdk.adminFace.v1 = { descriptor:[128], thumb, at } — 이 기기 안에만
+     · 로그인 판정 거리: 관원 출석(기본 0.48)보다 엄격한 0.42
+     · 아이디·비밀번호 로그인은 백업으로 항상 남긴다
+     ========================================================= */
+  var ADMIN_FACE_THRESHOLD = 0.42;
+  function adminFaceThreshold() { return ADMIN_FACE_THRESHOLD; }
+  function adminFaceRegistered() {
+    return !!(app.adminFace && app.adminFace.descriptor && app.adminFace.descriptor.length === 128);
+  }
+  function adminFaceAtText() {
+    if (!adminFaceRegistered()) { return ''; }
+    var at = app.adminFace.at ? new Date(app.adminFace.at) : null;
+    if (!at || isNaN(at.getTime())) { return '시각 미기록'; }
+    return fmtDateKorean(at) + ' ' + fmtKoreanTime(at);
+  }
+  function saveAdminFace(descriptor, thumb) {
+    var clean = sanitizeAdminFace({ descriptor: descriptor, thumb: thumb, at: new Date().toISOString() });
+    if (!clean) { return false; }
+    app.adminFace = clean;
+    saveAdminFaceData();
+    renderAdminFaceState();
+    return true;
+  }
+  function removeAdminFace() {
+    if (!adminFaceRegistered()) { return false; }
+    app.adminFace = null;
+    saveAdminFaceData();
+    renderAdminFaceState();
+    return true;
+  }
+  function confirmRemoveAdminFace() {
+    if (!adminFaceRegistered()) { toast('등록된 관리자 얼굴이 없어요.'); return; }
+    openModal({
+      title: '관장님 얼굴 등록을 삭제할까요?',
+      sub: '삭제하면 얼굴로는 로그인할 수 없고, 아이디·비밀번호로만 들어갈 수 있어요.',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '삭제', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      removeAdminFace();
+      toast('관리자 얼굴 등록을 삭제했어요 · 아이디·비밀번호로 로그인할 수 있어요.');
+    });
+  }
+  function renderAdminFaceState() {
+    var reg = adminFaceRegistered();
+    var badge = el('admin-face-badge');
+    if (badge) {
+      badge.className = 'face-badge' + (reg ? ' on' : '');
+      badge.textContent = reg ? '✅ 등록됨' : '미등록';
+    }
+    var thumb = el('admin-face-thumb');
+    if (thumb) {
+      thumb.innerHTML = (reg && app.adminFace.thumb)
+        ? '<img src="' + esc(app.adminFace.thumb) + '" alt="등록된 관리자 얼굴">'
+        : '👤';
+    }
+    var meta = el('admin-face-meta');
+    if (meta) {
+      meta.innerHTML = reg
+        ? '등록 시각 <b>' + esc(adminFaceAtText()) + '</b> · 이 기기에서 얼굴로 관리자 로그인<br>판정 거리 <b>' + adminFaceThreshold().toFixed(2) + '</b> 이하일 때만 통과해요.'
+        : '아직 등록된 얼굴이 없어요. 등록하면 아이디·비밀번호 없이 <b>얼굴로</b> 관리자 화면에 들어올 수 있어요.';
+    }
+    var delBtn = el('btn-admin-face-del');
+    if (delBtn) { delBtn.disabled = !reg; }
+    var openBtn = el('btn-admin-face-open');
+    if (openBtn) { openBtn.textContent = reg ? '📷 얼굴 다시 등록' : '📷 얼굴 등록'; }
+  }
+
+  /* 촬영·업로드한 사진 한 장에서 정확히 얼굴 1명을 찾아 관리자 특징값으로 저장 */
+  function registerAdminFaceFromCanvas(canvas, onStatus) {
+    var setStatus = onStatus || function () {};
+    if (!ai.ready) {
+      setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
+      return Promise.resolve(false);
+    }
+    setStatus('wait', '얼굴을 분석하는 중…');
+    return detectFaces(canvas, 416).then(function (results) {
+      if (!results || !results.length) {
+        setStatus('err', '얼굴을 찾지 못했어요. 밝은 곳에서 정면을 바라봐 주세요.');
+        return false;
+      }
+      if (results.length > 1) {
+        setStatus('err', '얼굴이 ' + results.length + '명 보여요. 한 명만 비춰 주세요.');
+        return false;
+      }
+      var r = results[0];
+      var thumb = makeFaceThumb(canvas, r.detection.box);
+      if (!saveAdminFace(Array.prototype.slice.call(r.descriptor), thumb)) {
+        setStatus('err', '얼굴 특징값을 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.');
+        return false;
+      }
+      setStatus('ok', '✅ 관장님 얼굴을 등록했어요. 이제 로그인 화면의 📷 얼굴 인식으로 들어올 수 있어요.');
+      playSuccess();
+      toast('관리자 얼굴을 등록했어요 (판정 거리 ' + adminFaceThreshold().toFixed(2) + ' 이하).');
+      return true;
+    }).catch(function (err) {
+      setStatus('err', '얼굴 분석에 실패했어요 (' + ((err && err.message) || 'error') + '). 다시 시도해 주세요.');
+      return false;
+    });
+  }
+
+  function openAdminFaceRegister() {
+    var existing = app.adminFace;
+    var body = '' +
+      '<div class="face-cam"><video id="afr-video" autoplay muted playsinline></video>' +
+      '<div class="face-frame"></div></div>' +
+      '<div class="face-status" id="afr-status">카메라를 준비하고 있어요…</div>' +
+      '<div class="form-actions" style="flex-wrap:wrap">' +
+      '<button class="btn btn-mint" id="afr-capture">📷 지금 화면으로 등록</button>' +
+      '<button class="btn" id="afr-upload">🖼️ 사진 파일로 등록</button>' +
+      '<input type="file" id="afr-file" accept="image/*" style="display:none">' +
+      '</div>' +
+      '<div class="face-preview" id="afr-preview"></div>' +
+      '<div class="face-tip">관리자 얼굴은 이 기기 안에서만 분석되고, 저장되는 것은 128개 숫자(특징값)와 작은 썸네일뿐이에요. 외부 서버로 보내지 않습니다.<br>' +
+      '관원 출석(기본 0.48)보다 엄격한 판정 거리 <b>' + adminFaceThreshold().toFixed(2) + '</b>를 써서 다른 사람 얼굴로는 통과하지 않도록 했어요. 아이디·비밀번호 로그인은 그대로 쓸 수 있습니다.</div>';
+
+    var done = openModal({
+      title: '📷 관장님 얼굴 ' + (existing ? '다시 등록' : '등록'),
+      sub: '정면 얼굴이 정확히 1명 검출되면 바로 저장됩니다.',
+      body: body,
+      actions: [{ label: '닫기', value: null, kind: 'btn-ghost' }],
+      onClose: function () { stopAdminFaceRegisterCamera(); }
+    });
+
+    var video = el('afr-video');
+    var closed = false;
+
+    function setStatus(kind, text) {
+      var box = el('afr-status');
+      if (!box) { return; }
+      box.className = 'face-status' + (kind ? ' ' + kind : '');
+      box.textContent = text;
+    }
+
+    function showPreview() {
+      var box = el('afr-preview');
+      if (!box) { return; }
+      var f = app.adminFace;
+      if (!f) { box.innerHTML = ''; return; }
+      box.innerHTML = (f.thumb ? '<img src="' + esc(f.thumb) + '" alt="등록된 관리자 얼굴">' : '') +
+        '<div class="face-preview-txt">등록 시각 ' + esc(adminFaceAtText()) + '</div>';
+    }
+
+    function attachCamera() {
+      if (!video) { return; }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus('err', '이 브라우저에서는 카메라를 열 수 없어요. 사진 파일로 등록해 주세요.');
+        return;
+      }
+      setStatus('wait', '카메라를 켜는 중…');
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      }).then(function (stream) {
+        if (closed) {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          return;
+        }
+        adminFaceRegister.stream = stream;
+        try { video.srcObject = stream; } catch (e) {}
+        if (video.play) {
+          var p = video.play();
+          if (p && p.catch) { p.catch(function () {}); }
+        }
+        setStatus('ok', '카메라 준비 완료 · 얼굴을 맞추고 촬영해 주세요.');
+      }).catch(function (err) {
+        adminFaceRegister.stream = null;
+        setStatus('err', '카메라를 열 수 없어요 (' + ((err && err.name) || 'error') + '). 사진 파일로 등록해 주세요.');
+      });
+    }
+
+    function captureCurrent() {
+      if (!ai.ready) {
+        setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
+        return;
+      }
+      if (!video || !video.videoWidth) {
+        setStatus('wait', '카메라 화면이 아직 준비되지 않았어요. 사진 파일로 등록할 수도 있습니다.');
+        return;
+      }
+      var canvas = document.createElement('canvas');
+      var vw = video.videoWidth, vh = video.videoHeight;
+      var scale = Math.min(1, 900 / Math.max(vw, vh));
+      canvas.width = Math.round(vw * scale);
+      canvas.height = Math.round(vh * scale);
+      var ctx = canvas.getContext ? canvas.getContext('2d') : null;
+      if (!ctx) { setStatus('err', '이 브라우저에서는 사진을 만들 수 없어요.'); return; }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      registerAdminFaceFromCanvas(canvas, function (kind, text) {
+        setStatus(kind, text);
+        if (kind === 'ok') { showPreview(); }
+      });
+    }
+
+    function handleUpload(file) {
+      if (!file) { return; }
+      if (!ai.ready) {
+        setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
+        return;
+      }
+      setStatus('wait', '사진에서 얼굴을 찾는 중…');
+      readImageFile(file).then(function (img) {
+        var canvas = imageToCanvas(img, 900);
+        if (!canvas) { throw new Error('canvas'); }
+        return registerAdminFaceFromCanvas(canvas, function (kind, text) {
+          setStatus(kind, text);
+          if (kind === 'ok') { showPreview(); }
+        });
+      }).catch(function () {
+        setStatus('err', '사진 파일을 읽지 못했어요. JPG·PNG 파일로 다시 시도해 주세요.');
+      });
+    }
+
+    var capBtn = el('afr-capture');
+    if (capBtn) { capBtn.addEventListener('click', captureCurrent); }
+    var upBtn = el('afr-upload');
+    if (upBtn) {
+      upBtn.addEventListener('click', function () {
+        var f = el('afr-file');
+        if (f) { f.click(); }
+      });
+    }
+    var fileEl = el('afr-file');
+    if (fileEl) {
+      fileEl.addEventListener('change', function () {
+        if (fileEl.files && fileEl.files[0]) { handleUpload(fileEl.files[0]); }
+        fileEl.value = '';
+      });
+    }
+
+    showPreview();
+    if (!ai.ready) {
+      setStatus(ai.state === 'loading' ? 'wait' : 'err', ai.state === 'loading'
+        ? 'AI 모델을 불러오는 중이에요. 준비되면 촬영할 수 있습니다.'
+        : 'AI 모델을 불러오지 못했어요. 사진 파일 대신 아이디·비밀번호 로그인을 쓸 수 있습니다.');
+    }
+    attachCamera();
+
+    function finish() {
+      closed = true;
+      stopAdminFaceRegisterCamera();
+    }
+    done.then(finish);
+  }
+
+  /* 얼굴 등록 모달이 쓰는 카메라 스트림 (모달을 닫으면 반드시 정리) */
+  var adminFaceRegister = { stream: null };
+  function stopAdminFaceRegisterCamera() {
+    if (adminFaceRegister.stream) {
+      try { adminFaceRegister.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+      adminFaceRegister.stream = null;
+    }
+    var video = el('afr-video');
+    if (video) { try { video.srcObject = null; } catch (e) {} }
+  }
+
+  /* ---------- 로그인 모달의 얼굴인식 로그인 ---------- */
+  var adminFaceLogin = { stream: null, timer: null, running: false, busy: false };
+
+  function adminFaceLoginStatus(kind, text) {
+    var box = el('adm-face-status');
+    if (!box) { return; }
+    box.className = 'face-status' + (kind ? ' ' + kind : '');
+    box.textContent = text;
+  }
+
+  function stopAdminFaceLoginCamera(showNote) {
+    adminFaceLogin.running = false;
+    adminFaceLogin.busy = false;
+    if (adminFaceLogin.timer) { clearTimeout(adminFaceLogin.timer); adminFaceLogin.timer = null; }
+    if (adminFaceLogin.stream) {
+      try { adminFaceLogin.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+      adminFaceLogin.stream = null;
+    }
+    var video = el('adm-face-video');
+    if (video) { try { video.srcObject = null; } catch (e) {} }
+    var live = el('adm-face-live');
+    if (live && live.style) { live.style.display = 'none'; }
+    if (showNote) {
+      var note = el('adm-face-stopped');
+      if (note) { note.style.display = 'block'; }
+      adminFaceLoginStatus('', '얼굴 로그인을 멈췄어요. 아이디·비밀번호로 로그인할 수 있습니다.');
+    }
+  }
+
+  function scheduleAdminFaceLoginTick(ms) {
+    if (!adminFaceLogin.running) { return; }
+    if (adminFaceLogin.timer) { clearTimeout(adminFaceLogin.timer); }
+    adminFaceLogin.timer = setTimeout(adminFaceLoginTick, ms || 600);
+  }
+
+  function startAdminFaceLogin() {
+    if (!adminFaceRegistered()) {
+      toast('먼저 「🔐 관리자 계정」에서 관장님 얼굴을 등록해 주세요.');
+      return;
+    }
+    if (adminFaceLogin.timer) { clearTimeout(adminFaceLogin.timer); adminFaceLogin.timer = null; }
+    adminFaceLogin.running = true;
+    adminFaceLogin.busy = false;
+    var live = el('adm-face-live');
+    if (live && live.style) { live.style.display = 'block'; }
+    var stopped = el('adm-face-stopped');
+    if (stopped) { stopped.style.display = 'none'; }
+    adminFaceLoginStatus('wait', '카메라를 켜는 중…');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      adminFaceLogin.running = false;
+      adminFaceLoginStatus('err', '이 브라우저에서는 카메라를 열 수 없어요. 아이디·비밀번호로 로그인해 주세요.');
+      return;
+    }
+    if (adminFaceLogin.stream) {
+      scheduleAdminFaceLoginTick(300);
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 540 } },
+      audio: false
+    }).then(function (stream) {
+      if (!adminFaceLogin.running) {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        return;
+      }
+      adminFaceLogin.stream = stream;
+      var video = el('adm-face-video');
+      if (video) {
+        try { video.srcObject = stream; } catch (e) {}
+        if (video.play) {
+          var p = video.play();
+          if (p && p.catch) { p.catch(function () {}); }
+        }
+      }
+      adminFaceLoginStatus('wait', '얼굴을 비춰 주세요 · 등록된 관장님 얼굴과 맞는지 확인합니다.');
+      scheduleAdminFaceLoginTick(500);
+    }).catch(function (err) {
+      adminFaceLogin.running = false;
+      adminFaceLoginStatus('err', '카메라를 열 수 없어요 (' + ((err && err.name) || 'error') + '). 아이디·비밀번호로 로그인해 주세요.');
+    });
+  }
+
+  function adminFaceLoginTick() {
+    adminFaceLogin.timer = null;
+    if (!adminFaceLogin.running) { return; }
+    if (!adminFaceRegistered()) {
+      stopAdminFaceLoginCamera();
+      adminFaceLoginStatus('err', '등록된 관리자 얼굴이 없어요. 아이디·비밀번호로 로그인해 주세요.');
+      return;
+    }
+    if (!ai.ready) {
+      if (ai.state === 'offline') {
+        stopAdminFaceLoginCamera();
+        adminFaceLoginStatus('err', 'AI 모델을 불러오지 못했어요. 아이디·비밀번호로 로그인해 주세요.');
+        return;
+      }
+      adminFaceLoginStatus('wait', 'AI 모델을 준비하는 중이에요…');
+      scheduleAdminFaceLoginTick(700);
+      return;
+    }
+    var video = el('adm-face-video');
+    if (!video || !video.videoWidth) {
+      adminFaceLoginStatus('wait', '카메라 화면을 준비하는 중이에요…');
+      scheduleAdminFaceLoginTick(500);
+      return;
+    }
+    if (adminFaceLogin.busy) {
+      scheduleAdminFaceLoginTick(400);
+      return;
+    }
+    adminFaceLogin.busy = true;
+    detectFaces(video, 224).then(function (results) {
+      adminFaceLogin.busy = false;
+      if (!adminFaceLogin.running) { return; }
+      handleAdminFaceLoginResults(results || []);
+    }).catch(function (err) {
+      adminFaceLogin.busy = false;
+      if (!adminFaceLogin.running) { return; }
+      adminFaceLoginStatus('err', '얼굴 분석에 실패했어요 (' + ((err && err.message) || 'error') + '). 아이디·비밀번호로 로그인해 주세요.');
+      scheduleAdminFaceLoginTick(1500);
+    });
+  }
+
+  function handleAdminFaceLoginResults(results) {
+    if (!results.length) {
+      adminFaceLoginStatus('wait', '얼굴을 찾지 못했어요. 밝은 곳에서 정면을 비춰 주세요.');
+      scheduleAdminFaceLoginTick(600);
+      return;
+    }
+    if (results.length > 1) {
+      adminFaceLoginStatus('wait', '얼굴이 ' + results.length + '명 보여요. 한 명만 비춰 주세요.');
+      scheduleAdminFaceLoginTick(600);
+      return;
+    }
+    var desc = Array.prototype.slice.call(results[0].descriptor);
+    var dist = euclideanDistance(desc, app.adminFace.descriptor);
+    if (dist <= adminFaceThreshold()) {
+      adminFaceLoginSuccess(dist);
+      return;
+    }
+    adminFaceLoginStatus('err', '등록된 관장님 얼굴과 맞지 않아요 (거리 ' + dist.toFixed(2) + ' > ' + adminFaceThreshold().toFixed(2) + '). 아이디·비밀번호로 로그인해 주세요.');
+    scheduleAdminFaceLoginTick(800);
+  }
+
+  function adminFaceLoginSuccess(dist) {
+    stopAdminFaceLoginCamera();
+    app.adminAuthed = true;
+    renderAdminAccountState();
+    renderAdminFaceState();
+    setView('admin');
+    setAdminTab('overview');
+    closeActiveModal('face');
+    playSuccess();
+    toast('📷 얼굴 인식으로 관리자로 들어왔어요' + (typeof dist === 'number' ? ' · 거리 ' + dist.toFixed(2) : ''));
+  }
+
+  /* =========================================================
      11-A. 띠 체계 / 급수
      ========================================================= */
   function belts() {
     var list = app.settings && app.settings.belts;
-    return (Array.isArray(list) && list.length) ? list : defaultBelts(app.settings ? app.settings.promotionThreshold : 20);
+    return (Array.isArray(list) && list.length) ? list : defaultBelts();
   }
   function beltIndex(name) {
     var list = belts();
@@ -4696,10 +5276,20 @@
     var i = beltIndex(name);
     return i === -1 ? null : belts()[i];
   }
-  function beltColor(name) {
+  function beltColors(name) {
     var b = beltByName(name);
-    if (b) { return b.color; }
-    return BELT_COLORS[name] || '#c7cedb';
+    if (b) { return normalizeBeltColors(b); }
+    var c = BELT_COLORS[name] || '#c7cedb';
+    return [c, c, c];
+  }
+  function beltColor(name) {
+    return beltColors(name)[0];
+  }
+  /* 띠 아이콘(3분할·줄무늬) — 명단·승급심사·키오스크·월간·원비에서 같이 쓴다 */
+  function beltSwatchHtml(name, cls) {
+    return '<span class="' + (cls || 'belt-swatch') + '">' + beltColors(name).map(function (c) {
+      return '<i style="background:' + esc(c) + '"></i>';
+    }).join('') + '</span>';
   }
   function beltGrade(name) {
     var b = beltByName(name);
@@ -4725,12 +5315,12 @@
     if (idx === -1) { idx = 0; }
     var cur = list[idx];
     var next = (idx + 1 < list.length) ? list[idx + 1] : null;
-    var t = Math.max(1, Number(cur && cur.threshold) || promoThreshold());
     var c = Math.max(0, Number(s.attendCount) || 0);
     return {
-      count: c, threshold: t,
+      count: c,
       next: next ? next.name : null,
-      target: !!next && c >= t,
+      // 최고 띠가 아니면 누적 출석과 관계없이 바로 심사 대상
+      target: !!next,
       top: !next,
       belt: cur ? cur.name : ''
     };
@@ -4831,14 +5421,10 @@
   function beltDraft() {
     if (!app.beltDraft) {
       app.beltDraft = belts().map(function (b) {
-        return { name: b.name, color: b.color, grade: b.grade || '', threshold: Number(b.threshold) || promoThreshold() };
+        return { name: b.name, colors: normalizeBeltColors(b), grade: b.grade || '' };
       });
     }
     return app.beltDraft;
-  }
-  function newBeltThreshold() {
-    var v = parseInt(el('p-threshold') ? el('p-threshold').value : promoThreshold(), 10);
-    return (isNaN(v) || v < 1) ? promoThreshold() : v;
   }
   function renderBeltEditor(force) {
     var wrap = el('belt-rows');
@@ -4850,12 +5436,19 @@
       return;
     }
     wrap.innerHTML = list.map(function (b, i) {
+      var cs = normalizeBeltColors(b);
       return '<div class="belt-row" data-bi="' + i + '">' +
         '<span class="belt-order">' + (i + 1) + '</span>' +
-        '<input type="color" class="belt-color" data-bf="color" value="' + esc(b.color || '#9aa4b5') + '" aria-label="띠 색상">' +
+        '<span class="belt-colors">' +
+        '<span class="belt-color-set">' +
+        [0, 1, 2].map(function (ci) {
+          return '<input type="color" class="belt-color" data-bf="colors" data-ci="' + ci + '" value="' + esc(cs[ci]) + '" aria-label="띠 색상 ' + (ci + 1) + '">';
+        }).join('') +
+        '</span>' +
+        '<span class="belt-preview" aria-hidden="true">' + cs.map(function (c) { return '<i style="background:' + esc(c) + '"></i>'; }).join('') + '</span>' +
+        '</span>' +
         '<input class="input" data-bf="name" value="' + esc(b.name) + '" maxlength="14" placeholder="띠 이름" aria-label="띠 이름">' +
         '<input class="input" data-bf="grade" value="' + esc(b.grade || '') + '" maxlength="6" placeholder="급수" aria-label="급수">' +
-        '<div class="belt-th"><input class="input" type="number" min="1" step="1" data-bf="threshold" value="' + (Number(b.threshold) || 20) + '" aria-label="승급 기준 출석"><span>회</span></div>' +
         '<button class="btn" data-bup="' + i + '" title="위로 이동">▲</button>' +
         '<button class="btn" data-bdown="' + i + '" title="아래로 이동">▼</button>' +
         '<button class="btn btn-danger" data-bdel="' + i + '" title="띠 삭제">✕</button>' +
@@ -4871,8 +5464,18 @@
     var b = beltDraft()[i];
     if (!b) { return; }
     var f = input.getAttribute('data-bf');
-    if (f === 'threshold') { b.threshold = Math.max(1, parseInt(input.value, 10) || 1); }
-    else if (f === 'name' || f === 'grade' || f === 'color') { b[f] = input.value; }
+    if (f === 'colors') {
+      var ci = Number(input.getAttribute('data-ci'));
+      var cs = normalizeBeltColors(b);
+      if (ci >= 0 && ci < 3) { cs[ci] = input.value; }
+      b.colors = normalizeBeltColors({ colors: cs });
+      var prev = row.querySelector ? row.querySelector('.belt-preview') : null;
+      if (prev) {
+        prev.innerHTML = b.colors.map(function (c) { return '<i style="background:' + esc(c) + '"></i>'; }).join('');
+      }
+      return;
+    }
+    if (f === 'name' || f === 'grade') { b[f] = input.value; }
   }
   function moveBelt(i, dir) {
     var list = beltDraft();
@@ -4883,7 +5486,7 @@
   }
   function addBelt() {
     var list = beltDraft();
-    list.push({ name: '새 띠 ' + (list.length + 1), color: '#9aa4b5', grade: '', threshold: newBeltThreshold() });
+    list.push({ name: '새 띠 ' + (list.length + 1), colors: ['#9aa4b5', '#9aa4b5', '#9aa4b5'], grade: '' });
     renderBeltEditor(true);
     toast('띠를 추가했어요. 이름·색상·급수를 정한 뒤 저장해 주세요.');
   }
@@ -4911,12 +5514,10 @@
   }
   function saveBeltSystem() {
     var list = beltDraft().map(function (b) {
-      var c = String(b.color || '');
       return {
         name: String(b.name || '').trim(),
-        color: /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#9aa4b5',
-        grade: String(b.grade || '').trim(),
-        threshold: Math.max(1, parseInt(b.threshold, 10) || promoThreshold())
+        colors: normalizeBeltColors(b),
+        grade: String(b.grade || '').trim()
       };
     });
     if (!list.length) { toast('띠를 하나 이상 남겨 주세요.'); return; }
@@ -4927,23 +5528,22 @@
       seen[list[i].name] = true;
     }
     app.settings.belts = list;
-    app.settings.promotionThreshold = newBeltThreshold();
     saveSettings();
     app.beltDraft = null;
     renderAll();
-    toast('띠 체계를 저장했어요. 심사 대상 판정에 바로 반영됩니다.');
+    toast('띠 체계를 저장했어요. 승급 순서와 띠 색에 바로 반영됩니다.');
   }
   function resetBeltSystem() {
     openModal({
       title: '띠 체계를 기본값으로 되돌릴까요?',
-      sub: '이름·색상·급수·기준이 기본 10단계로 돌아갑니다. [띠 체계 저장]을 눌러야 실제로 적용됩니다.',
+      sub: '이름·색상·급수가 기본 10단계로 돌아갑니다. [띠 체계 저장]을 눌러야 실제로 적용됩니다.',
       actions: [
         { label: '취소', value: false, kind: 'btn-ghost' },
         { label: '기본값 불러오기', value: true, kind: 'btn-danger' }
       ]
     }).then(function (ok) {
       if (!ok) { return; }
-      app.beltDraft = defaultBelts(newBeltThreshold());
+      app.beltDraft = defaultBelts();
       renderBeltEditor(true);
       toast('기본값을 불러왔어요. [띠 체계 저장]을 눌러 적용하세요.');
     });
@@ -5036,8 +5636,6 @@
     var st = promoState(student);
     if (!st.next) { toast('이미 최고 띠예요.'); return; }
     var message = buildPromotionMessage(student.name, st.next);
-    var warning = st.target ? '' :
-      '<div class="help" style="margin:10px 0 0; border-color:#f6d9a8; background:#fffaf1; color:#8a5300">아직 기준(' + st.threshold + '회)보다 ' + (st.threshold - st.count) + '회 부족합니다. 그래도 승급 처리할 수 있어요.</div>';
     openModal({
       title: student.name + ' 관원을 승급 처리할까요?',
       sub: (student.belt || '') + ' → ' + st.next + ' · 누적 출석 ' + st.count + '회가 0으로 초기화됩니다.',
@@ -5045,7 +5643,7 @@
         '<div class="sms-msg" style="margin-top:9px; box-shadow:none">' +
         '<div class="sms-head"><span class="sms-tag">승급 축하</span><span class="sms-sender">' + esc(app.settings.dojoName) + '</span></div>' +
         '<div class="sms-bubble">' + esc(message) + '</div>' +
-        '</div></div>' + warning,
+        '</div></div>',
       actions: [
         { label: '취소', value: false, kind: 'btn-ghost' },
         { label: '합격·승급 처리', value: true, kind: 'btn-primary' }
@@ -5138,11 +5736,10 @@
       return l.kind === 'promotion' && monthKey(new Date(l.at)) === monthKey(now);
     }).length;
     el('ps-target').innerHTML = targets.length + '<small>명</small>';
-    el('ps-threshold').innerHTML = promoThreshold() + '<small>회</small>';
+    if (el('ps-belts')) { el('ps-belts').innerHTML = belts().length + '<small>단계</small>'; }
     el('ps-promoted').innerHTML = promoted + '<small>명</small>';
     el('ps-total').innerHTML = activeStudents().length + '<small>명</small>';
     el('promo-note').textContent = fmtDateKorean(now) + ' 기준';
-    if (document.activeElement !== el('p-threshold')) { el('p-threshold').value = promoThreshold(); }
     if (!el('p-exam-date').value) { el('p-exam-date').value = app.settings.examDate || defaultExamDate(); }
     if (!el('p-exam-time').value) { el('p-exam-time').value = app.settings.examTime || '10:00'; }
     renderBeltEditor();
@@ -5170,31 +5767,27 @@
     var tbody = el('promo-table');
     if (!rows.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="7">' +
-        (filter === 'target' ? '아직 심사 대상이 없어요. 관원들이 기준 출석일수를 채우면 여기에 올라옵니다.' : '등록된 관원이 없습니다') +
+        (filter === 'target' ? '지금은 모두 최고 띠예요. 아래 띠를 차고 있는 재원생이 생기면 여기에 올라옵니다.' : '등록된 관원이 없습니다') +
         '</td></tr>';
       renderBulkBar();
       return;
     }
     tbody.innerHTML = rows.map(function (s) {
       var st = promoState(s);
-      var pct = Math.min(100, Math.round(st.count / st.threshold * 100));
       var grade = studentGrade(s);
-      var statusChip = st.top ? '<span class="chip ok">최고 띠</span>'
-        : st.target ? '<span class="chip wait">심사 대상</span>'
-        : '<span class="chip">' + (st.threshold - st.count) + '회 남음</span>';
+      var statusChip = st.top ? '<span class="chip ok">최고 띠</span>' : '<span class="chip wait">심사 대상</span>';
       var expected = app.settings.examDate && st.target ? '<div class="sub">' + esc(examDateText()) + '</div>' : '';
       return '<tr>' +
         '<td><input type="checkbox" class="ck" data-check="' + esc(s.id) + '"' + (sel[s.id] ? ' checked' : '') + ' aria-label="' + esc(s.name) + ' 선택"></td>' +
         '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(studentLabel(s)) + '</div></td>' +
-        '<td><span class="belt-badge"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span>' +
+        '<td>' + beltSwatchHtml(s.belt) + ' <span class="sub" style="font-size:12px;color:#344054;font-weight:800">' + esc(s.belt || '미지정') + '</span>' +
         (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
-        '<td><div class="bar' + (st.target ? ' full' : '') + '"><i style="width:' + pct + '%"></i></div>' +
-        '<div class="sub">' + st.count + ' / ' + st.threshold + '회</div></td>' +
+        '<td><span class="cell-time">' + st.count + '</span><span class="sub">회</span></td>' +
         '<td>' + (st.next ? '<span class="sub" style="font-size:12px;color:#344054">' + esc(st.next) + (beltGrade(st.next) ? ' · ' + esc(beltGrade(st.next)) : '') + '</span>' : '<span class="chip">-</span>') + '</td>' +
         '<td>' + statusChip + expected + '</td>' +
         '<td style="white-space:nowrap">' +
         (st.target ? '<button class="btn btn-sm" data-exam="' + esc(s.id) + '">안내</button> ' : '') +
-        (st.top ? '<span class="sub">최고 띠</span>' : '<button class="btn btn-sm ' + (st.target ? 'btn-primary' : '') + '" data-promote="' + esc(s.id) + '">합격·승급</button>') +
+        (st.top ? '<span class="sub">최고 띠</span>' : '<button class="btn btn-sm btn-primary" data-promote="' + esc(s.id) + '">합격·승급</button>') +
         '</td></tr>';
     }).join('');
     var all = el('promo-check-all');
@@ -5310,7 +5903,7 @@
     var rows = activeStudents().slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
     var tbody = el('gk-table');
     if (!rows.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">등록된 관원이 없습니다</td></tr>';
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="7">등록된 관원이 없습니다</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(function (s) {
@@ -5318,6 +5911,7 @@
       return '<tr>' +
         '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(s.belt || '') + (grade ? ' · ' + esc(grade) : '') + '</div></td>' +
         '<td>' + poomSelect(s.id, 'poomDan', s.poomDan) + '</td>' +
+        '<td><input class="input mini gk-grade-input" data-gk="grade" data-sid="' + esc(s.id) + '" maxlength="12" list="grade-list" value="' + esc(s.grade || '') + '" placeholder="' + esc(beltGrade(s.belt) || '예: 7급') + '" aria-label="' + esc(s.name) + ' 급수"></td>' +
         '<td>' + poomSelect(s.id, 'targetPoomDan', s.targetPoomDan) + '</td>' +
         '<td>' + statusSelect(s.id, gkStatusOf(s)) + '</td>' +
         '<td><input type="date" class="input mini" data-gk="gukExamDate" data-sid="' + esc(s.id) + '" value="' + esc(s.gukExamDate || '') + '"></td>' +
@@ -5328,6 +5922,25 @@
           : '') +
         '</td></tr>';
     }).join('');
+  }
+
+  /* 국기원 심사 명단 CSV — 급수까지 화면과 같은 값으로 내보낸다 */
+  function gkCSVText() {
+    var lines = [['관원', '부서', '수업', '띠', '급수', '현재 품·단', '목표 품·단', '응시 상태', '심사일']];
+    activeStudents().slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); }).forEach(function (s) {
+      lines.push([
+        s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', studentGrade(s),
+        s.poomDan || '없음', s.targetPoomDan || '없음', GK_STATUS[gkStatusOf(s)] || '', s.gukExamDate || ''
+      ]);
+    });
+    return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
+  }
+  function downloadGkCSV() {
+    var list = activeStudents();
+    if (!list.length) { toast('내려받을 관원이 없어요.'); return; }
+    if (downloadFile('국기원심사명단_' + todayKey() + '.csv', gkCSVText(), 'text/csv;charset=utf-8')) {
+      toast('국기원 심사 명단 ' + list.length + '명을 내려받았어요 · 급수 포함');
+    }
   }
 
   /* =========================================================
@@ -5362,25 +5975,14 @@
     var parts = [];
     if (visPublic('beltSystem')) {
       var chips = belts().map(function (b) {
-        return '<span class="ki-chip"><i style="background:' + b.color + '"></i>' + esc(b.name) +
+        return '<span class="ki-chip">' + beltSwatchHtml(b.name) + esc(b.name) +
           (b.grade ? ' <em style="font-style:normal;color:#98a2b3;font-weight:800">' + esc(b.grade) + '</em>' : '') + '</span>';
       }).join('');
       parts.push('<div class="ki"><span class="ki-label">급수 체계</span><div class="ki-body">' + chips + '</div></div>');
     }
     if (visPublic('promotion')) {
       var targets = activeStudents().filter(function (s) { return promoState(s).target; });
-      var best = null;
-      app.students.forEach(function (s) {
-        if (isPaused(s)) { return; }
-        var st = promoState(s);
-        if (st.top) { return; }
-        var ratio = st.count / st.threshold;
-        if (!best || ratio > best.ratio) { best = { s: s, st: st, ratio: ratio }; }
-      });
-      var html = '<span class="ki-num">' + targets.length + '</span><span class="ki-chip">심사 대상</span>';
-      if (best) {
-        html += '<span class="ki-chip">' + esc(best.s.name) + ' ' + best.st.count + '/' + best.st.threshold + '회</span>';
-      }
+      var html = '<span class="ki-num">' + targets.length + '</span><span class="ki-chip">승급심사 대상</span>';
       parts.push('<div class="ki"><span class="ki-label">승급심사</span><div class="ki-body">' + html + '</div></div>');
     }
     if (visPublic('gukgiwon')) {
@@ -5489,25 +6091,62 @@
     }
     return head + ' · 수동 보정 (시각 없음) · 눌러서 지우기';
   }
-  function renderMonthStats(total, people, topNames, topDays) {
+  function renderMonthStats(total, people) {
     if (el('mon-total')) { el('mon-total').innerHTML = total + '<small>일</small>'; }
     if (el('mon-people')) { el('mon-people').innerHTML = people + '<small>명</small>'; }
     var avg = people ? Math.round(total / people * 10) / 10 : 0;
     if (el('mon-avg')) { el('mon-avg').innerHTML = avg + '<small>일</small>'; }
-    var top = el('mon-top');
-    if (!top) { return; }
-    if (!topNames || !topNames.length || topDays <= 0) {
-      top.innerHTML = '<span style="color:#b0b8c6;font-size:14px;font-weight:800">아직 없음</span>';
-      return;
-    }
-    top.innerHTML = esc(topNames[0]) +
-      '<small>' + topDays + '일' + (topNames.length > 1 ? ' · 외 ' + (topNames.length - 1) + '명' : '') + '</small>';
   }
   function setMonthNote(ym, count, filtered) {
     var note = el('mon-note');
     if (!note) { return; }
     var label = ym.slice(0, 4) + '년 ' + pad2(parseInt(ym.slice(5, 7), 10)) + '월';
     note.textContent = label + ' · ' + (filtered ? '필터 적용' : '전체 부서') + ' · ' + count + '명';
+  }
+
+  /* ---------- 월 이동: 크게 누르는 이전/다음 달 + 빠른 월 칩 ---------- */
+  function monthChipLabel(ym) {
+    var y = String(ym).slice(0, 4);
+    var m = parseInt(String(ym).slice(5, 7), 10);
+    if (y === String(new Date().getFullYear())) { return m + '월'; }
+    return y + '년 ' + m + '월';
+  }
+  /* 최근 6개월 + 다음 달 + 기록이 있는 최근 달 + 지금 보는 달 (최신순, 최대 9개) */
+  function monthQuickList(selected) {
+    var now = monthKey(new Date());
+    var set = Object.create(null);
+    function add(k) {
+      var v = String(k == null ? '' : k);
+      if (/^\d{4}-\d{2}$/.test(v)) { set[v] = true; }
+    }
+    for (var i = 0; i < 6; i++) { add(shiftMonth(now, -i)); }
+    add(shiftMonth(now, 1));
+    add(selected);
+    var cut = shiftMonth(now, -14);
+    Object.keys(app.attendance || {}).forEach(function (dk) {
+      var v = String(dk).slice(0, 7);
+      if (v >= cut && v <= shiftMonth(now, 1)) { add(v); }
+    });
+    var list = Object.keys(set).sort().reverse();
+    if (list.length > 9) {
+      var top = list.slice(0, 9);
+      if (top.indexOf(selected) === -1) { top[8] = selected; }
+      list = top.sort().reverse();
+    }
+    return list;
+  }
+  function renderMonthQuick(selected) {
+    var box = el('mon-quick');
+    if (!box) { return; }
+    var now = monthKey(new Date());
+    var list = monthQuickList(selected);
+    box.innerHTML = '<span class="mq-label">바로 가기</span>' + list.map(function (ym) {
+      var cls = 'mon-chip' + (ym === selected ? ' active' : '') + (ym === now ? ' now' : '');
+      return '<button type="button" class="' + cls + '" data-mpick="' + esc(ym) + '"' +
+        ' aria-label="' + esc(ym.slice(0, 4) + '년 ' + parseInt(ym.slice(5, 7), 10) + '월 출석부 보기') + '"' +
+        (ym === selected ? ' aria-current="true"' : '') + '>' + esc(monthChipLabel(ym)) +
+        (ym === now ? ' · 이번 달' : '') + '</button>';
+    }).join('');
   }
 
   function renderMonthly() {
@@ -5518,6 +6157,8 @@
     if (el('mon-label')) {
       el('mon-label').textContent = ym.slice(0, 4) + '년 ' + pad2(parseInt(ym.slice(5, 7), 10)) + '월';
     }
+    if (el('mon-pick') && el('mon-pick').value !== ym) { el('mon-pick').value = ym; }
+    renderMonthQuick(ym);
 
     var sel = el('mon-class');
     var classes = monthClasses();
@@ -5556,12 +6197,12 @@
       tbody.innerHTML = '<tr class="empty-row"><td colspan="' + (days + 2) + '">' +
         (app.students.length ? '조건에 맞는 관원이 없어요. 부서 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다') +
         '</td></tr>';
-      renderMonthStats(0, 0, [], 0);
+      renderMonthStats(0, 0);
       setMonthNote(ym, 0, filtered);
       return;
     }
 
-    var totalDays = 0, people = 0, topDays = 0, topNames = [];
+    var totalDays = 0, people = 0;
     var html = rows.map(function (s) {
       var cells = '';
       var cnt = 0;
@@ -5583,13 +6224,11 @@
       }
       totalDays += cnt;
       if (cnt > 0) { people++; }
-      if (cnt > topDays) { topDays = cnt; topNames = [s.name]; }
-      else if (cnt === topDays && cnt > 0) { topNames.push(s.name); }
       var grade = studentGrade(s);
       return '<tr>' +
         '<td class="c-name" title="' + esc(s.name + ' · ' + studentLabel(s) + (grade ? ' · ' + grade : '')) + '">' +
         '<div class="nm">' + esc(s.name) +
-        '<span class="belt-badge mtb-belt"><i style="background:' + beltColor(s.belt) + '"></i>' +
+        '<span class="belt-badge mtb-belt">' + beltSwatchHtml(s.belt) + +
         esc(s.belt || '미지정') + '</span></div>' +
         '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) + '</div></td>' +
         cells +
@@ -5598,7 +6237,7 @@
     }).join('');
     tbody.innerHTML = html;
 
-    renderMonthStats(totalDays, people, topNames, topDays);
+    renderMonthStats(totalDays, people);
     setMonthNote(ym, rows.length, filtered);
   }
 
@@ -6513,7 +7152,7 @@
           '<td><input type="checkbox" class="ck" data-tcheck="' + esc(s.id) + '"' + (selMap[s.id] ? ' checked' : '') +
           ' aria-label="' + esc(s.name + ' 선택') + '"></td>' +
           '<td class="nm"><div class="nm-line">' + esc(s.name) +
-          '<span class="belt-badge tub-belt"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span></div>' +
+          '<span class="belt-badge tub-belt">' + beltSwatchHtml(s.belt) + esc(s.belt || '미지정') + '</span></div>' +
           '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) + '</div></td>' +
           '<td><input class="input mini tu-fee" type="number" min="0" step="1000" inputmode="numeric" value="' + base + '"' +
           ' data-tfee="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 기본 월 원비') + '"></td>' +
@@ -7654,7 +8293,7 @@
         return '<label class="bs-row' + (on ? ' sel' : '') + (phone ? '' : ' nophone') + '">' +
           '<input type="checkbox" class="ck" data-bscheck="' + esc(s.id) + '"' +
           (on ? ' checked' : '') + ' aria-label="' + esc(s.name + ' 발송 대상') + '">' +
-          '<span class="bs-belt" style="background:' + beltColor(s.belt) + '"></span>' +
+          '<span class="bs-belt">' + beltColors(s.belt).map(function (c) { return '<i style="background:' + esc(c) + '"></i>'; }).join('') + '</span>' +
           '<span class="bs-main"><span class="bs-name">' + esc(s.name) + '</span>' +
           '<span class="bs-sub">' + esc(studentLabel(s)) + ' · ' + esc(s.belt || '띠 미지정') + '</span></span>' +
           '<span class="bs-phone">' + (phone ? esc(normalizePhone(phone)) : '<i>번호 없음</i>') + '</span>' +
@@ -7922,7 +8561,7 @@
         (app.faces[s.id] ? '<span class="face-badge on">얼굴 보관</span>' : '') + '</div>' +
         '<div class="pz-days' + (ready ? ' ready' : '') + '">' + esc(dayTxt) + '</div></td>' +
         '<td class="sub">' + esc(studentLabel(s)) + siblingBadge(s) + '</td>' +
-        '<td><span class="belt-badge"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span>' +
+        '<td>' + beltSwatchHtml(s.belt) + ' <span class="sub" style="font-size:12px;color:#344054;font-weight:800">' + esc(s.belt || '미지정') + '</span>' +
         (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
         '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
         '<td><input class="input mini" type="date" data-pzdate="' + esc(s.id) + '" value="' + esc(s.pausedDate || '') + '" aria-label="' + esc(s.name + ' 휴관일') + '"></td>' +
@@ -8866,6 +9505,11 @@
         autoLock: app.admin.autoLock !== false,
         updatedAt: app.admin.updatedAt || ''
       } : null,
+      adminFace: app.adminFace ? {
+        descriptor: app.adminFace.descriptor.slice(0, 128),
+        thumb: app.adminFace.thumb || '',
+        at: app.adminFace.at || ''
+      } : null,
       logs: app.logs,
       settings: app.settings,
       driveWebhookUrl: driveConf().webhookUrl,
@@ -8928,6 +9572,14 @@
     if (data.admin != null && (typeof data.admin !== 'object' || Array.isArray(data.admin))) {
       return { ok: false, reason: '관리자 계정 설정 형식이 올바르지 않아요.' };
     }
+    if (data.adminFace != null) {
+      if (typeof data.adminFace !== 'object' || Array.isArray(data.adminFace)) {
+        return { ok: false, reason: '관리자 얼굴 데이터 형식이 올바르지 않아요.' };
+      }
+      if (!sanitizeAdminFace(data.adminFace)) {
+        return { ok: false, reason: '관리자 얼굴 데이터가 손상되어 복원할 수 없어요.' };
+      }
+    }
     if (data.feeTable != null && (typeof data.feeTable !== 'object' || Array.isArray(data.feeTable))) {
       return { ok: false, reason: '원비 단가표 형식이 올바르지 않아요.' };
     }
@@ -8961,6 +9613,12 @@
         updatedAt: String(data.admin.updatedAt || '')
       });
     }
+    // 관리자 얼굴: 백업에 항목이 있을 때만 손대고(없는 예전 백업은 이 기기 등록을 유지), null이면 지운다
+    if (Object.prototype.hasOwnProperty.call(data, 'adminFace')) {
+      var af = sanitizeAdminFace(data.adminFace);
+      app.adminFace = af;
+      saveAdminFaceData();
+    }
     if (data.logs) { writeJSON(LS.logs, data.logs); }
     if (data.feeTable && typeof data.feeTable === 'object' && !Array.isArray(data.feeTable)) {
       writeJSON(LS.feeTable, sanitizeFeeTable(data.feeTable));
@@ -8993,7 +9651,6 @@
     document.title = app.settings.dojoName + ' · AI 출석 알림';
     el('mode-in').classList.toggle('active', app.settings.mode !== 'out');
     el('mode-out').classList.toggle('active', app.settings.mode === 'out');
-    el('p-threshold').value = promoThreshold();
     renderAll();
     renderFaceAdmin();
     renderBeltEditor(true);
@@ -9006,6 +9663,7 @@
     renderPaused(true);
     renderCounsel();
     renderAdminAccountState();
+    renderAdminFaceState();
     fillDriveForm();
     renderPin();
     refreshAiHint();
@@ -9019,9 +9677,12 @@
     var tplCount = Array.isArray(data.smsTemplates) ? data.smsTemplates.length : 0;
     var csCount = Array.isArray(data.counsel) ? data.counsel.length : 0;
     var hasAdmin = !!(data.admin && data.admin.hash);
+    var hasAdminFace = !!(data.adminFace && data.adminFace.descriptor);
     return '<div class="help" style="margin-top:0">' +
       '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 상담 기록 <b>' + csCount + '건</b>' +
-      (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') + ' · 띠 체계·문자·원비·수업별 단가표 설정 포함<br>' +
+      (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') +
+      (hasAdminFace ? ' · 관리자 얼굴 <b>등록됨</b>' : ' · 관리자 얼굴 미등록') +
+      ' · 띠 체계·문자·원비·수업별 단가표 설정 포함<br>' +
       (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
       '</div>';
   }
@@ -9710,12 +10371,26 @@
       var field = f.getAttribute('data-gk');
       var val = f.value;
       if (field === 'gukStatus' && !GK_STATUS[val]) { val = 'none'; }
+      if (field === 'grade') {
+        // 급수: 비우면 띠 기준 자동값으로 돌아간다 (student.grade 하나만 고친다)
+        val = String(val == null ? '' : val).trim().slice(0, 12);
+        s.grade = val;
+        saveStudents();
+        renderGukgiwon();
+        renderStudentsTable();
+        renderPromotion();
+        renderKioskInfo();
+        renderLog();
+        toast(s.name + ' 관원 급수를 ' + (val || '띠 기준 자동(' + (studentGrade(s) || '없음') + ')') + '(으)로 저장했어요');
+        return;
+      }
       s[field] = val;
       saveStudents();
       renderGukgiwon();
       renderKioskInfo();
       renderLog();
     });
+    el('btn-gk-csv').addEventListener('click', downloadGkCSV);
     el('gk-table').addEventListener('click', function (e) {
       var n = e.target.closest('[data-gknotice]');
       if (n) { var s1 = byId(n.getAttribute('data-gknotice')); if (s1) { sendGukNotice(s1); } return; }
@@ -9834,6 +10509,24 @@
       renderMonthly();
       toast('이번 달로 돌아왔어요');
     });
+    if (el('mon-pick')) {
+      el('mon-pick').addEventListener('change', function () {
+        var v = String(el('mon-pick').value || '');
+        if (!/^\d{4}-\d{2}$/.test(v)) { return; }
+        ensureMonthly().month = v;
+        renderMonthly();
+      });
+    }
+    if (el('mon-quick')) {
+      el('mon-quick').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-mpick]');
+        if (!b) { return; }
+        var v = b.getAttribute('data-mpick');
+        if (!/^\d{4}-\d{2}$/.test(v)) { return; }
+        ensureMonthly().month = v;
+        renderMonthly();
+      });
+    }
     el('mon-class').addEventListener('change', function () {
       ensureMonthly().className = el('mon-class').value || 'all';
       renderMonthly();
@@ -10270,6 +10963,8 @@
     el('adm-autolock').addEventListener('change', function () {
       saveAdminAutoLock(el('adm-autolock').value);
     });
+    el('btn-admin-face-open').addEventListener('click', openAdminFaceRegister);
+    el('btn-admin-face-del').addEventListener('click', confirmRemoveAdminFace);
     el('btn-goto-account').addEventListener('click', function () {
       setAdminTab('students');
       var p = el('admin-account-panel');
@@ -10305,7 +11000,6 @@
     fillDriveForm();
     resetStudentForm();
     switchTouch('pin');
-    el('p-threshold').value = promoThreshold();
     el('p-exam-date').value = app.settings.examDate || defaultExamDate();
     el('p-exam-time').value = app.settings.examTime || '10:00';
     el('p-exam-place').value = app.settings.examPlace || DEFAULT_SETTINGS.examPlace;
@@ -10332,6 +11026,7 @@
       renderAdminAccountState();
     }, function () {});
     renderAdminAccountState();
+    renderAdminFaceState();
 
     renderFaceAdmin();
     refreshAiHint();
@@ -10383,7 +11078,8 @@
     data: {
       buildBackup: buildBackup,
       validateBackup: validateBackup,
-      applyBackup: applyBackup
+      applyBackup: applyBackup,
+      summary: backupSummaryHtml
     },
     drive: {
       folderId: DRIVE_FOLDER_ID,
@@ -10441,6 +11137,7 @@
       courseOf: courseOf,
       siblingOf: siblingOf,
       divisionFromText: divisionFromText,
+      grade: studentGrade,
       sample: function () { return SAMPLE_STUDENTS; },
       save: saveStudent,
       edit: startEdit,
@@ -10503,6 +11200,35 @@
       thisMonth: reportThisMonth,
       setYear: reportSetYear,
       print: printReport
+    },
+    promotion: {
+      render: renderPromotion,
+      state: promoState,
+      threshold: promoThreshold,
+      promote: promoteStudent,
+      all: renderAll,
+      defaults: defaultBelts,
+      belts: belts,
+      beltColors: beltColors,
+      beltSwatch: beltSwatchHtml
+    },
+    monthly: {
+      render: renderMonthly,
+      days: monthDaysOf,
+      shift: shiftMonth,
+      quick: monthQuickList,
+      chipLabel: monthChipLabel,
+      current: function () { return ensureMonthly().month; },
+      rows: monthRows
+    },
+    gukgiwon: {
+      render: renderGukgiwon,
+      statusOf: gkStatusOf,
+      active: gkActive,
+      csv: gkCSVText,
+      download: downloadGkCSV,
+      dateText: gkDateText,
+      notice: buildGukNotice
     },
     bulkSms: {
       limit: BULK_SMS_LIMIT,
@@ -10598,6 +11324,24 @@
       login: openAdminLogin,
       state: function () { return { authed: app.adminAuthed, account: adminAccount() }; },
       render: renderAdminAccountState,
+      face: {
+        registered: adminFaceRegistered,
+        threshold: adminFaceThreshold,
+        sanitize: sanitizeAdminFace,
+        save: saveAdminFace,
+        remove: removeAdminFace,
+        confirmRemove: confirmRemoveAdminFace,
+        registerFromCanvas: registerAdminFaceFromCanvas,
+        openRegister: openAdminFaceRegister,
+        render: renderAdminFaceState,
+        startLogin: startAdminFaceLogin,
+        stopLogin: stopAdminFaceLoginCamera,
+        tick: adminFaceLoginTick,
+        handle: handleAdminFaceLoginResults,
+        atText: adminFaceAtText,
+        loginState: function () { return { running: adminFaceLogin.running, stream: !!adminFaceLogin.stream, timer: !!adminFaceLogin.timer }; },
+        registerState: function () { return { stream: !!adminFaceRegister.stream }; }
+      },
       defaults: function () { return { id: DEFAULT_ADMIN_ID, pw: DEFAULT_ADMIN_PW }; }
     }
   };
