@@ -421,7 +421,7 @@
   .admin-tabs{display:flex; gap:4px; margin-bottom:14px; background:#e8edf7; padding:5px; border-radius:14px; width:fit-content; max-width:100%; overflow-x:auto; flex-wrap:wrap}
   .admin-tab{border:0; background:transparent; color:#5b6b85; font-weight:800; font-size:12.5px; padding:9px 11px; border-radius:10px; cursor:pointer; white-space:nowrap}
   .admin-tab.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.10)}
-  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov, #view-admin.sms-mode .ov, #view-admin.paused-mode .ov, #view-admin.report-mode .ov, #view-admin.cs-mode .ov{display:none}
+  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov, #view-admin.sms-mode .ov, #view-admin.paused-mode .ov, #view-admin.report-mode .ov, #view-admin.cs-mode .ov, #view-admin.cp-mode .ov{display:none}
   .belt-badge{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:800; background:#f6f8fc; border:1px solid #e6ebf4; padding:4px 9px 4px 6px; border-radius:999px; white-space:nowrap}
   .belt-swatch{display:inline-flex; width:20px; height:12px; border-radius:3px; overflow:hidden; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(0,0,0,.14); vertical-align:-1px; background:#eef1f6}
   .belt-swatch i{flex:1 1 0; display:block}
@@ -768,6 +768,53 @@
   textarea.cs-text{height:auto; min-height:104px; padding:10px 12px; line-height:1.55; resize:vertical}
   .cs-actions{display:flex; gap:8px; align-items:center; margin-top:2px; flex-wrap:wrap}
 
+  /* 🎟️ 쿠폰 지급 현황 */
+  .cp-form{display:grid; grid-template-columns:repeat(auto-fit,minmax(152px,1fr)); gap:10px; align-items:end}
+  .cp-form .field{margin:0}
+  .cp-form .field label{font-size:11.5px; font-weight:800; color:#5b6b85; display:block; margin-bottom:4px}
+  .cp-form .input{height:36px; font-size:12.5px}
+  .cp-form-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:11px}
+  .cp-types{display:flex; flex-wrap:wrap; gap:6px}
+  .cp-typec{display:inline-flex; align-items:center; gap:5px; border:1px solid #dbe4f2; background:#f8fafd; border-radius:999px; padding:5px 6px 5px 11px; font-size:12px; font-weight:800; color:#1b2a5b}
+  .cp-typec b{font-weight:900}
+  .cp-typecnt{font-size:10.5px; font-weight:800; color:#63748f; background:#fff; border:1px solid #e3e9f4; border-radius:999px; padding:1px 6px}
+  .cp-typec button{border:0; background:#eef2f9; color:#5b6b85; width:20px; height:20px; border-radius:50%; font-size:10px; font-weight:900; cursor:pointer; padding:0; line-height:1}
+  .cp-typec button:hover{background:#dde6f5; color:#1b2a5b}
+  .cp-type-add{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+  .cp-type-add .input{flex:1 1 220px; height:36px; font-size:12.5px}
+  .cp-filters{display:flex; align-items:center; gap:7px; flex-wrap:wrap; padding:0 12px 11px}
+  .cp-filters .input{height:34px; flex:0 1 240px; min-width:150px; padding:0 11px; font-size:12px; border-radius:10px}
+  .cp-list{padding:0 12px 12px}
+  .cp-tablehint{display:none}
+  .cp-tablewrap{overflow-x:auto}
+  table.cp-table{width:100%; min-width:900px; border-collapse:collapse; table-layout:fixed; font-size:12px}
+  table.cp-table th{background:#eef1f6; color:#3a475f; font-size:11.5px; font-weight:900; padding:7px 6px; border:1px solid #e2e8f2; text-align:left; white-space:nowrap}
+  table.cp-table th.c{text-align:center}
+  table.cp-table td{border:1px solid #e8edf6; padding:5px 6px; background:#fff; vertical-align:middle}
+  table.cp-table td input.input{width:100%; height:32px; padding:0 6px; font-size:12px; border-radius:6px; border:1px solid #dfe6f0; background:#fff; min-width:0}
+  table.cp-table td input.input:focus{border-color:#8aa4ff; box-shadow:0 0 0 2px rgba(47,111,237,.14); outline:0}
+  table.cp-table td input[type="date"]{font-variant-numeric:tabular-nums; padding:0 4px}
+  .cp-sts{display:flex; gap:3px}
+  .cp-st{flex:1 1 0; min-width:0; height:28px; border:1px solid #dfe6f0; background:#f8fafd; color:#3a475f; border-radius:6px; padding:0 3px; font-weight:800; font-size:11px; cursor:pointer; white-space:nowrap}
+  .cp-st.unused.on{background:#e3f6ec; border-color:#12a871; color:#0b7a55}
+  .cp-st.used.on{background:#e6efff; border-color:#2f6fed; color:#155e9c}
+  .cp-st.ended.on{background:#eef0f4; border-color:#8a94a6; color:#42506a}
+  .cp-used{font-size:10.5px; font-weight:800; color:#63748f; margin-top:3px; text-align:center}
+  .cp-badge{display:inline-block; margin-left:4px; font-size:10.5px; font-weight:900; border-radius:6px; padding:1px 6px; vertical-align:middle}
+  .cp-badge.exp{background:#fdeaea; border:1px solid #f0b4b4; color:#b42318}
+  .cp-tools{text-align:center; white-space:nowrap}
+  .cp-del{width:26px; height:28px; border:1px solid #e6c4c4; background:#fdf0f0; color:#b42318; border-radius:6px; font-weight:900; font-size:11px; cursor:pointer; padding:0}
+  .cp-del:hover{background:#fbdcdc}
+  .cp-empty{padding:26px 12px; text-align:center; color:#98a2b3; font-size:13px; line-height:1.6}
+  .cp-empty b{color:#33415c}
+  @media (max-width:760px){
+    .cp-filters{padding:0 8px 10px}
+    .cp-list{padding:0 8px 10px}
+    table.cp-table{min-width:880px}
+    .cp-tablehint{display:block; font-size:11px; color:#7a88a0; font-weight:800; padding:0 2px 5px}
+    .cp-form{grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:8px}
+  }
+
   /* 🚌 차량 운행 스케줄표 */
   .sh-filters{display:flex; align-items:center; gap:7px; flex-wrap:wrap; padding:0 12px 11px}
   .sh-filters .input{height:34px; flex:0 1 240px; min-width:150px; padding:0 11px; font-size:12px; border-radius:10px}
@@ -809,23 +856,12 @@
   .sh-kbtn{flex:1 1 0; min-width:0; height:30px; border:1px solid #dfe6f0; background:rgba(255,255,255,.7); color:#3a475f; border-radius:6px; padding:0 2px; font-weight:800; font-size:11.5px; cursor:pointer; white-space:nowrap}
   .sh-kbtn.pick.active{background:#e3f6ec; border-color:#12a871; color:#0b7a55}
   .sh-kbtn.drop.active{background:#e6efff; border-color:#2f6fed; color:#155e9c}
-  .sh-td-riders{vertical-align:top}
-  .sh-rbox{display:flex; align-items:center; flex-wrap:wrap; gap:3px; min-height:30px; padding:1px 0}
-  .sh-rcount{flex:0 0 auto; font-size:10px; font-weight:900; color:#63748f; background:rgba(255,255,255,.8); border:1px solid #dbe4f2; border-radius:5px; padding:1px 4px; line-height:14px}
-  .sh-rchip{display:inline-flex; align-items:center; gap:3px; border:1px solid #dbe4f2; background:rgba(255,255,255,.85); border-radius:5px; padding:1px 3px 1px 6px; font-size:11px; font-weight:800; color:#1b2a5b; line-height:16px}
-  .sh-rchip button{border:0; background:#e3e9f4; color:#5b6b85; width:15px; height:15px; border-radius:50%; font-weight:900; font-size:10px; line-height:1; cursor:pointer; padding:0}
-  .sh-radd{flex:1 1 44px; min-width:34px; height:26px; border:0; border-bottom:1px dashed #c3cfe2; background:transparent; font-size:11.5px; padding:0 4px; border-radius:0; color:#1b2537}
-  .sh-radd::placeholder{color:#a6b0c1}
-  .sh-radd:focus{outline:0; border-bottom-color:#2f6fed; background:#fff}
-  .sh-rempty{font-size:11px; color:#a6b0c1; font-weight:700}
+  /* 원생 칸은 목적지·비고와 똑같은 글자 입력칸 하나 (검색·칩 없음) */
+  .sh-td input.sh-riders::placeholder{color:#b6c0d0; font-weight:700}
   .sh-td-tools{white-space:nowrap; text-align:center}
   .sh-tool{width:21px; height:27px; border:1px solid #dfe6f0; background:rgba(255,255,255,.75); border-radius:5px; color:#5a6880; font-size:11px; font-weight:900; cursor:pointer; padding:0; margin-right:1px; line-height:1}
   .sh-tool:hover{background:#fff; border-color:#c3cfe2; color:#1b2a5b}
   .sh-tool.del:hover{background:#fdeaea; border-color:#e08a8a; color:#b42318}
-  .sh-picks{display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; max-height:160px; overflow:auto}
-  .sh-picks:not(:empty){background:#fff; border:1px solid #dbe4f2; border-radius:8px; padding:5px; box-shadow:0 6px 14px rgba(15,33,66,.08); margin-bottom:2px}
-  .sh-picks:empty{display:none}
-  .sh-picks .cs-pick{padding:4px 9px; font-size:11.5px; border-radius:8px}
   .sh-tablehint{display:none}
   .sh-empty{padding:30px 12px; text-align:center; color:#98a2b3; font-size:13px; line-height:1.65}
   .sh-empty b{color:#33415c}
@@ -1253,6 +1289,7 @@
           <button class="admin-tab" id="atab-tuition" data-atab="tuition">💳 원비 관리</button>
           <button class="admin-tab" id="atab-sms" data-atab="sms">📢 단체문자</button>
           <button class="admin-tab" id="atab-shuttle" data-atab="shuttle">🚌 차량 운행</button>
+          <button class="admin-tab" id="atab-coupons" data-atab="coupons">🎟️ 쿠폰지급현황</button>
           <button class="admin-tab" id="atab-counsel" data-atab="counsel">🗒️ 상담기록</button>
           <button class="admin-tab" id="atab-report" data-atab="report">📈 수납 리포트</button>
           <button class="admin-tab" id="atab-settings" data-atab="settings">🔐 관리자 계정</button>
@@ -2164,7 +2201,7 @@
               <div class="panel-body" style="border-top:1px solid #eef1f6">
                 <div class="help" style="margin-top:0">
                   칸을 눌러 <b>엑셀처럼 바로 적으면 즉시 저장</b>됩니다. <b>Tab</b>으로 다음 칸, <b>Enter</b>로 다음 줄로 넘어가요. 운행이 늘면 <b>＋ 운행 추가</b>, 순서는 <b>▲▼</b>나 <b>🕒 부·시간순 정렬</b>로 맞춥니다.<br>
-                  원생 칸은 <b>이름·초성을 검색해 고르거나</b>, <b>쉼표(,)</b>로 구분해 여러 명을 적고 <b>Enter</b>를 누르면 한 번에 들어갑니다. 명단에 없는 이름도 그대로 적으면 됩니다.<br>
+                  원생 칸은 <b>이름을 그대로 적으면</b> 됩니다. <b>쉼표(,)</b>나 띄어쓰기로 여러 명을 적으면 한 명씩 나뉘어 저장되고, 명단에 있는 이름은 자동으로 그 관원과 연결됩니다. 명단에 없는 이름도 그대로 적으면 돼요.<br>
                   <b>📥 엑셀/CSV 올리기</b>로 엑셀에서 적던 스케줄을 그대로 넣고, <b>📄 엑셀 양식</b>으로 빈 양식을 받아 채워 올릴 수 있어요. <b>📤 스케줄 CSV</b>는 지금 표를 엑셀로 내려받는 버튼이고, <b>🖨️ 인쇄</b>는 차량에 비치할 A4 스케줄표입니다.
                 </div>
               </div>
@@ -2185,6 +2222,70 @@
               <tbody id="sh-print-body"></tbody>
             </table>
             <div class="sh-print-foot"><span id="sh-print-foot-left">경희대MTA태권도</span><span>차량 운행표는 도장·차량에 비치해 주세요</span></div>
+          </div>
+        </div>
+        <div id="admin-coupons" style="display:none">
+          <div class="stats cp-stats">
+            <div class="stat"><div class="stat-label">🎟️ 전체 쿠폰</div><div class="stat-val" id="cp-total">0<small>장</small></div><div class="tu-sub" id="cp-total-sub">지급한 쿠폰</div></div>
+            <div class="stat in"><div class="stat-label">🟢 미사용</div><div class="stat-val" id="cp-unused">0<small>장</small></div><div class="tu-sub" id="cp-unused-sub">아직 쓸 수 있어요</div></div>
+            <div class="stat out"><div class="stat-label">✅ 사용</div><div class="stat-val" id="cp-used">0<small>장</small></div><div class="tu-sub">사용 완료</div></div>
+            <div class="stat absent"><div class="stat-label">⏹️ 종료</div><div class="stat-val" id="cp-ended">0<small>장</small></div><div class="tu-sub">종료 처리한 쿠폰</div></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>🎟️ 쿠폰 종류</h3><div class="spacer"></div>
+              <span class="tiny-note" id="cp-types-note">-</span>
+            </div>
+            <div class="panel-body">
+              <div class="cp-types" id="cp-types"></div>
+              <div class="cp-type-add">
+                <input class="input" id="cp-type-new" placeholder="새 쿠폰 종류 (예: 원비 2만원 할인)" maxlength="40" autocomplete="off" aria-label="쿠폰 종류 이름">
+                <button class="btn btn-sm btn-primary" id="btn-cp-type-add">＋ 종류 추가</button>
+                <button class="btn btn-sm btn-ghost" id="btn-cp-type-cancel" style="display:none">수정 취소</button>
+              </div>
+              <div class="help" style="margin-top:8px">쿠폰 종류 이름은 여기서 <b>추가·수정·삭제</b>할 수 있어요. 이름을 고치면 그 종류로 지급한 쿠폰도 같이 바뀝니다. 표의 쿠폰종류 칸에 없는 이름을 적어도 새 종류로 저장됩니다.</div>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top:13px">
+            <div class="panel-head"><h3>🎟️ 쿠폰 지급 등록</h3><div class="spacer"></div><span class="tiny-note" id="cp-form-note">신규 등록 때 지급한 쿠폰을 적어 두세요</span></div>
+            <div class="panel-body">
+              <div class="cp-form">
+                <div class="field"><label>이름</label><input class="input" id="cp-new-name" list="cp-name-list" placeholder="관원 이름 (검색·선택)" autocomplete="off" aria-label="쿠폰 받을 관원 이름"></div>
+                <div class="field"><label>쿠폰종류</label><input class="input" id="cp-new-type" list="cp-type-list" placeholder="쿠폰 종류" autocomplete="off" aria-label="쿠폰 종류"></div>
+                <div class="field"><label>지급날짜</label><input class="input" id="cp-new-given" type="date" aria-label="지급날짜"></div>
+                <div class="field"><label>사용기한 시작</label><input class="input" id="cp-new-start" type="date" aria-label="사용기한 시작"></div>
+                <div class="field"><label>사용기한 끝</label><input class="input" id="cp-new-end" type="date" aria-label="사용기한 끝"></div>
+              </div>
+              <div class="cp-form-actions">
+                <button class="btn btn-primary" id="btn-cp-add">🎟️ 쿠폰 지급 등록</button>
+                <button class="btn btn-ghost" id="btn-cp-reset">입력 지우기</button>
+              </div>
+              <datalist id="cp-name-list"></datalist>
+              <datalist id="cp-type-list"></datalist>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top:13px">
+            <div class="panel-head"><h3>🎟️ 쿠폰 지급 현황</h3><div class="spacer"></div>
+              <span class="tiny-note" id="cp-note">-</span>
+              <button class="btn btn-sm" id="btn-cp-sort" title="이름 가나다순 / 상태별로 정렬">🔤 가나다순</button>
+              <button class="btn btn-sm" id="btn-cp-csv" title="지금 표를 엑셀에서 열 수 있는 CSV로 내려받습니다">📤 쿠폰 CSV</button>
+            </div>
+            <div class="promo-filters cp-filters" id="cp-filters">
+              <input class="input" id="cp-q" placeholder="🔍 이름 · 쿠폰종류 검색" autocomplete="off" aria-label="쿠폰 검색">
+              <button class="pchip active" data-cpfilter="all" id="cpf-all">전체</button>
+              <button class="pchip" data-cpfilter="unused" id="cpf-unused">🟢 미사용</button>
+              <button class="pchip" data-cpfilter="used" id="cpf-used">✅ 사용</button>
+              <button class="pchip" data-cpfilter="ended" id="cpf-ended">⏹️ 종료</button>
+            </div>
+            <div class="cp-list" id="cp-list"></div>
+            <div class="panel-body" style="border-top:1px solid #eef1f6">
+              <div class="help" style="margin-top:0">
+                표에서 <b>이름·쿠폰종류·날짜</b>를 바로 고칠 수 있고, <b>미사용 / 사용 / 종료</b>를 누르면 그 자리에서 저장됩니다. <b>사용</b>으로 바꾸면 사용한 날짜가 함께 기록되고, 사용기한 끝이 지난 미사용 쿠폰에는 <b>기간만료</b> 배지가 붙습니다.
+              </div>
+            </div>
           </div>
         </div>
         <div id="admin-counsel" style="display:none">
@@ -2320,7 +2421,9 @@
     admin: 'tdk.admin.v1',
     adminFace: 'tdk.adminFace.v1',
     counsel: 'tdk.counsel.v1',
-    shuttle: 'tdk.shuttle.v1'
+    shuttle: 'tdk.shuttle.v1',
+    coupons: 'tdk.coupons.v1',
+    couponTypes: 'tdk.couponTypes.v1'
   };
 
   var SAMPLE_STUDENTS = [
@@ -2915,6 +3018,11 @@
     app.counselUI = null;
     app.shuttle = loadShuttle();
     app.shuttleUI = null;
+    app.couponTypes = loadCouponTypes();
+    // 처음 한 번은 예시 종류를 저장소에도 남겨, 백업·드라이브 백업에 그대로 담기게 한다
+    if (readJSON(LS.couponTypes, null) === null) { writeJSON(LS.couponTypes, app.couponTypes); }
+    app.coupons = loadCoupons();
+    app.couponUI = null;
     app.admin = loadAdminAccount();
     app.adminFace = loadAdminFace();
     app.adminAuthed = false;
@@ -6678,7 +6786,7 @@
   }
 
   function setAdminTab(tab) {
-    var tabs = ['overview', 'students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'shuttle', 'counsel', 'report', 'settings'];
+    var tabs = ['overview', 'students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'shuttle', 'coupons', 'counsel', 'report', 'settings'];
     if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
     app.adminTab = tab;
     tabs.forEach(function (t) {
@@ -6695,6 +6803,7 @@
     el('view-admin').classList.toggle('paused-mode', tab === 'paused');
     el('view-admin').classList.toggle('cs-mode', tab === 'counsel');
     el('view-admin').classList.toggle('report-mode', tab === 'report');
+    el('view-admin').classList.toggle('cp-mode', tab === 'coupons');
     el('admin-promotion').style.display = tab === 'promotion' ? 'block' : 'none';
     el('admin-gukgiwon').style.display = tab === 'gukgiwon' ? 'block' : 'none';
     el('admin-monthly').style.display = tab === 'monthly' ? 'block' : 'none';
@@ -6702,6 +6811,7 @@
     el('admin-bulk-sms').style.display = tab === 'sms' ? 'block' : 'none';
     el('admin-paused').style.display = tab === 'paused' ? 'block' : 'none';
     el('admin-shuttle').style.display = tab === 'shuttle' ? 'block' : 'none';
+    el('admin-coupons').style.display = tab === 'coupons' ? 'block' : 'none';
     el('admin-counsel').style.display = tab === 'counsel' ? 'block' : 'none';
     el('admin-report').style.display = tab === 'report' ? 'block' : 'none';
     el('admin-settings').style.display = tab === 'settings' ? 'block' : 'none';
@@ -6714,6 +6824,7 @@
     if (tab === 'paused') { renderPaused(true); }
     if (tab === 'counsel') { renderCounsel(); }
     if (tab === 'shuttle') { renderShuttle(); }
+    if (tab === 'coupons') { renderCoupons(); }
     if (tab === 'report') { renderReport(true); }
   }
 
@@ -10051,13 +10162,12 @@
 
   function ensureShuttleUI() {
     if (!app.shuttleUI || typeof app.shuttleUI !== 'object' || Array.isArray(app.shuttleUI)) {
-      app.shuttleUI = { q: '', kind: 'all', part: 'all', picks: {} };
+      app.shuttleUI = { q: '', kind: 'all', part: 'all' };
     }
     var u = app.shuttleUI;
     if (typeof u.q !== 'string') { u.q = ''; }
     if (u.kind !== 'pick' && u.kind !== 'drop') { u.kind = 'all'; }
     if (typeof u.part !== 'string') { u.part = 'all'; }
-    if (!u.picks || typeof u.picks !== 'object' || Array.isArray(u.picks)) { u.picks = {}; }
     return u;
   }
 
@@ -10069,6 +10179,40 @@
 
   function shuttleRidersText(r) {
     return ((r && r.riders) || []).map(function (p) { return p.name; }).join(', ');
+  }
+
+  /* 이름 하나가 관원 명단에 있으면 그 관원, 없으면 null */
+  function studentByName(name) {
+    var key = String(name == null ? '' : name).replace(/\s+/g, '');
+    var hit = null;
+    if (!key) { return null; }
+    (app.students || []).forEach(function (s) {
+      if (String(s.name).replace(/\s+/g, '') === key) { hit = s; }
+    });
+    return hit;
+  }
+
+  /* 「김민준, 이서연」처럼 적은 글자 → riders 배열
+     · 쉼표·세미콜론·슬래시·줄바꿈, 그리고 이름 사이 띄어쓰기로 나눈다
+     · 명단에 있는 이름은 관원 id 를 연결하고 이름을 명단 표기로 맞춘다 */
+  function shuttleRidersFromText(text) {
+    var out = [], seen = {};
+    String(text == null ? '' : text).replace(/\r/g, '\n').split(/[,，、;\/\n\t]+/).forEach(function (tok) {
+      var piece = tok.trim();
+      if (!piece) { return; }
+      // 「김 민준」처럼 띄어 쓴 이름도 명단에 있으면 한 사람으로 본다
+      var parts = (studentByName(piece) || piece.indexOf(' ') === -1) ? [piece] : piece.split(/\s+/);
+      parts.forEach(function (part) {
+        var nm = part.trim().slice(0, 24);
+        if (!nm) { return; }
+        var hit = studentByName(nm);
+        var name = hit ? String(hit.name) : nm;
+        if (seen[name]) { return; }
+        seen[name] = true;
+        out.push({ id: hit ? String(hit.id) : '', name: name });
+      });
+    });
+    return out;
   }
 
   function shuttleSummary() {
@@ -10119,7 +10263,7 @@
 
   function shuttleEmptyHtml() {
     return '<div class="sh-empty">🚌 아직 운행 스케줄이 없어요.<br>' +
-      '<b>＋ 운행 추가</b>를 눌러 <b>시간 · 승차/하차 · 목적지</b>를 적고 원생을 더하면 끝이에요.<br>' +
+      '<b>＋ 운행 추가</b>를 눌러 <b>시간 · 승차/하차 · 목적지</b>를 적고 원생 이름을 적으면 끝이에요.<br>' +
       '적은 내용은 이 기기에 바로 저장되고 백업에도 함께 담깁니다.</div>';
   }
 
@@ -10146,13 +10290,6 @@
 
   /* 엑셀 시트처럼 얇은 한 줄 — 칸마다 테두리 있는 입력칸, Tab 으로 옆 칸 이동 */
   function shuttleRowHtml(r) {
-    var u = ensureShuttleUI();
-    var q = String(u.picks[r.id] || '');
-    var chips = (r.riders || []).map(function (p) {
-      return '<span class="sh-rchip">' + esc(p.name) +
-        '<button data-shrm="' + esc(r.id) + '" data-shname="' + esc(p.name) + '" tabindex="-1" title="빼기" aria-label="' + esc(p.name) + ' 빼기">×</button></span>';
-    }).join('');
-    var count = r.riders.length ? '<span class="sh-rcount">' + r.riders.length + '명</span>' : '';
     return '<tr class="sh-row ' + shuttlePartClass(r.part) + '" data-shrow="' + esc(r.id) + '">' +
       '<td class="sh-td sh-td-part">' +
       '<select class="input sh-part" data-shfield="part" data-shid="' + esc(r.id) + '" aria-label="몇시부">' + shuttlePartOptions(r.part) + '</select></td>' +
@@ -10162,12 +10299,7 @@
       '<button class="sh-kbtn drop' + (r.kind === 'drop' ? ' active' : '') + '" data-shkind="drop" data-shid="' + esc(r.id) + '" tabindex="-1" title="하차">하차</button>' +
       '</div></td>' +
       '<td class="sh-td"><input class="input" value="' + esc(r.dest) + '" data-shfield="dest" data-shid="' + esc(r.id) + '" placeholder="목적지" aria-label="목적지"></td>' +
-      '<td class="sh-td sh-td-riders">' +
-      '<div class="sh-rbox">' + count + chips +
-      (chips ? '' : '<span class="sh-rempty">아직 없음</span>') +
-      '<input class="sh-radd" value="' + esc(q) + '" data-shpick="' + esc(r.id) + '" placeholder="＋원생" autocomplete="off" aria-label="탑승 원생">' +
-      '</div>' +
-      '<div class="sh-picks cs-picks" id="sh-picks-' + esc(r.id) + '"></div></td>' +
+      '<td class="sh-td"><input class="input sh-riders" type="text" value="' + esc(shuttleRidersText(r)) + '" data-shfield="riders" data-shid="' + esc(r.id) + '" placeholder="예: 김민준, 이서연" autocomplete="off" aria-label="탑승 원생"></td>' +
       '<td class="sh-td"><input class="input" value="' + esc(r.memo) + '" data-shfield="memo" data-shid="' + esc(r.id) + '" placeholder="비고" aria-label="비고"></td>' +
       '<td class="sh-td sh-td-tools">' +
       '<button class="sh-tool" data-shup="' + esc(r.id) + '" tabindex="-1" title="위로 옮기기" aria-label="위로 옮기기">▲</button>' +
@@ -10188,33 +10320,6 @@
       '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
 
-  /* 한 운행 줄의 원생 후보 칩 — 입력칸은 건드리지 않고 후보 상자만 다시 그린다 */
-  function renderShuttlePicks(rowId) {
-    var r = shuttleById(rowId);
-    var box = el('sh-picks-' + rowId);
-    if (!r || !box) { return; }
-    var u = ensureShuttleUI();
-    var q = String(u.picks[rowId] || '').trim();
-    if (!q) { box.innerHTML = ''; return; }
-    var have = {};
-    (r.riders || []).forEach(function (p) { have[p.name] = true; });
-    var typed = q.replace(/\s+/g, '');
-    var exact = null, list = [];
-    (app.students || []).forEach(function (s) {
-      if (String(s.name).replace(/\s+/g, '') === typed) { exact = s; }
-      if (!have[s.name] && matchSearch(s, q)) { list.push(s); }
-    });
-    list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); });
-    var html = list.slice(0, 8).map(function (s) {
-      return '<button class="cs-pick" data-shadd="' + esc(rowId) + '" data-shsid="' + esc(s.id) + '" data-shname="' + esc(s.name) + '">' +
-        esc(s.name) + (isPaused(s) ? ' · 휴권' : '') + '</button>';
-    }).join('');
-    if (!exact) {
-      html += '<button class="cs-pick" data-shaddfree="' + esc(rowId) + '" data-shname="' + esc(q.slice(0, 24)) + '">➕ \'' + esc(q.slice(0, 24)) + '\' 직접 추가</button>';
-    }
-    box.innerHTML = html;
-  }
-
   function renderShuttle() {
     var u = ensureShuttleUI();
     renderShuttleStats();
@@ -10231,7 +10336,6 @@
     if (box) {
       box.innerHTML = (rows.length || (app.shuttle || []).length) ? shuttleTableHtml(rows) : shuttleEmptyHtml();
     }
-    (app.shuttle || []).forEach(function (r) { renderShuttlePicks(r.id); });
     if (el('sh-note')) {
       el('sh-note').textContent = rows.length === (app.shuttle || []).length
         ? '총 ' + rows.length + '건 · 저장됨'
@@ -10260,7 +10364,7 @@
     app.shuttle.push(row);
     saveShuttle();
     renderShuttle();
-    if (!opts.silent) { toast('운행을 추가했어요 · 시간·목적지를 적고 원생을 더해 주세요'); }
+    if (!opts.silent) { toast('운행을 추가했어요 · 시간·목적지·원생을 적어 주세요'); }
     return row;
   }
 
@@ -10276,6 +10380,9 @@
       r.memo = String(value == null ? '' : value).trim().slice(0, 80);
     } else if (field === 'part') {
       r.part = normShuttlePart(value);
+    } else if (field === 'riders') {
+      // 친 그대로 저장 — 화면 입력칸은 다시 그리지 않아 커서·타이핑이 끊기지 않는다
+      r.riders = shuttleRidersFromText(value);
     } else {
       return null;
     }
@@ -10294,68 +10401,9 @@
     return r;
   }
 
-  function addShuttleRider(rowId, rider) {
-    var r = shuttleById(rowId);
-    if (!r) { return null; }
-    var obj = (rider && typeof rider === 'object') ? rider : { name: rider };
-    var name = String((obj && obj.name) == null ? '' : obj.name).trim().slice(0, 24);
-    if (!name) { return null; }
-    var sid = String((obj && obj.id) || '');
-    var existing = null;
-    (r.riders || []).forEach(function (p) { if (p.name === name) { existing = p; } });
-    if (existing) {
-      toast(name + '은(는) 이미 이 운행에 들어 있어요');
-      return existing;
-    }
-    r.riders.push({ id: sid, name: name });
-    var u = ensureShuttleUI();
-    u.picks[rowId] = '';
-    saveShuttle();
-    renderShuttle();
-    toast(r.time ? r.time + ' ' + shuttleKindLabel(r.kind) + ' · ' + name + ' 추가' : name + ' 추가');
-    return r.riders[r.riders.length - 1];
-  }
-
-  /* 「이서연, 김민준」처럼 쉼표로 구분해 한 번에 여러 명을 넣는다 (명단에 없으면 이름만 보관) */
-  function addShuttleRiders(rowId, text) {
-    var r = shuttleById(rowId);
-    if (!r) { return []; }
-    var added = [];
-    String(text == null ? '' : text).split(/[,，、;\/\n]+/).forEach(function (tok) {
-      var nm = tok.trim().slice(0, 24);
-      if (!nm) { return; }
-      var hit = null;
-      (app.students || []).forEach(function (s) {
-        if (String(s.name).replace(/\s+/g, '') === nm.replace(/\s+/g, '')) { hit = s; }
-      });
-      var name = hit ? String(hit.name) : nm;
-      var dup = false;
-      (r.riders || []).forEach(function (p) { if (p.name === name) { dup = true; } });
-      if (dup) { return; }
-      r.riders.push({ id: hit ? String(hit.id) : '', name: name });
-      added.push(name);
-    });
-    var u = ensureShuttleUI();
-    u.picks[rowId] = '';
-    if (added.length) {
-      saveShuttle();
-      renderShuttle();
-      toast(added.length === 1 ? (added[0] + ' 추가') : (added[0] + ' 외 ' + (added.length - 1) + '명 추가'));
-    }
-    return added;
-  }
-
-  function removeShuttleRider(rowId, name) {
-    var r = shuttleById(rowId);
-    if (!r) { return false; }
-    var nm = String(name == null ? '' : name).trim();
-    var before = r.riders.length;
-    r.riders = r.riders.filter(function (p) { return p.name !== nm; });
-    if (r.riders.length === before) { return false; }
-    saveShuttle();
-    renderShuttle();
-    toast(nm + '을(를) 뺐어요');
-    return true;
+  /* 원생 칸에 적은 글자를 그대로 riders 로 맞춘다 (테스트·도구에서도 쓴다) */
+  function setShuttleRiders(rowId, text) {
+    return !!setShuttleField(rowId, 'riders', text);
   }
 
   function moveShuttleRow(id, dir) {
@@ -10402,8 +10450,6 @@
     }).then(function (ok) {
       if (!ok) { return false; }
       app.shuttle = (app.shuttle || []).filter(function (x) { return x.id !== id; });
-      var u = ensureShuttleUI();
-      delete u.picks[id];
       saveShuttle();
       renderShuttle();
       toast('운행을 지웠어요');
@@ -10495,18 +10541,7 @@
 
   /* 원생 칸: 「김민준, 이서연」 → 명단에서 이름으로 찾아 id 를 붙이고, 모르는 이름은 이름만 보관 */
   function shuttleRidersFromCell(v) {
-    var out = [], seen = {};
-    String(v == null ? '' : v).replace(/\r/g, '\n').split(/[,，、;\/\n]+/).forEach(function (tok) {
-      var nm = tok.trim().slice(0, 24);
-      if (!nm || seen[nm]) { return; }
-      seen[nm] = true;
-      var hit = null;
-      (app.students || []).forEach(function (s) {
-        if (String(s.name).replace(/\s+/g, '') === nm.replace(/\s+/g, '')) { hit = s; }
-      });
-      out.push({ id: hit ? String(hit.id) : '', name: hit ? String(hit.name) : nm });
-    });
-    return out;
+    return shuttleRidersFromText(v);
   }
 
   /* 2차원 표(엑셀 시트·CSV) → 운행 줄 배열. 머리글이 없으면 부·시간·승차/하차·목적지·원생·비고 순서로 읽는다 */
@@ -10800,18 +10835,6 @@
     if (dn) { moveShuttleRow(dn.getAttribute('data-shdown'), 1); return; }
     var del = t.closest('[data-shdel]');
     if (del) { deleteShuttleRow(del.getAttribute('data-shdel')); return; }
-    var rm = t.closest('[data-shrm]');
-    if (rm) { removeShuttleRider(rm.getAttribute('data-shrm'), rm.getAttribute('data-shname')); return; }
-    var add = t.closest('[data-shadd]');
-    if (add) {
-      addShuttleRider(add.getAttribute('data-shadd'), {
-        id: add.getAttribute('data-shsid') || '',
-        name: add.getAttribute('data-shname') || ''
-      });
-      return;
-    }
-    var free = t.closest('[data-shaddfree]');
-    if (free) { addShuttleRider(free.getAttribute('data-shaddfree'), { name: free.getAttribute('data-shname') || '' }); }
   }
 
   function onShuttleListInput(e, changeOnly) {
@@ -10825,18 +10848,14 @@
       if (field === 'time' && changeOnly && row && t.value !== row.time) {
         t.value = row.time;
       }
+      // 원생 칸도 blur 되면 「김민준, 이서연」처럼 한 가지 모양으로 정돈한다
+      if (field === 'riders' && changeOnly && row) {
+        var canon = shuttleRidersText(row);
+        if (t.value !== canon) { t.value = canon; }
+      }
       // 부가 바뀌면 줄 바탕색이 바로 따라오게 그 줄을 다시 그린다
       if (field === 'part') { renderShuttle(); }
       return;
-    }
-    // blur 때 오는 change 로 후보 칩을 다시 그리면, 누르려던 칩이 사라져 클릭이 먹지 않는다.
-    // 후보 칩은 글자를 칠 때(input)만 새로 그린다.
-    if (changeOnly) { return; }
-    var pk = t.closest('[data-shpick]');
-    if (pk) {
-      var id = pk.getAttribute('data-shpick');
-      ensureShuttleUI().picks[id] = String(t.value == null ? '' : t.value);
-      renderShuttlePicks(id);
     }
   }
 
@@ -10859,20 +10878,10 @@
   function onShuttleListKey(e) {
     var t = e && e.target;
     if (!t || !t.closest) { return; }
-    var pk = t.closest('[data-shpick]');
-    if (pk) {
-      if (e.key !== 'Enter') { return; }
-      if (e.preventDefault) { e.preventDefault(); }
-      var id = pk.getAttribute('data-shpick');
-      var typed = String(ensureShuttleUI().picks[id] || '').trim();
-      if (!typed) { return; }
-      addShuttleRiders(id, typed);
-      return;
-    }
     var f = t.closest('[data-shfield]');
     if (!f || e.key !== 'Enter') { return; }
     var field = f.getAttribute('data-shfield');
-    if (field !== 'time' && field !== 'dest' && field !== 'memo') { return; }
+    if (field !== 'time' && field !== 'dest' && field !== 'riders' && field !== 'memo') { return; }
     if (e.preventDefault) { e.preventDefault(); }
     setShuttleField(f.getAttribute('data-shid'), field, f.value);
     focusShuttleNeighbor(f.getAttribute('data-shid'), field);
@@ -10926,6 +10935,606 @@
       list.addEventListener('input', function (e) { onShuttleListInput(e, false); });
       list.addEventListener('change', function (e) { onShuttleListInput(e, true); });
       list.addEventListener('keydown', onShuttleListKey);
+    }
+  }
+
+  /* =========================================================
+     11-J-2. 쿠폰 지급 현황 (신규 등록 쿠폰 · 사용기한 · 사용/미사용/종료)
+     ---------------------------------------------------------
+     저장 구조
+       tdk.coupons.v1 = [
+         { id, name, studentId, type, givenDate, startDate, endDate,
+           status:'unused'|'used'|'ended', usedDate }
+       ]
+       tdk.couponTypes.v1 = ['도복 무료 쿠폰', '원비 1만원 할인', …]
+     · 표에서 고치면 즉시 저장 — 전체 백업·드라이브 백업에도 함께 담긴다
+     ========================================================= */
+  var COUPON_STATUS = { unused: '미사용', used: '사용', ended: '종료' };
+  var COUPON_STATUS_ORDER = { unused: 0, used: 1, ended: 2 };
+  var COUPON_DEFAULT_TYPES = ['도복 무료 쿠폰', '원비 1만원 할인', '1주일 체험권', '가방 증정'];
+
+  function couponAddDays(key, days) {
+    if (!isDateKey(key)) { return ''; }
+    var d = new Date(key + 'T00:00:00');
+    if (isNaN(d.getTime())) { return ''; }
+    d.setDate(d.getDate() + (parseInt(days, 10) || 0));
+    return todayKey(d);
+  }
+
+  function couponTypeList() {
+    if (!Array.isArray(app.couponTypes)) { app.couponTypes = []; }
+    return app.couponTypes;
+  }
+
+  function loadCouponTypes() {
+    var raw = readJSON(LS.couponTypes, null);
+    var out = [];
+    // 한 번도 저장한 적이 없을 때만 예시 종류를 채운다 (전부 지운 [] 는 그대로 둔다)
+    if (!Array.isArray(raw)) { return COUPON_DEFAULT_TYPES.slice(); }
+    raw.forEach(function (t) {
+      var nm = String(t == null ? '' : (typeof t === 'object' ? t.name : t)).trim().slice(0, 40);
+      if (nm && out.indexOf(nm) === -1) { out.push(nm); }
+    });
+    return out;
+  }
+
+  function saveCouponTypes() {
+    writeJSON(LS.couponTypes, couponTypeList());
+    if (typeof driveTouchData === 'function') { driveTouchData(); }
+  }
+
+  function coupons() {
+    if (!Array.isArray(app.coupons)) { app.coupons = []; }
+    return app.coupons;
+  }
+
+  function loadCoupons() {
+    var raw = readJSON(LS.coupons, []);
+    var out = [];
+    if (!Array.isArray(raw)) { return out; }
+    raw.forEach(function (r) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) { return; }
+      var name = String(r.name || r.studentName || '').trim().slice(0, 24);
+      if (!name) { return; }
+      out.push({
+        id: String(r.id || uid('cp')),
+        name: name,
+        studentId: String(r.studentId || ''),
+        type: String(r.type || '').trim().slice(0, 40),
+        givenDate: isDateKey(r.givenDate) ? String(r.givenDate) : '',
+        startDate: isDateKey(r.startDate) ? String(r.startDate) : '',
+        endDate: isDateKey(r.endDate) ? String(r.endDate) : '',
+        status: COUPON_STATUS[r.status] ? r.status : 'unused',
+        usedDate: isDateKey(r.usedDate) ? String(r.usedDate) : ''
+      });
+    });
+    return out;
+  }
+
+  function saveCoupons() {
+    writeJSON(LS.coupons, coupons());
+    if (typeof driveTouchData === 'function') { driveTouchData(); }
+  }
+
+  /* 백업의 쿠폰 → 이름으로 지금 명단의 관원 id 를 다시 연결 */
+  function remapCouponBackup(list, students) {
+    var out = [];
+    var byName = {};
+    (students || []).forEach(function (s) {
+      if (s && s.name) { byName[String(s.name).replace(/\s+/g, '')] = s; }
+    });
+    (Array.isArray(list) ? list : []).forEach(function (r) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) { return; }
+      var name = String(r.name || r.studentName || '').trim().slice(0, 24);
+      if (!name) { return; }
+      var hit = byName[name.replace(/\s+/g, '')] || null;
+      out.push({
+        id: String(r.id || uid('cp')),
+        name: hit ? String(hit.name) : name,
+        studentId: hit ? String(hit.id) : '',
+        type: String(r.type || '').trim().slice(0, 40),
+        givenDate: isDateKey(r.givenDate) ? String(r.givenDate) : '',
+        startDate: isDateKey(r.startDate) ? String(r.startDate) : '',
+        endDate: isDateKey(r.endDate) ? String(r.endDate) : '',
+        status: COUPON_STATUS[r.status] ? r.status : 'unused',
+        usedDate: isDateKey(r.usedDate) ? String(r.usedDate) : ''
+      });
+    });
+    return out;
+  }
+
+  function ensureCouponUI() {
+    if (!app.couponUI || typeof app.couponUI !== 'object' || Array.isArray(app.couponUI)) {
+      app.couponUI = { q: '', status: 'all', sort: 'name', typeEdit: '' };
+    }
+    var u = app.couponUI;
+    if (typeof u.q !== 'string') { u.q = ''; }
+    if (u.status !== 'unused' && u.status !== 'used' && u.status !== 'ended') { u.status = 'all'; }
+    if (u.sort !== 'status') { u.sort = 'name'; }
+    if (typeof u.typeEdit !== 'string') { u.typeEdit = ''; }
+    return u;
+  }
+
+  function couponById(id) {
+    var list = coupons();
+    for (var i = 0; i < list.length; i++) { if (list[i].id === id) { return list[i]; } }
+    return null;
+  }
+
+  /* 사용기한 끝이 지난 미사용 쿠폰 — 상태는 그대로 두고 화면에 만료 배지로만 알린다 */
+  function couponExpired(c) {
+    return !!(c && c.status === 'unused' && c.endDate && c.endDate < todayKey());
+  }
+
+  function couponStatusLabel(c) {
+    return couponExpired(c) ? '기간만료' : (COUPON_STATUS[c.status] || '미사용');
+  }
+
+  function couponSummary() {
+    var s = { total: 0, unused: 0, used: 0, ended: 0, expired: 0 };
+    coupons().forEach(function (c) {
+      s.total++;
+      if (c.status === 'used') { s.used++; }
+      else if (c.status === 'ended') { s.ended++; }
+      else { s.unused++; if (couponExpired(c)) { s.expired++; } }
+    });
+    return s;
+  }
+
+  function couponSortList(list) {
+    var u = ensureCouponUI();
+    return (list || []).slice().sort(function (a, b) {
+      if (u.sort === 'status') {
+        var sa = couponExpired(a) ? 2 : COUPON_STATUS_ORDER[a.status];
+        var sb = couponExpired(b) ? 2 : COUPON_STATUS_ORDER[b.status];
+        if (sa !== sb) { return sa - sb; }
+      }
+      var n = String(a.name).localeCompare(String(b.name), 'ko');
+      if (n) { return n; }
+      if (a.givenDate !== b.givenDate) { return a.givenDate < b.givenDate ? 1 : -1; }
+      return String(a.id) < String(b.id) ? -1 : 1;
+    });
+  }
+
+  /* 현재 필터(상태 + 검색)에 맞는 쿠폰 — 화면·CSV 가 같은 목록을 쓴다 */
+  function couponRows() {
+    var u = ensureCouponUI();
+    var q = String(u.q || '').replace(/\s+/g, '');
+    var list = coupons().filter(function (c) {
+      if (u.status !== 'all' && c.status !== u.status) { return false; }
+      if (!q) { return true; }
+      var hay = [c.name, c.type, COUPON_STATUS[c.status], couponExpired(c) ? '기간만료' : '',
+        c.givenDate, c.startDate, c.endDate, c.usedDate].join(' ').replace(/\s+/g, '');
+      if (hay.indexOf(q) !== -1) { return true; }
+      if (isChosungQuery(q) && toChosung(String(c.name).replace(/\s+/g, '')).indexOf(q) !== -1) { return true; }
+      return false;
+    });
+    return couponSortList(list);
+  }
+
+  function renderCouponStats() {
+    var s = couponSummary();
+    if (el('cp-total')) { el('cp-total').innerHTML = s.total + '<small>장</small>'; }
+    if (el('cp-unused')) { el('cp-unused').innerHTML = s.unused + '<small>장</small>'; }
+    if (el('cp-used')) { el('cp-used').innerHTML = s.used + '<small>장</small>'; }
+    if (el('cp-ended')) { el('cp-ended').innerHTML = s.ended + '<small>장</small>'; }
+    if (el('cp-total-sub')) {
+      el('cp-total-sub').textContent = s.total
+        ? ('미사용 ' + s.unused + ' · 사용 ' + s.used + ' · 종료 ' + s.ended)
+        : '지급한 쿠폰';
+    }
+    if (el('cp-unused-sub')) {
+      el('cp-unused-sub').textContent = s.expired ? ('기간만료 ' + s.expired + '장 포함') : '아직 쓸 수 있어요';
+    }
+  }
+
+  function renderCouponTypes() {
+    var u = ensureCouponUI();
+    var box = el('cp-types');
+    var types = couponTypeList();
+    var cnt = {};
+    coupons().forEach(function (c) { if (c.type) { cnt[c.type] = (cnt[c.type] || 0) + 1; } });
+    if (box) {
+      box.innerHTML = types.length
+        ? types.map(function (t) {
+          return '<span class="cp-typec"><b>' + esc(t) + '</b>' +
+            '<span class="cp-typecnt">' + (cnt[t] || 0) + '장</span>' +
+            '<button data-cptype-edit="' + esc(t) + '" title="이름 바꾸기" aria-label="' + esc(t) + ' 이름 바꾸기">✏️</button>' +
+            '<button data-cptype-del="' + esc(t) + '" title="종류 지우기" aria-label="' + esc(t) + ' 지우기">✕</button></span>';
+        }).join('')
+        : '<span class="tiny-note">쿠폰 종류가 없어요. 아래에서 추가해 주세요.</span>';
+    }
+    if (el('cp-types-note')) {
+      el('cp-types-note').textContent = types.length + '종' + (u.typeEdit ? ' · 「' + u.typeEdit + '」 수정 중' : '');
+    }
+    if (el('btn-cp-type-add')) {
+      el('btn-cp-type-add').textContent = u.typeEdit ? '💾 이름 저장' : '＋ 종류 추가';
+    }
+    if (el('btn-cp-type-cancel')) {
+      el('btn-cp-type-cancel').style.display = u.typeEdit ? '' : 'none';
+    }
+    var dl = el('cp-type-list');
+    if (dl) {
+      dl.innerHTML = types.map(function (t) { return '<option value="' + esc(t) + '"></option>'; }).join('');
+    }
+    var dn = el('cp-name-list');
+    if (dn) {
+      dn.innerHTML = (app.students || []).slice()
+        .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); })
+        .map(function (s) { return '<option value="' + esc(s.name) + '"></option>'; }).join('');
+    }
+  }
+
+  function couponStatusButtons(c) {
+    return ['unused', 'used', 'ended'].map(function (k) {
+      return '<button class="cp-st ' + k + (c.status === k ? ' on' : '') + '" data-cpst="' + k + '" data-cpid="' + esc(c.id) + '" aria-pressed="' + (c.status === k ? 'true' : 'false') + '">' +
+        COUPON_STATUS[k] + '</button>';
+    }).join('');
+  }
+
+  function couponRowHtml(c) {
+    var exp = couponExpired(c);
+    var cell = function (field, value, extra) {
+      return '<input class="input" ' + (extra || '') + ' value="' + esc(value) + '" data-cpfield="' + field + '" data-cpid="' + esc(c.id) + '" autocomplete="off">';
+    };
+    return '<tr data-cprow="' + esc(c.id) + '">' +
+      '<td>' + cell('name', c.name, 'list="cp-name-list" placeholder="관원 이름" aria-label="이름"') + '</td>' +
+      '<td>' + cell('type', c.type, 'list="cp-type-list" placeholder="쿠폰 종류" aria-label="쿠폰종류"') + '</td>' +
+      '<td>' + cell('givenDate', c.givenDate, 'type="date" aria-label="지급날짜"') + '</td>' +
+      '<td>' + cell('startDate', c.startDate, 'type="date" aria-label="사용기한 시작"') + '</td>' +
+      '<td>' + cell('endDate', c.endDate, 'type="date" aria-label="사용기한 끝"') +
+      (exp ? '<span class="cp-badge exp">기간만료</span>' : '') + '</td>' +
+      '<td><div class="cp-sts">' + couponStatusButtons(c) + '</div>' +
+      (c.usedDate ? '<div class="cp-used">사용 ' + esc(c.usedDate) + '</div>' : '') + '</td>' +
+      '<td class="cp-tools"><button class="cp-del" data-cpdel="' + esc(c.id) + '" title="이 쿠폰 지우기" aria-label="이 쿠폰 지우기">✕</button></td>' +
+      '</tr>';
+  }
+
+  function couponEmptyHtml() {
+    if (!coupons().length) {
+      return '<div class="cp-empty">🎟️ 아직 지급한 쿠폰이 없어요.<br>' +
+        '위의 <b>쿠폰 지급 등록</b>에 <b>이름 · 쿠폰종류 · 지급날짜 · 사용기한</b>을 적고 <b>쿠폰 지급 등록</b>을 누르면 여기에 쌓입니다.</div>';
+    }
+    return '<div class="cp-empty">🔍 조건에 맞는 쿠폰이 없어요.<br>검색어나 사용 상태 필터를 바꿔 보세요.</div>';
+  }
+
+  function fillCouponForm(force) {
+    var t = todayKey();
+    [['cp-new-given', t], ['cp-new-start', t], ['cp-new-end', couponAddDays(t, 30)]].forEach(function (p) {
+      var node = el(p[0]);
+      if (node && (force || !isDateKey(node.value))) { node.value = p[1]; }
+    });
+  }
+
+  function resetCouponForm() {
+    ['cp-new-name', 'cp-new-type'].forEach(function (id) { if (el(id)) { el(id).value = ''; } });
+    fillCouponForm(true);
+    renderCoupons();
+  }
+
+  function renderCoupons() {
+    var u = ensureCouponUI();
+    renderCouponStats();
+    renderCouponTypes();
+    ['all', 'unused', 'used', 'ended'].forEach(function (k) {
+      var b = el('cpf-' + k);
+      if (b) { b.classList.toggle('active', u.status === k); }
+    });
+    if (el('cp-q') && document.activeElement !== el('cp-q') && el('cp-q').value !== (u.q || '')) {
+      el('cp-q').value = u.q || '';
+    }
+    if (el('btn-cp-sort')) {
+      el('btn-cp-sort').textContent = u.sort === 'status' ? '🟢 상태별 정렬' : '🔤 가나다순';
+    }
+    fillCouponForm(false);
+    var rows = couponRows();
+    var box = el('cp-list');
+    if (box) {
+      box.innerHTML = rows.length
+        ? ('<div class="cp-tablehint">← → 옆으로 밀면 사용기한·상태까지 볼 수 있어요</div>' +
+          '<div class="cp-tablewrap"><table class="cp-table"><colgroup>' +
+          '<col style="width:118px"><col style="width:210px"><col style="width:132px">' +
+          '<col style="width:132px"><col style="width:150px"><col style="width:196px"><col style="width:46px">' +
+          '</colgroup><thead><tr>' +
+          '<th>이름</th><th>쿠폰종류</th><th>지급날짜</th><th>사용기한 시작</th><th>사용기한 끝</th><th>상태</th><th class="c">도구</th>' +
+          '</tr></thead><tbody>' + rows.map(couponRowHtml).join('') + '</tbody></table></div>')
+        : couponEmptyHtml();
+    }
+    if (el('cp-note')) {
+      el('cp-note').textContent = rows.length === coupons().length
+        ? '총 ' + rows.length + '장 · 저장됨'
+        : rows.length + '장 / 전체 ' + coupons().length + '장';
+    }
+  }
+
+  function addCoupon(opts) {
+    opts = opts || {};
+    var name = String(opts.name == null ? '' : opts.name).trim().slice(0, 24);
+    if (!name) { return null; }
+    var d = couponAddDays(todayKey(), 30);
+    var hit = studentByName(name);
+    var row = {
+      id: uid('cp'),
+      name: hit ? String(hit.name) : name,
+      studentId: hit ? String(hit.id) : '',
+      type: String(opts.type == null ? '' : opts.type).trim().slice(0, 40),
+      givenDate: isDateKey(opts.givenDate) ? String(opts.givenDate) : todayKey(),
+      startDate: isDateKey(opts.startDate) ? String(opts.startDate) : todayKey(),
+      endDate: isDateKey(opts.endDate) ? String(opts.endDate) : d,
+      status: COUPON_STATUS[opts.status] ? opts.status : 'unused',
+      usedDate: ''
+    };
+    if (row.status === 'used') { row.usedDate = todayKey(); }
+    coupons().push(row);
+    saveCoupons();
+    renderCoupons();
+    return row;
+  }
+
+  function setCouponField(id, field, value) {
+    var c = couponById(id);
+    if (!c) { return null; }
+    if (field === 'name') {
+      var nm = String(value == null ? '' : value).trim().slice(0, 24);
+      if (!nm) { return c; }   // 이름은 비워 두지 않는다 (칸을 떠날 때 원래 이름으로 되돌린다)
+      c.name = nm;
+      var hit = studentByName(nm);
+      c.studentId = hit ? String(hit.id) : '';
+    } else if (field === 'type') {
+      c.type = String(value == null ? '' : value).trim().slice(0, 40);
+    } else if (field === 'givenDate' || field === 'startDate' || field === 'endDate') {
+      c[field] = isDateKey(value) ? String(value) : '';
+    } else {
+      return null;
+    }
+    saveCoupons();
+    renderCouponStats();
+    return c;
+  }
+
+  function setCouponStatus(id, status) {
+    var c = couponById(id);
+    if (!c || !COUPON_STATUS[status]) { return null; }
+    c.status = status;
+    if (status === 'used') {
+      if (!isDateKey(c.usedDate)) { c.usedDate = todayKey(); }
+    } else if (status === 'unused') {
+      c.usedDate = '';
+    }
+    saveCoupons();
+    renderCoupons();
+    toast(c.name + ' · ' + COUPON_STATUS[status] + '로 바꿨어요');
+    return c;
+  }
+
+  function deleteCoupon(id) {
+    var c = couponById(id);
+    if (!c) { return false; }
+    return openModal({
+      title: '이 쿠폰을 지울까요?',
+      sub: c.name + ' · ' + (c.type || '쿠폰 종류 없음') + ' · ' + couponStatusLabel(c),
+      body: '<div class="help" style="margin-top:0">지운 쿠폰은 되돌릴 수 없어요.' +
+        (c.givenDate ? '<br>지급날짜: ' + esc(c.givenDate) : '') +
+        (c.endDate ? '<br>사용기한: ' + esc(c.startDate || '-') + ' ~ ' + esc(c.endDate) : '') + '</div>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '지우기', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return false; }
+      app.coupons = coupons().filter(function (x) { return x.id !== id; });
+      saveCoupons();
+      renderCoupons();
+      toast('쿠폰을 지웠어요');
+      return true;
+    });
+  }
+
+  function saveCouponFromForm() {
+    var name = String(el('cp-new-name') ? el('cp-new-name').value : '').trim();
+    if (!name) { toast('쿠폰을 받을 관원 이름을 적어 주세요.'); return null; }
+    var type = String(el('cp-new-type') ? el('cp-new-type').value : '').trim();
+    var givenDate = String(el('cp-new-given') ? el('cp-new-given').value : '');
+    var startDate = String(el('cp-new-start') ? el('cp-new-start').value : '');
+    var endDate = String(el('cp-new-end') ? el('cp-new-end').value : '');
+    if (!isDateKey(givenDate)) { givenDate = todayKey(); }
+    if (isDateKey(startDate) && isDateKey(endDate) && endDate < startDate) {
+      toast('사용기한 끝이 시작보다 빠를 수 없어요.');
+      return null;
+    }
+    // 표에 없던 쿠폰 종류를 적었으면 종류 목록에도 남긴다
+    if (type && couponTypeList().indexOf(type) === -1) {
+      app.couponTypes.push(type);
+      saveCouponTypes();
+    }
+    var row = addCoupon({ name: name, type: type, givenDate: givenDate, startDate: startDate, endDate: endDate });
+    if (!row) { return null; }
+    ['cp-new-name', 'cp-new-type'].forEach(function (id) { if (el(id)) { el(id).value = ''; } });
+    fillCouponForm(true);
+    renderCoupons();
+    toast(row.name + ' 님께 ' + (row.type || '쿠폰') + ' 지급 · 사용기한 ' + (row.startDate || '-') + ' ~ ' + (row.endDate || '-'));
+    return row;
+  }
+
+  /* 쿠폰 종류 추가 / 이름 수정 — 입력칸 하나를 두 용도로 쓴다 */
+  function saveCouponTypeFromInput() {
+    var u = ensureCouponUI();
+    var nm = String(el('cp-type-new') ? el('cp-type-new').value : '').trim().slice(0, 40);
+    if (!nm) { toast('쿠폰 종류 이름을 적어 주세요.'); return false; }
+    var old = u.typeEdit;
+    if (old) {
+      if (old === nm) { u.typeEdit = ''; if (el('cp-type-new')) { el('cp-type-new').value = ''; } renderCoupons(); return true; }
+      if (couponTypeList().indexOf(nm) !== -1 && nm !== old) {
+        toast('이미 있는 쿠폰 종류예요.');
+        return false;
+      }
+      app.couponTypes = couponTypeList().map(function (t) { return t === old ? nm : t; });
+      coupons().forEach(function (c) { if (c.type === old) { c.type = nm; } });
+      u.typeEdit = '';
+      if (el('cp-type-new')) { el('cp-type-new').value = ''; }
+      saveCouponTypes();
+      saveCoupons();
+      renderCoupons();
+      toast('쿠폰 종류 「' + old + '」 → 「' + nm + '」');
+      return true;
+    }
+    if (couponTypeList().indexOf(nm) !== -1) { toast('이미 있는 쿠폰 종류예요.'); return false; }
+    app.couponTypes.push(nm);
+    saveCouponTypes();
+    if (el('cp-type-new')) { el('cp-type-new').value = ''; }
+    renderCoupons();
+    toast('쿠폰 종류 「' + nm + '」 추가');
+    return true;
+  }
+
+  function startCouponTypeEdit(name) {
+    var u = ensureCouponUI();
+    u.typeEdit = String(name || '');
+    if (el('cp-type-new')) {
+      el('cp-type-new').value = u.typeEdit;
+      if (typeof el('cp-type-new').focus === 'function') { el('cp-type-new').focus(); }
+    }
+    renderCoupons();
+    return u.typeEdit;
+  }
+
+  function cancelCouponTypeEdit() {
+    var u = ensureCouponUI();
+    u.typeEdit = '';
+    if (el('cp-type-new')) { el('cp-type-new').value = ''; }
+    renderCoupons();
+  }
+
+  function deleteCouponType(name) {
+    var nm = String(name || '');
+    if (!nm) { return false; }
+    var used = coupons().filter(function (c) { return c.type === nm; }).length;
+    return openModal({
+      title: '쿠폰 종류 「' + nm + '」를 지울까요?',
+      sub: used ? ('이 종류로 지급한 쿠폰 ' + used + '장은 그대로 남고, 종류 목록에서만 빠집니다.') : '지급한 쿠폰이 없는 종류예요.',
+      body: '<div class="help" style="margin-top:0">쿠폰 종류는 자주 쓰는 이름을 모아 두는 목록이에요. 지워도 지급 현황 표는 바뀌지 않아요.</div>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '지우기', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return false; }
+      app.couponTypes = couponTypeList().filter(function (t) { return t !== nm; });
+      var u = ensureCouponUI();
+      if (u.typeEdit === nm) { u.typeEdit = ''; }
+      saveCouponTypes();
+      renderCoupons();
+      toast('쿠폰 종류 「' + nm + '」를 지웠어요');
+      return true;
+    });
+  }
+
+  function couponCSVText(list) {
+    var lines = [['번호', '이름', '쿠폰종류', '지급날짜', '사용기한 시작', '사용기한 끝', '상태', '사용일']];
+    (list || []).forEach(function (c, i) {
+      lines.push([i + 1, c.name, c.type, c.givenDate, c.startDate, c.endDate, couponStatusLabel(c), c.usedDate]);
+    });
+    return '\uFEFF' + lines.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
+  }
+
+  function downloadCouponCSV() {
+    var rows = couponRows();
+    if (!rows.length) { toast('내려받을 쿠폰이 없어요'); return false; }
+    downloadText(couponCSVText(rows), 'text/csv;charset=utf-8', '쿠폰지급현황_' + todayKey() + '.csv');
+    toast('쿠폰 ' + rows.length + '장을 CSV로 내려받았어요');
+    return true;
+  }
+
+  function onCouponListClick(e) {
+    var t = e && e.target;
+    if (!t || !t.closest) { return; }
+    var st = t.closest('[data-cpst]');
+    if (st) { setCouponStatus(st.getAttribute('data-cpid'), st.getAttribute('data-cpst')); return; }
+    var del = t.closest('[data-cpdel]');
+    if (del) { deleteCoupon(del.getAttribute('data-cpdel')); }
+  }
+
+  function onCouponListInput(e, changeOnly) {
+    var t = e && e.target;
+    if (!t || !t.closest) { return; }
+    var f = t.closest('[data-cpfield]');
+    if (!f) { return; }
+    var field = f.getAttribute('data-cpfield');
+    var row = setCouponField(f.getAttribute('data-cpid'), field, t.value);
+    if (!row) { return; }
+    if (!changeOnly) { return; }
+    // 칸을 떠날 때 모양을 정돈한다 — 이름은 명단 표기로, 날짜는 YYYY-MM-DD(또는 빈칸)로
+    if (field === 'name') {
+      var hit = studentByName(f.value);
+      if (hit) { row.name = String(hit.name); row.studentId = String(hit.id); saveCoupons(); }
+      t.value = row.name;
+    } else if (field === 'type') {
+      t.value = row.type;
+      if (row.type && couponTypeList().indexOf(row.type) === -1) {
+        app.couponTypes.push(row.type);
+        saveCouponTypes();
+        renderCouponTypes();
+      }
+    } else if (t.value !== row[field]) {
+      t.value = row[field];
+    }
+    if (field === 'endDate') { renderCoupons(); }
+  }
+
+  function bindCouponEvents() {
+    if (el('atab-coupons')) { el('atab-coupons').addEventListener('click', function () { setAdminTab('coupons'); }); }
+    if (el('btn-cp-add')) { el('btn-cp-add').addEventListener('click', function () { saveCouponFromForm(); }); }
+    if (el('btn-cp-reset')) { el('btn-cp-reset').addEventListener('click', resetCouponForm); }
+    if (el('btn-cp-csv')) { el('btn-cp-csv').addEventListener('click', downloadCouponCSV); }
+    if (el('btn-cp-sort')) {
+      el('btn-cp-sort').addEventListener('click', function () {
+        var u = ensureCouponUI();
+        u.sort = u.sort === 'status' ? 'name' : 'status';
+        renderCoupons();
+        toast(u.sort === 'status' ? '상태별 · 이름 가나다순으로 정렬했어요' : '이름 가나다순으로 정렬했어요');
+      });
+    }
+    if (el('btn-cp-type-add')) { el('btn-cp-type-add').addEventListener('click', function () { saveCouponTypeFromInput(); }); }
+    if (el('btn-cp-type-cancel')) { el('btn-cp-type-cancel').addEventListener('click', cancelCouponTypeEdit); }
+    if (el('cp-type-new')) {
+      el('cp-type-new').addEventListener('keydown', function (e) {
+        if (e && e.key === 'Enter') {
+          if (e.preventDefault) { e.preventDefault(); }
+          saveCouponTypeFromInput();
+        }
+      });
+    }
+    if (el('cp-types')) {
+      el('cp-types').addEventListener('click', function (e) {
+        var t = e && e.target;
+        if (!t || !t.closest) { return; }
+        var ed = t.closest('[data-cptype-edit]');
+        if (ed) { startCouponTypeEdit(ed.getAttribute('data-cptype-edit')); return; }
+        var del = t.closest('[data-cptype-del]');
+        if (del) { deleteCouponType(del.getAttribute('data-cptype-del')); }
+      });
+    }
+    if (el('cp-q')) {
+      el('cp-q').addEventListener('input', function () {
+        ensureCouponUI().q = String(el('cp-q').value || '');
+        renderCoupons();
+      });
+    }
+    if (el('cp-filters')) {
+      el('cp-filters').addEventListener('click', function (e) {
+        var t = e && e.target;
+        var b = t && t.closest ? t.closest('[data-cpfilter]') : null;
+        if (!b) { return; }
+        var v = b.getAttribute('data-cpfilter');
+        ensureCouponUI().status = (v === 'unused' || v === 'used' || v === 'ended') ? v : 'all';
+        renderCoupons();
+      });
+    }
+    var list = el('cp-list');
+    if (list) {
+      list.addEventListener('click', onCouponListClick);
+      list.addEventListener('input', function (e) { onCouponListInput(e, false); });
+      list.addEventListener('change', function (e) { onCouponListInput(e, true); });
     }
   }
 
@@ -11253,6 +11862,8 @@
       smsTemplates: app.smsTemplates || [],
       counsel: app.counsel || [],
       shuttle: app.shuttle || [],
+      coupons: app.coupons || [],
+      couponTypes: couponTypeList(),
       admin: app.admin ? {
         id: app.admin.id,
         salt: app.admin.salt,
@@ -11329,6 +11940,12 @@
     if (data.shuttle != null && !Array.isArray(data.shuttle)) {
       return { ok: false, reason: '차량 운행 스케줄 형식이 올바르지 않아요.' };
     }
+    if (data.coupons != null && !Array.isArray(data.coupons)) {
+      return { ok: false, reason: '쿠폰 지급 현황 형식이 올바르지 않아요.' };
+    }
+    if (data.couponTypes != null && !Array.isArray(data.couponTypes)) {
+      return { ok: false, reason: '쿠폰 종류 형식이 올바르지 않아요.' };
+    }
     if (data.admin != null && (typeof data.admin !== 'object' || Array.isArray(data.admin))) {
       return { ok: false, reason: '관리자 계정 설정 형식이 올바르지 않아요.' };
     }
@@ -11368,6 +11985,16 @@
     }
     // 차량 운행: 이 기능 이전 백업(항목 없음)은 빈 스케줄로 복원한다
     writeJSON(LS.shuttle, remapShuttleBackup(data.shuttle, data.students));
+    // 쿠폰: 항목이 없는 예전 백업은 빈 목록으로 복원하고, 이름으로 관원을 다시 연결한다
+    writeJSON(LS.coupons, remapCouponBackup(data.coupons, data.students));
+    if (Array.isArray(data.couponTypes)) {
+      var ct = [];
+      data.couponTypes.forEach(function (t) {
+        var nm = String(t == null ? '' : (typeof t === 'object' ? t.name : t)).trim().slice(0, 40);
+        if (nm && ct.indexOf(nm) === -1) { ct.push(nm); }
+      });
+      writeJSON(LS.couponTypes, ct);
+    }
     if (data.admin && typeof data.admin === 'object' && !Array.isArray(data.admin) && data.admin.hash) {
       writeJSON(LS.admin, {
         id: String(data.admin.id || DEFAULT_ADMIN_ID).slice(0, 24),
@@ -11434,6 +12061,7 @@
     renderPaused(true);
     renderCounsel();
     renderShuttle();
+    renderCoupons();
     renderAdminAccountState();
     renderAdminFaceState();
     fillDriveForm();
@@ -11449,10 +12077,11 @@
     var tplCount = Array.isArray(data.smsTemplates) ? data.smsTemplates.length : 0;
     var csCount = Array.isArray(data.counsel) ? data.counsel.length : 0;
     var shCount = Array.isArray(data.shuttle) ? data.shuttle.length : 0;
+    var cpCount = Array.isArray(data.coupons) ? data.coupons.length : 0;
     var hasAdmin = !!(data.admin && data.admin.hash);
     var hasAdminFace = !!(data.adminFace && data.adminFace.descriptor);
     return '<div class="help" style="margin-top:0">' +
-      '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 상담 기록 <b>' + csCount + '건</b> · 차량 운행 <b>' + shCount + '건</b>' +
+      '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 상담 기록 <b>' + csCount + '건</b> · 차량 운행 <b>' + shCount + '건</b> · 쿠폰 <b>' + cpCount + '장</b>' +
       (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') +
       (hasAdminFace ? ' · 관리자 얼굴 <b>등록됨</b>' : ' · 관리자 얼굴 미등록') +
       ' · 띠 체계·문자·원비·수업별 단가표 설정 포함<br>' +
@@ -12641,6 +13270,7 @@
     el('btn-rp-print').addEventListener('click', printReport);
     bindCounselEvents();
     bindShuttleEvents();
+    bindCouponEvents();
     el('pz-search').addEventListener('input', function () {
       ensurePausedUI().q = el('pz-search').value || '';
       renderPaused();
@@ -13245,8 +13875,7 @@
       add: addShuttleRow,
       setField: setShuttleField,
       setKind: setShuttleKind,
-      addRider: addShuttleRider,
-      removeRider: removeShuttleRider,
+      setRiders: setShuttleRiders,
       up: function (id) { return moveShuttleRow(id, -1); },
       down: function (id) { return moveShuttleRow(id, 1); },
       sort: sortShuttleByTime,
@@ -13263,7 +13892,7 @@
       label: shuttleKindLabel,
       ridersText: shuttleRidersText,
       ridersFromCell: shuttleRidersFromCell,
-      addMany: addShuttleRiders,
+      ridersList: shuttleRidersFromText,
       rowsFromTable: shuttleRowsFromTable,
       headerMap: shuttleHeaderMap,
       timeCell: parseShuttleTimeCell,
@@ -13275,6 +13904,29 @@
       table: shuttleTableHtml,
       remap: remapShuttleBackup,
       load: loadShuttle,
+      setTab: setAdminTab
+    },
+    coupons: {
+      list: function () { return coupons(); },
+      types: couponTypeList,
+      rows: couponRows,
+      summary: couponSummary,
+      add: addCoupon,
+      set: setCouponField,
+      status: setCouponStatus,
+      remove: deleteCoupon,
+      saveForm: saveCouponFromForm,
+      saveType: saveCouponTypeFromInput,
+      editType: startCouponTypeEdit,
+      cancelType: cancelCouponTypeEdit,
+      removeType: deleteCouponType,
+      csv: couponCSVText,
+      download: downloadCouponCSV,
+      render: renderCoupons,
+      expired: couponExpired,
+      statusLabel: couponStatusLabel,
+      load: loadCoupons,
+      loadTypes: loadCouponTypes,
       setTab: setAdminTab
     },
     admin: {
