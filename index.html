@@ -307,6 +307,7 @@
   .chip.ok{background:#e6f7f0; color:#0b7a55}
   .chip.wait{background:#fff4e6; color:#a35b00}
   .chip.off{background:#fdecec; color:#c0392b}
+  .chip.pause{background:#f1ecfb; color:#6b4fa8}
   .empty-row td{text-align:center; color:#9aa4b5; padding:22px; font-weight:600}
 
   .field{margin-bottom:11px}
@@ -390,7 +391,7 @@
   .admin-tabs{display:flex; gap:5px; margin-bottom:14px; background:#e8edf7; padding:5px; border-radius:14px; width:fit-content; max-width:100%; overflow-x:auto; flex-wrap:wrap}
   .admin-tab{border:0; background:transparent; color:#5b6b85; font-weight:800; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer}
   .admin-tab.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.10)}
-  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov, #view-admin.sms-mode .ov{display:none}
+  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov, #view-admin.sms-mode .ov, #view-admin.paused-mode .ov{display:none}
   .belt-badge{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:800; background:#f6f8fc; border:1px solid #e6ebf4; padding:4px 9px 4px 6px; border-radius:999px; white-space:nowrap}
   .belt-badge i{width:12px; height:12px; border-radius:3px; display:inline-block; box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
   .bar{width:104px; height:7px; background:#edf0f7; border-radius:6px; overflow:hidden; margin-bottom:4px}
@@ -593,6 +594,26 @@
   .bs-send-row .btn{min-height:42px; padding:0 18px; font-size:13.5px}
   .bs-note{font-size:10.5px; font-weight:700; color:#8a94a6; line-height:1.55; flex:1; min-width:150px}
 
+  /* ---------- 재원 / 휴관생 ---------- */
+  table.tb tr.paused-row{background:#fbf8ff}
+  .pz-stats .stat-val{font-size:26px}
+  .pz-tablewrap{max-height:min(58vh,560px); overflow:auto}
+  table.pzb td{padding:8px 9px; vertical-align:middle}
+  table.pzb .nm-line{display:flex; align-items:center; gap:5px; white-space:nowrap}
+  table.pzb .pz-reason{min-width:120px; max-width:280px; white-space:normal; line-height:1.5}
+  .pz-act{white-space:nowrap}
+  .pz-act .btn{margin-right:3px}
+  .pz-days{font-size:10.5px; font-weight:800; color:#8a94a6; margin-top:2px}
+  .pz-days.ready{color:#0b7a55}
+  input.input.pz-search{width:206px; height:38px}
+
+  /* ---------- 관리자 잠금 ---------- */
+  .admin-lockbar{display:flex; align-items:center; gap:10px; background:#0f2142; color:#dbe6ff; border-radius:12px; padding:8px 12px; margin-bottom:10px; font-size:12px; font-weight:800; flex-wrap:wrap}
+  .admin-lockbar .alock-note b{color:#fff}
+  .admin-lockbar .btn{background:#1d345c; border-color:#2a4a7f; color:#dbe6ff}
+  .admin-lockbar .btn:hover{background:#27446f}
+  .admin-pw-banner{display:flex; align-items:center; gap:10px; background:#fff4e6; border:1px solid #f4e0b6; color:#8a5300; border-radius:12px; padding:10px 12px; margin-bottom:12px; font-size:12px; font-weight:800; flex-wrap:wrap; line-height:1.5}
+
   /* 스크롤바 */
   ::-webkit-scrollbar{width:8px; height:8px}
   ::-webkit-scrollbar-thumb{background:#cfd8e6; border-radius:8px}
@@ -756,8 +777,19 @@
     <!-- ================= 관리자 ================= -->
     <section class="view" id="view-admin">
       <div class="admin-wrap">
+        <div class="admin-lockbar" id="admin-lockbar" style="display:none">
+          <span class="alock-note">🔓 관리자 모드 · <b id="admin-lock-id">admin</b></span>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="btn-admin-lock" title="관리자 화면을 잠그고 출석 화면으로 돌아갑니다">🔒 관리자 잠금</button>
+        </div>
+        <div class="admin-pw-banner" id="admin-pw-banner" style="display:none">
+          <span>🔐 아직 <b>초기 비밀번호(0000)</b>를 쓰고 있어요. 입구 태블릿에 아이들이 들어올 수 있으니 꼭 바꿔 주세요.</span>
+          <div class="spacer"></div>
+          <button class="btn btn-sm btn-primary" id="btn-goto-account">관리자 계정 변경</button>
+        </div>
         <div class="admin-tabs" role="tablist">
           <button class="admin-tab active" id="atab-overview" data-atab="overview">📋 출석 · 명단</button>
+          <button class="admin-tab" id="atab-paused" data-atab="paused">🛌 휴관생 관리</button>
           <button class="admin-tab" id="atab-promotion" data-atab="promotion">🎖️ 승급심사 관리</button>
           <button class="admin-tab" id="atab-gukgiwon" data-atab="gukgiwon">🏅 국기원 심사</button>
           <button class="admin-tab" id="atab-monthly" data-atab="monthly">📅 월간 출석부</button>
@@ -812,6 +844,16 @@
                   <div class="field"><label>현재 품·단</label><select class="input" id="f-poomdan"></select></div>
                   <div class="field"><label>월 원비 (비우면 기본 원비)</label><input class="input" id="f-fee" type="number" min="0" step="1000" inputmode="numeric" placeholder="예: 150000"></div>
                 </div>
+                <div class="row3">
+                  <div class="field"><label>상태</label>
+                    <select class="input" id="f-status">
+                      <option value="active">재원생</option>
+                      <option value="paused">휴관생</option>
+                    </select>
+                  </div>
+                  <div class="field"><label>휴관일 (휴관생일 때)</label><input class="input" id="f-paused-date" type="date"></div>
+                  <div class="field"><label>휴관 사유/메모</label><input class="input" id="f-pause-reason" maxlength="40" placeholder="예: 개인 사정 3개월"></div>
+                </div>
                 <datalist id="grade-list"></datalist>
                 <div class="form-actions">
                   <button class="btn btn-primary" id="btn-save-student">관원 저장</button>
@@ -820,8 +862,15 @@
                   <button class="btn btn-sm btn-danger" id="btn-sample">샘플 6명으로 복원</button>
                 </div>
                 <div class="tablewrap" style="margin-top:13px; max-height:330px; overflow:auto">
+                  <div class="promo-filters" id="stu-filters" style="margin:-2px 0 9px">
+                    <button class="pchip active" data-sfilter="all" id="sf-all">전체</button>
+                    <button class="pchip" data-sfilter="active" id="sf-active">재원생</button>
+                    <button class="pchip" data-sfilter="paused" id="sf-paused">휴관생</button>
+                    <div class="spacer"></div>
+                    <span class="tiny-note" id="stu-filter-note"></span>
+                  </div>
                   <table class="tb">
-                    <thead><tr><th>이름</th><th>반 / 시간</th><th>띠</th><th>보호자</th><th>얼굴</th><th style="width:78px"></th></tr></thead>
+                    <thead><tr><th>이름</th><th>반 / 시간</th><th>띠</th><th>보호자</th><th>얼굴</th><th style="width:132px"></th></tr></thead>
                     <tbody id="stu-table"></tbody>
                   </table>
                 </div>
@@ -857,7 +906,7 @@
                 </div>
                 <div class="help">
                   <b>컬럼은 자동으로 찾아요.</b> 이름(성명·관원명), 반/시간(클래스·부), 띠(급·벨트), 보호자 연락처(학부모·전화), 누적 출석(출석일수·출석횟수) 열을 파일 안에서 알아서 인식합니다.
-                  첫 줄이 제목이어도 위쪽 몇 줄을 훑어 머리글을 찾습니다.
+                  <b>상태·구분</b> 열에 ‘휴관’이 적힌 관원은 휴관생으로 들어가고, 합치기 할 때 기존 관원은 상태만 바뀝니다. 첫 줄이 제목이어도 위쪽 몇 줄을 훑어 머리글을 찾습니다.
                 </div>
               </div>
             </div>
@@ -941,6 +990,32 @@
                 <div class="help" style="margin-top:10px">
                   관원 명단 · <b>얼굴 특징값</b> · 날짜별 출석 이력 · 띠 체계 · 문자 발송 설정과 로그를 <b>파일 하나(JSON)</b>로 내려받습니다. 태블릿을 바꾸거나 브라우저 저장소를 지워야 할 때 이 파일 하나로 그대로 되살릴 수 있어요.
                   복원은 지금 화면의 데이터를 <b>백업 파일 내용으로 바꾸는</b> 작업이라, 실행 전에 한 번 더 확인합니다.
+                </div>
+              </div>
+            </div>
+
+            <div class="panel" id="admin-account-panel">
+              <div class="panel-head"><h3>🔐 관리자 계정 (ID · 비밀번호)</h3><div class="spacer"></div><span class="tiny-note" id="adm-state">-</span></div>
+              <div class="panel-body">
+                <div class="row3">
+                  <div class="field"><label>현재 비밀번호</label><input class="input" id="adm-cur-pw" type="password" autocomplete="current-password" placeholder="현재 비밀번호"></div>
+                  <div class="field"><label>새 아이디</label><input class="input" id="adm-new-id" maxlength="24" autocomplete="username" placeholder="예: mta_master"></div>
+                  <div class="field"><label>출석 화면으로 나갈 때</label>
+                    <select class="input" id="adm-autolock">
+                      <option value="on">자동으로 잠그기 (권장)</option>
+                      <option value="off">잠그지 않기 (잠금 버튼 사용)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row2">
+                  <div class="field"><label>새 비밀번호 (4자 이상)</label><input class="input" id="adm-new-pw" type="password" autocomplete="new-password"></div>
+                  <div class="field"><label>새 비밀번호 확인</label><input class="input" id="adm-new-pw2" type="password" autocomplete="new-password"></div>
+                </div>
+                <div class="form-actions">
+                  <button class="btn btn-primary" id="btn-adm-save">계정 변경 저장</button>
+                  <button class="btn btn-sm" id="btn-admin-lock2">🔒 지금 잠그기</button>
+                  <div class="spacer"></div>
+                  <span class="tiny-note">비밀번호는 Web Crypto(SHA-256) 해시로만 저장되고 평문은 남지 않아요.</span>
                 </div>
               </div>
             </div>
@@ -1332,6 +1407,54 @@
             </div>
           </div>
         </div>
+        <div id="admin-paused" style="display:none">
+          <div class="mon-bar">
+            <div class="mon-nav"><div class="mon-label" id="pz-label">휴관생</div></div>
+            <div class="spacer"></div>
+            <input class="input pz-search" id="pz-search" placeholder="🔍 이름·초성 검색" autocomplete="off" aria-label="휴관생 이름 검색">
+            <select class="input mon-select" id="pz-import-mode" aria-label="가져오기 방식" style="min-width:214px">
+              <option value="sync">합치기 · 기존 명단에 동기화</option>
+              <option value="replace">교체 · 휴관생 명단을 파일로 교체</option>
+            </select>
+            <button class="btn" id="btn-pz-import">📤 휴관생 엑셀/CSV 가져오기</button>
+            <button class="btn btn-primary" id="btn-pz-csv">📥 휴관생 명단 CSV 다운로드</button>
+          </div>
+          <input type="file" id="pz-file" accept=".xlsx,.xls,.csv,.txt" style="display:none">
+          <div class="file-name" id="pz-file-name" style="margin:-6px 0 10px"></div>
+
+          <div class="stats pz-stats">
+            <div class="stat"><div class="stat-label">🛌 전체 휴관생</div><div class="stat-val" id="pz-total">0<small>명</small></div><div class="tu-sub" id="pz-total-sub">전체 0명 중</div></div>
+            <div class="stat out"><div class="stat-label">📅 이번 달 휴관</div><div class="stat-val" id="pz-month">0<small>명</small></div><div class="tu-sub" id="pz-month-sub">-</div></div>
+            <div class="stat in"><div class="stat-label">🔄 복귀 가능</div><div class="stat-val" id="pz-ready">0<small>명</small></div><div class="tu-sub">휴관 90일 이상</div></div>
+            <div class="stat absent"><div class="stat-label">📝 사유 미기록</div><div class="stat-val" id="pz-noreason">0<small>명</small></div><div class="tu-sub">사유를 채워 두면 관리가 쉬워요</div></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>🛌 휴관생 명단</h3><div class="spacer"></div>
+              <span class="tiny-note" id="pz-note">-</span>
+            </div>
+            <div class="tablewrap pz-tablewrap">
+              <table class="tb pzb">
+                <thead>
+                  <tr>
+                    <th>관원</th><th>반</th><th>띠 · 급수</th><th style="width:128px">보호자</th>
+                    <th style="width:118px">휴관일</th><th>휴관 사유/메모</th><th style="width:252px"></th>
+                  </tr>
+                </thead>
+                <tbody id="pz-table"></tbody>
+              </table>
+            </div>
+            <div class="panel-body" style="border-top:1px solid #eef1f6">
+              <div class="help" style="margin-top:0">
+                휴관생은 <b>출석 키오스크(얼굴·키패드·이름검색)·오늘 미등원 집계·월간 출석부·원비 예상액·승급심사·단체문자 전체 선택</b>에서 저절로 빠집니다.
+                누적 출석·띠·얼굴 등록 정보는 지우지 않고 그대로 보관되므로, <b>🔄 재원 복귀</b>를 누르면 바로 이어집니다.<br>
+                <b>📤 가져오기</b>는 이름+보호자 연락처가 같은 관원이 이미 있으면 <b>휴관생으로 상태만 바꾸고</b>, 새 관원이면 휴관생으로 추가합니다(누적 출석·얼굴은 유지).
+                <b>교체</b>는 파일에 없는 휴관생을 명단에서 빼지만 재원생은 건드리지 않아요. 파일의 <b>상태·구분</b> 열도 인식합니다.
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -1357,7 +1480,8 @@
     attendance: 'tdk.attendance.v1',
     faces: 'tdk.faces.v1',
     tuition: 'tdk.tuition.v1',
-    smsTemplates: 'tdk.smsTemplates.v1'
+    smsTemplates: 'tdk.smsTemplates.v1',
+    admin: 'tdk.admin.v1'
   };
 
   var SAMPLE_STUDENTS = [
@@ -1436,7 +1560,11 @@
     tuition: {},
     tuitionUI: null,
     bulkSms: null,
-    smsTemplates: []
+    smsTemplates: [],
+    stuFilter: 'all',
+    pausedUI: null,
+    admin: null,
+    adminAuthed: false
   };
 
   /* =========================================================
@@ -1558,6 +1686,9 @@
         targetPoomDan: String(s.targetPoomDan || '없음').trim(),
         gukStatus: GK_STATUS[s.gukStatus] ? s.gukStatus : 'none',
         gukExamDate: String(s.gukExamDate || '').trim(),
+        status: (s.status === 'paused') ? 'paused' : 'active',
+        pausedDate: isDateKey(s.pausedDate) ? String(s.pausedDate) : '',
+        pauseReason: String(s.pauseReason || '').trim().slice(0, 60),
         monthlyFee: (function () {
           var v = parseInt(s.monthlyFee, 10);
           return (isNaN(v) || v < 0) ? null : v;
@@ -1627,7 +1758,11 @@
     app.monthly = { month: monthKey(new Date()), className: 'all', q: '' };
     app.tuitionUI = null;
     app.bulkSms = null;
+    app.pausedUI = null;
+    app.stuFilter = 'all';
     app.smsTemplates = loadBulkTemplates();
+    app.admin = loadAdminAccount();
+    app.adminAuthed = false;
 
     var logs = readJSON(LS.logs, []);
     app.logs = Array.isArray(logs) ? logs : [];
@@ -1803,8 +1938,10 @@
   }
   function counts() {
     var day = todayRecords();
-    var c = { total: app.students.length, in: 0, out: 0, absent: 0 };
+    var c = { total: 0, in: 0, out: 0, absent: 0, paused: 0 };
     app.students.forEach(function (s) {
+      if (isPaused(s)) { c.paused++; return; }
+      c.total++;
       var r = day[s.id] || {};
       if (recInText(r)) { c.in++; }
       if (recOutText(r)) { c.out++; }
@@ -1895,6 +2032,10 @@
         var btn = e.target.closest('[data-idx]');
         if (btn) {
           var a = actions[Number(btn.getAttribute('data-idx'))];
+          // 닫기 전에 입력값을 읽을 수 있게 하는 훅 (모달 입력폼용)
+          if (a && typeof opts.onAction === 'function') {
+            try { opts.onAction(a.value, root); } catch (err) {}
+          }
           close(a ? a.value : null);
           return;
         }
@@ -1984,6 +2125,14 @@
   }
 
   function setView(view) {
+    // 출석 화면으로 나가면 관리자 잠금 (자동 잠금이 켜져 있을 때)
+    if (view === 'attendance' && app.adminAuthed) {
+      var acc = adminAccount();
+      if (!acc || acc.autoLock !== false) {
+        app.adminAuthed = false;
+        renderAdminAccountState();
+      }
+    }
     el('view-attendance').classList.toggle('active', view === 'attendance');
     el('view-admin').classList.toggle('active', view === 'admin');
     el('tab-att').classList.toggle('active', view === 'attendance');
@@ -2283,7 +2432,7 @@
 
   function renderStudentsList() {
     var q = el('name-search') ? el('name-search').value : '';
-    var list = app.students.filter(function (s) { return matchSearch(s, q); });
+    var list = activeStudents().filter(function (s) { return matchSearch(s, q); });
     var wrap = el('stu-list');
     if (!list.length) {
       wrap.innerHTML = '<div class="log-empty" style="padding:18px 10px"><span>🔍</span>검색 결과가 없어요.</div>';
@@ -2336,7 +2485,7 @@
   function submitPin() {
     var pin = app.pin;
     if (pin.length !== 4) { return; }
-    var matches = app.students.filter(function (s) {
+    var matches = activeStudents().filter(function (s) {
       return digitsOnly(s.phone).slice(-4) === pin;
     });
     var listEl = el('cand-list');
@@ -2369,6 +2518,11 @@
      ========================================================= */
   function checkIn(student, source) {
     if (!student) { return; }
+    if (isPaused(student)) {
+      playError();
+      toast(student.name + ' 관원은 휴관생이에요. 「🛌 휴관생 관리」에서 복귀 처리하면 다시 출석할 수 있어요.');
+      return;
+    }
     var mode = app.settings.mode;
     var rec = recordOf(student.id);
     var now = new Date();
@@ -2628,6 +2782,8 @@
       if (!f || !f.descriptor || f.descriptor.length !== 128) { return; }
       var student = byId(sid);
       if (!student) { return; }
+      // 휴관생은 키오스크 얼굴인식 대상에서 뺀다 (등록 얼굴·특징값은 보관)
+      if (isPaused(student)) { return; }
       var dist = euclideanDistance(descriptor, f.descriptor);
       if (!best || dist < best.distance) { best = { studentId: sid, student: student, distance: dist }; }
     });
@@ -3148,7 +3304,8 @@
     el('st-in').innerHTML = c.in + '<small>명</small>';
     el('st-out').innerHTML = c.out + '<small>명</small>';
     el('st-absent').innerHTML = c.absent + '<small>명</small>';
-    el('st-total').innerHTML = c.total + '<small>명</small>';
+    el('st-total').innerHTML = c.total + '<small>명</small>' +
+      (c.paused ? ' <small style="color:#6b4fa8">+휴관' + c.paused + '</small>' : '');
     el('admin-today').textContent = fmtDateKorean(new Date());
     el('pill-in').textContent = c.in;
     el('pill-out').textContent = c.out;
@@ -3160,6 +3317,8 @@
     renderMonthly();
     renderTuition();
     renderBulkSms();
+    renderPaused();
+    renderAdminAccountState();
     renderAdminLog();
   }
 
@@ -3191,12 +3350,13 @@
 
   function renderAttendanceTable() {
     var day = todayRecords();
-    var rows = app.students.slice().sort(function (a, b) {
+    var rows = activeStudents().slice().sort(function (a, b) {
       return a.name.localeCompare(b.name, 'ko');
     });
     var tbody = el('att-table');
     if (!rows.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="5">등록된 관원이 없습니다</td></tr>';
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="5">' +
+        (app.students.length ? '재원생이 없어요. 휴관생은 「🛌 휴관생 관리」에서 볼 수 있어요.' : '등록된 관원이 없습니다') + '</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(function (s) {
@@ -3231,23 +3391,47 @@
   }
 
   function renderStudentsTable() {
-    el('stu-count').textContent = app.students.length + '명';
+    var filter = app.stuFilter || 'all';
+    var counts2 = { all: app.students.length, active: activeStudents().length, paused: pausedStudents().length };
+    el('stu-count').textContent = counts2.active + '명 재원' + (counts2.paused ? ' · ' + counts2.paused + '명 휴관' : '');
+    if (el('stu-filter-note')) {
+      el('stu-filter-note').textContent = filter === 'all' ? '전체 ' + counts2.all + '명'
+        : filter === 'active' ? '재원생 ' + counts2.active + '명'
+        : '휴관생 ' + counts2.paused + '명';
+    }
+    ['all', 'active', 'paused'].forEach(function (k) {
+      var b = el('sf-' + k);
+      if (b) { b.classList.toggle('active', filter === k); }
+    });
+    var list = app.students.filter(function (s) {
+      if (filter === 'active') { return isActive(s); }
+      if (filter === 'paused') { return isPaused(s); }
+      return true;
+    }).slice().sort(function (a, b) {
+      if (isPaused(a) !== isPaused(b)) { return isPaused(a) ? 1 : -1; }
+      return a.name.localeCompare(b.name, 'ko');
+    });
+
     var tbody = el('stu-table');
-    if (!app.students.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">관원이 없습니다</td></tr>';
+    if (!list.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">' +
+        (app.students.length ? '이 상태의 관원이 없어요.' : '관원이 없습니다') + '</td></tr>';
       return;
     }
-    tbody.innerHTML = app.students.slice().sort(function (a, b) {
-      return a.name.localeCompare(b.name, 'ko');
-    }).map(function (s) {
-      return '<tr>' +
-        '<td class="nm">' + esc(s.name) + '</td>' +
+    tbody.innerHTML = list.map(function (s) {
+      var paused = isPaused(s);
+      return '<tr' + (paused ? ' class="paused-row"' : '') + '>' +
+        '<td class="nm">' + esc(s.name) +
+        (paused ? ' <span class="chip pause">휴관</span>' : '') + '</td>' +
         '<td><span class="sub">' + esc(s.className || '-') + '</span></td>' +
         '<td><span class="chip">' + esc(s.belt || '-') + (studentGrade(s) ? ' · ' + esc(studentGrade(s)) : '') + '</span></td>' +
         '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
         '<td>' + faceCell(s) + '</td>' +
         '<td style="white-space:nowrap">' +
         '<button class="btn btn-sm" data-edit="' + esc(s.id) + '">편집</button> ' +
+        (paused
+          ? '<button class="btn btn-sm btn-mint" data-resume="' + esc(s.id) + '" title="재원으로 복귀">복귀</button> '
+          : '<button class="btn btn-sm" data-pause="' + esc(s.id) + '" title="휴관 처리">휴관</button> ') +
         '<button class="btn btn-sm btn-danger" data-del="' + esc(s.id) + '">삭제</button>' +
         '</td></tr>';
     }).join('');
@@ -3372,6 +3556,9 @@
     el('f-count').value = '0';
     el('f-grade').value = '';
     el('f-fee').value = '';
+    if (el('f-status')) { el('f-status').value = 'active'; }
+    if (el('f-paused-date')) { el('f-paused-date').value = ''; }
+    if (el('f-pause-reason')) { el('f-pause-reason').value = ''; }
     renderBeltOptions('');
     renderPoomOptions('없음');
     el('btn-cancel-edit').style.display = 'none';
@@ -3389,6 +3576,9 @@
     el('f-count').value = String(Number(s.attendCount) || 0);
     el('f-grade').value = s.grade || '';
     el('f-fee').value = (s.monthlyFee == null ? '' : String(s.monthlyFee));
+    if (el('f-status')) { el('f-status').value = isPaused(s) ? 'paused' : 'active'; }
+    if (el('f-paused-date')) { el('f-paused-date').value = isPaused(s) ? (s.pausedDate || '') : ''; }
+    if (el('f-pause-reason')) { el('f-pause-reason').value = isPaused(s) ? (s.pauseReason || '') : ''; }
     renderBeltOptions(s.belt);
     renderPoomOptions(s.poomDan);
     el('btn-cancel-edit').style.display = 'inline-block';
@@ -3417,21 +3607,31 @@
     if (!name) { toast('관원 이름을 입력해 주세요.'); el('f-name').focus(); return; }
     if (phone && digitsOnly(phone).length < 4) { toast('보호자 연락처를 다시 확인해 주세요.'); return; }
 
+    var status = (el('f-status') && el('f-status').value === 'paused') ? 'paused' : 'active';
+    var pausedDateRaw = String(el('f-paused-date') ? el('f-paused-date').value : '').trim();
+    var pauseReason = String(el('f-pause-reason') ? el('f-pause-reason').value : '').trim().slice(0, 60);
+    var pausedDate = (status === 'paused') ? (isDateKey(pausedDateRaw) ? pausedDateRaw : todayKey()) : '';
+    if (status !== 'paused') { pauseReason = ''; }
+
     if (app.editingId) {
       var s = app.students.filter(function (x) { return x.id === app.editingId; })[0];
       if (s) {
         s.name = name; s.phone = phone; s.className = className; s.belt = belt;
         s.attendCount = attendCount; s.grade = grade; s.poomDan = poomDan;
         s.monthlyFee = monthlyFee;
+        s.status = status;
+        s.pausedDate = pausedDate;
+        s.pauseReason = pauseReason;
       }
-      toast(name + ' 관원 정보를 수정했어요.');
+      toast(name + ' 관원 정보를 수정했어요.' + (status === 'paused' ? ' (휴관생)' : ''));
     } else {
       app.students.push({
         id: uid('stu'), name: name, phone: phone, className: className, belt: belt,
         attendCount: attendCount, grade: grade, poomDan: poomDan,
-        targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '', monthlyFee: monthlyFee
+        targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '', monthlyFee: monthlyFee,
+        status: status, pausedDate: pausedDate, pauseReason: pauseReason
       });
-      toast(name + ' 관원을 추가했어요.');
+      toast(name + ' 관원을 추가했어요.' + (status === 'paused' ? ' (휴관생)' : ''));
     }
     saveStudents();
     resetStudentForm();
@@ -3455,6 +3655,282 @@
       saveStudents();
       renderAll();
       toast(s.name + ' 관원을 삭제했어요.');
+    });
+  }
+
+  /* =========================================================
+     3-D. 관리자 계정 잠금 (ID + SHA-256 비밀번호 해시)
+     저장 구조 tdk.admin.v1 = { id, salt, hash, mustChange, autoLock, updatedAt }
+     · 비밀번호는 평문으로 저장하지 않는다.
+     · Web Crypto(crypto.subtle)를 우선 쓰고, 오프라인·비보안(file://, http)에서는
+       순수 JS SHA-256으로 같은 값을 낸다.
+     ========================================================= */
+  var DEFAULT_ADMIN_ID = 'admin';
+  var DEFAULT_ADMIN_PW = '0000';
+  var SHA256_K = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+  function rotr32(x, n) { return ((x >>> n) | (x << (32 - n))) >>> 0; }
+  function utf8Bytes(str) {
+    var s = String(str == null ? '' : str), out = [];
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i);
+      if (c < 0x80) { out.push(c); }
+      else if (c < 0x800) { out.push(0xc0 | (c >> 6), 0x80 | (c & 63)); }
+      else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
+        var c2 = s.charCodeAt(i + 1);
+        if (c2 >= 0xdc00 && c2 <= 0xdfff) {
+          var cp = 0x10000 + ((c - 0xd800) << 10) + (c2 - 0xdc00);
+          out.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));
+          i++;
+        } else {
+          out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+        }
+      } else { out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }
+    }
+    return out;
+  }
+  /* 순수 JS SHA-256 (비보안 컨텍스트 fallback) */
+  function sha256HexPure(str) {
+    var bytes = utf8Bytes(str);
+    var len = bytes.length;
+    var buf = bytes.slice();
+    buf.push(0x80);
+    while (buf.length % 64 !== 56) { buf.push(0); }
+    var bitHi = Math.floor(len / 536870912);
+    var bitLo = (len * 8) >>> 0;
+    buf.push((bitHi >>> 24) & 255, (bitHi >>> 16) & 255, (bitHi >>> 8) & 255, bitHi & 255);
+    buf.push((bitLo >>> 24) & 255, (bitLo >>> 16) & 255, (bitLo >>> 8) & 255, bitLo & 255);
+
+    var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    var w = new Array(64);
+    for (var off = 0; off < buf.length; off += 64) {
+      var i;
+      for (i = 0; i < 16; i++) {
+        w[i] = ((buf[off + i * 4] << 24) | (buf[off + i * 4 + 1] << 16) | (buf[off + i * 4 + 2] << 8) | buf[off + i * 4 + 3]) >>> 0;
+      }
+      for (i = 16; i < 64; i++) {
+        var s0 = (rotr32(w[i - 15], 7) ^ rotr32(w[i - 15], 18) ^ (w[i - 15] >>> 3)) >>> 0;
+        var s1 = (rotr32(w[i - 2], 17) ^ rotr32(w[i - 2], 19) ^ (w[i - 2] >>> 10)) >>> 0;
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+      }
+      var a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (i = 0; i < 64; i++) {
+        var S1 = (rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25)) >>> 0;
+        var ch = ((e & f) ^ (~e & g)) >>> 0;
+        var t1 = (h + S1 + ch + SHA256_K[i] + w[i]) >>> 0;
+        var S0 = (rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22)) >>> 0;
+        var maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+        var t2 = (S0 + maj) >>> 0;
+        h = g; g = f; f = e; e = (d + t1) >>> 0;
+        d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+      H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+    }
+    var hex = '';
+    for (var k = 0; k < 8; k++) { hex += ('00000000' + H[k].toString(16)).slice(-8); }
+    return hex;
+  }
+  function sha256Hex(str) {
+    var text = String(str == null ? '' : str);
+    var c = (typeof crypto !== 'undefined') ? crypto : null;
+    var enc = (typeof TextEncoder !== 'undefined') ? new TextEncoder() : null;
+    if (c && c.subtle && typeof c.subtle.digest === 'function' && enc && c.subtle.digest) {
+      try {
+        return c.subtle.digest('SHA-256', enc.encode(text)).then(function (buf) {
+          var arr = new Uint8Array(buf), out = '';
+          for (var i = 0; i < arr.length; i++) { out += ('0' + arr[i].toString(16)).slice(-2); }
+          return out;
+        }, function () { return sha256HexPure(text); });
+      } catch (e) { /* 비보안 컨텍스트 → 순수 JS */ }
+    }
+    return Promise.resolve(sha256HexPure(text));
+  }
+
+  function loadAdminAccount() {
+    var raw = readJSON(LS.admin, null);
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { return null; }
+    var hash = String(raw.hash || '').replace(/[^0-9a-fA-F]/g, '').toLowerCase();
+    if (hash.length !== 64) { return null; }
+    var salt = String(raw.salt || '').replace(/[^0-9a-fA-F]/g, '').toLowerCase().slice(0, 32);
+    return {
+      id: String(raw.id || DEFAULT_ADMIN_ID).trim().slice(0, 24) || DEFAULT_ADMIN_ID,
+      salt: salt,
+      hash: hash,
+      mustChange: raw.mustChange !== false,
+      autoLock: raw.autoLock !== false,
+      updatedAt: String(raw.updatedAt || '')
+    };
+  }
+  function adminAccount() {
+    if (!app.admin) { app.admin = loadAdminAccount(); }
+    return app.admin;
+  }
+  function saveAdminAccount() {
+    if (!app.admin) { return; }
+    writeJSON(LS.admin, app.admin);
+  }
+  function randomSalt() {
+    var out = '';
+    var c = (typeof crypto !== 'undefined') ? crypto : null;
+    if (c && typeof c.getRandomValues === 'function') {
+      try {
+        var arr = c.getRandomValues(new Uint8Array(8));
+        for (var i = 0; i < arr.length; i++) { out += ('0' + arr[i].toString(16)).slice(-2); }
+      } catch (e) { out = ''; }
+    }
+    if (!out) {
+      for (var j = 0; j < 16; j++) { out += Math.floor(Math.random() * 16).toString(16); }
+    }
+    return out;
+  }
+  function adminHash(id, pw, salt) {
+    return sha256Hex(String(salt) + '|' + String(id) + '|' + String(pw));
+  }
+  function ensureAdminAccount() {
+    var acc = adminAccount();
+    if (acc) { return Promise.resolve(acc); }
+    var salt = randomSalt();
+    return adminHash(DEFAULT_ADMIN_ID, DEFAULT_ADMIN_PW, salt).then(function (h) {
+      app.admin = {
+        id: DEFAULT_ADMIN_ID, salt: salt, hash: h,
+        mustChange: true, autoLock: true, updatedAt: new Date().toISOString()
+      };
+      saveAdminAccount();
+      renderAdminAccountState();
+      return app.admin;
+    });
+  }
+  function adminVerify(id, pw) {
+    var acc = adminAccount();
+    var wantId = String(id == null ? '' : id).trim();
+    var secret = String(pw == null ? '' : pw);
+    if (!acc) {
+      if (wantId === DEFAULT_ADMIN_ID && secret === DEFAULT_ADMIN_PW) {
+        return ensureAdminAccount().then(function (a) { return { ok: true, mustChange: true, account: a }; });
+      }
+      return Promise.resolve({ ok: false, reason: '관리자 계정을 준비하는 중이에요. 잠시 후 다시 시도해 주세요.' });
+    }
+    return adminHash(acc.id, secret, acc.salt).then(function (h) {
+      if (wantId !== acc.id || h !== acc.hash) {
+        return { ok: false, reason: '아이디 또는 비밀번호가 맞지 않아요.', mustChange: acc.mustChange };
+      }
+      return { ok: true, mustChange: acc.mustChange, account: acc };
+    });
+  }
+
+  function lockAdmin(silent) {
+    var was = app.adminAuthed;
+    app.adminAuthed = false;
+    renderAdminAccountState();
+    if (!silent && was) { toast('관리자 화면을 잠쉈어요 🔒'); }
+  }
+  function requestAdmin() {
+    if (app.adminAuthed) { setView('admin'); return; }
+    openAdminLogin();
+  }
+  function openAdminLogin() {
+    var acc = adminAccount();
+    var isDefault = !acc || acc.mustChange;
+    var draft = { id: acc ? acc.id : DEFAULT_ADMIN_ID, pw: '' };
+    openModal({
+      title: '🔒 관리자 로그인',
+      sub: '도장 관리자만 들어갈 수 있어요. 아이디와 비밀번호를 입력해 주세요.',
+      body: '<div class="row2">' +
+        '<div class="field"><label>아이디</label><input class="input" id="adm-id" autocomplete="username" value="' + esc(draft.id) + '"></div>' +
+        '<div class="field"><label>비밀번호</label><input class="input" id="adm-pw" type="password" autocomplete="current-password" placeholder="••••"></div>' +
+        '</div>' +
+        (isDefault
+          ? '<div class="help" style="margin-top:10px">처음이면 초기 계정 <b>' + esc(DEFAULT_ADMIN_ID) + ' / ' + esc(DEFAULT_ADMIN_PW) + '</b> 로 들어갈 수 있어요.<br>들어간 뒤 「🔐 관리자 계정」에서 <b>꼭 비밀번호를 바꿔 주세요.</b></div>'
+          : '<div class="help" style="margin-top:10px">비밀번호는 SHA-256 해시로만 저장되어 있어요. 열쇠를 잊었다면 마지막 백업 파일의 계정 설정으로 복원할 수 있습니다.</div>'),
+      actions: [
+        { label: '취소', value: null, kind: 'btn-ghost' },
+        { label: '로그인', value: 'login', kind: 'btn-primary' }
+      ],
+      onAction: function () {
+        if (el('adm-id')) { draft.id = String(el('adm-id').value || '').trim(); }
+        if (el('adm-pw')) { draft.pw = String(el('adm-pw').value || ''); }
+      }
+    }).then(function (v) {
+      if (v !== 'login') { return; }
+      adminVerify(draft.id, draft.pw).then(function (r) {
+        if (!r.ok) {
+          toast(r.reason || '아이디 또는 비밀번호가 맞지 않아요.');
+          openAdminLogin();
+          return;
+        }
+        app.adminAuthed = true;
+        setView('admin');
+        setAdminTab('overview');
+        renderAdminAccountState();
+        toast('관리자로 들어왔어요' + (r.mustChange ? ' · 초기 비밀번호를 꼭 바꿔 주세요' : ''));
+      });
+    });
+  }
+
+  function renderAdminAccountState() {
+    var acc = adminAccount();
+    if (el('adm-state')) {
+      el('adm-state').textContent = !acc ? '준비 중…' : (acc.mustChange ? '초기 비밀번호 사용 중 · 변경 필요' : 'SHA-256 해시로 저장됨');
+    }
+    if (el('admin-lock-id')) { el('admin-lock-id').textContent = acc ? acc.id : DEFAULT_ADMIN_ID; }
+    if (el('adm-autolock')) { el('adm-autolock').value = (acc && acc.autoLock === false) ? 'off' : 'on'; }
+    if (el('admin-pw-banner')) {
+      el('admin-pw-banner').style.display = (acc && acc.mustChange && app.adminAuthed) ? 'flex' : 'none';
+    }
+    if (el('admin-lockbar')) { el('admin-lockbar').style.display = app.adminAuthed ? 'flex' : 'none'; }
+  }
+
+  function clearAdminForm() {
+    ['adm-cur-pw', 'adm-new-id', 'adm-new-pw', 'adm-new-pw2'].forEach(function (id) {
+      if (el(id)) { el(id).value = ''; }
+    });
+  }
+  function saveAdminAutoLock(value) {
+    var acc = adminAccount();
+    if (!acc) { toast('관리자 계정을 준비하는 중이예요. 잠시 후 다시 시도해 주세요.'); return; }
+    acc.autoLock = value !== 'off';
+    acc.updatedAt = new Date().toISOString();
+    saveAdminAccount();
+    renderAdminAccountState();
+    toast(acc.autoLock ? '출석 화면으로 나가면 자동으로 잠그도록 했어요' : '자동 잠금을 껐어요 · 필요할 땐 「🔒 잠금」 버튼을 눌러 주세요');
+  }
+  function changeAdminAccount() {
+    var acc = adminAccount();
+    if (!acc) { toast('관리자 계정을 준비하는 중이예요. 잠시 후 다시 시도해 주세요.'); return; }
+    var cur = String(el('adm-cur-pw') ? el('adm-cur-pw').value : '');
+    var newId = String(el('adm-new-id') ? el('adm-new-id').value : '').trim().slice(0, 24);
+    var pw1 = String(el('adm-new-pw') ? el('adm-new-pw').value : '');
+    var pw2 = String(el('adm-new-pw2') ? el('adm-new-pw2').value : '');
+    if (!cur) { toast('현재 비밀번호를 입력해 주세요.'); return; }
+    if (!newId) { toast('새 아이디를 입력해 주세요 (예: mta_master).'); return; }
+    if (!/^[A-Za-z0-9_.\-]{3,24}$/.test(newId)) { toast('아이디는 영문·숫자로 3~24자까지 정할 수 있어요.'); return; }
+    if (pw1.length < 4) { toast('새 비밀번호는 4자 이상으로 정해 주세요.'); return; }
+    if (pw1 !== pw2) { toast('새 비밀번호가 서로 달라요. 다시 확인해 주세요.'); return; }
+    adminHash(acc.id, cur, acc.salt).then(function (curHash) {
+      if (curHash !== acc.hash) {
+        toast('현재 비밀번호가 맞지 않아요.');
+        return;
+      }
+      var salt = randomSalt();
+      return adminHash(newId, pw1, salt).then(function (h) {
+        app.admin = {
+          id: newId, salt: salt, hash: h, mustChange: false,
+          autoLock: acc.autoLock !== false, updatedAt: new Date().toISOString()
+        };
+        saveAdminAccount();
+        clearAdminForm();
+        renderAdminAccountState();
+        toast('관리자 계정을 바쉈어요 · 아이디 ' + newId + ' (SHA-256 해시 저장)');
+      });
     });
   }
 
@@ -3516,6 +3992,93 @@
   function monthKey(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1); }
   function byId(id) {
     return app.students.filter(function (x) { return x.id === id; })[0] || null;
+  }
+
+  /* =========================================================
+     3-C. 재원생 / 휴관생
+     학생 상태: status 'active'(재원생, 기본값) | 'paused'(휴관생)
+     휴관생은 키오스크·미등원·월간 출석부·원비 예상액·승급심사·단체문자에서 빠지고,
+     누적 출석·띠·얼굴 데이터는 그대로 남아 복귀하면 바로 이어진다.
+     ========================================================= */
+  function isPaused(s) { return !!(s && s.status === 'paused'); }
+  function isActive(s) { return !isPaused(s); }
+  function activeStudents() { return app.students.filter(isActive); }
+  function pausedStudents() { return app.students.filter(isPaused); }
+  function pausedDays(s) {
+    if (!s || !isDateKey(s.pausedDate)) { return 0; }
+    var p = String(s.pausedDate).split('-');
+    var start = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var days = Math.floor((today.getTime() - start.getTime()) / 86400000);
+    return days < 0 ? 0 : days;
+  }
+  function setStudentStatus(id, status, opts) {
+    var s = byId(id);
+    if (!s) { return null; }
+    opts = opts || {};
+    if (status === 'paused') {
+      s.status = 'paused';
+      s.pausedDate = isDateKey(opts.pausedDate) ? String(opts.pausedDate)
+        : (isDateKey(s.pausedDate) ? String(s.pausedDate) : todayKey());
+      var reason = (opts.pauseReason === undefined) ? String(s.pauseReason || '') : String(opts.pauseReason || '');
+      s.pauseReason = reason.trim().slice(0, 60);
+    } else {
+      s.status = 'active';
+      s.pausedDate = '';
+      s.pauseReason = '';
+    }
+    saveStudents();
+    renderAll();
+    return s;
+  }
+  function pauseStudentPrompt(id) {
+    var s = byId(id);
+    if (!s) { return; }
+    if (isPaused(s)) { toast(s.name + ' 관원은 이미 휴관생이에요.'); return; }
+    var draft = { date: todayKey(), reason: '' };
+    openModal({
+      title: s.name + ' 관원을 휴관 처리할까요?',
+      sub: '휴관생은 출석·미등원 집계·월간 출석부·원비 예상액·승급심사·단체문자 대상에서 빠집니다.',
+      body: '<div class="row2">' +
+        '<div class="field"><label>휴관일</label><input class="input" id="pz-modal-date" type="date" value="' + esc(todayKey()) + '"></div>' +
+        '<div class="field"><label>휴관 사유/메모</label><input class="input" id="pz-modal-reason" maxlength="40" placeholder="예: 개인 사정 3개월"></div>' +
+        '</div>' +
+        '<div class="help" style="margin-top:10px">누적 출석 ' + (Number(s.attendCount) || 0) + '회 · ' + esc(s.belt || '띠 미지정') +
+        ' · 얼굴 등록 정보는 그대로 남습니다. 「🔄 재원 복귀」를 누르면 바로 이어집니다.</div>',
+      actions: [
+        { label: '취소', value: null, kind: 'btn-ghost' },
+        { label: '휴관 처리', value: true, kind: 'btn-primary' }
+      ],
+      onAction: function () {
+        if (el('pz-modal-date')) { draft.date = String(el('pz-modal-date').value || '').trim(); }
+        if (el('pz-modal-reason')) { draft.reason = String(el('pz-modal-reason').value || '').trim(); }
+      }
+    }).then(function (ok) {
+      if (!ok) { return; }
+      setStudentStatus(id, 'paused', { pausedDate: isDateKey(draft.date) ? draft.date : todayKey(), pauseReason: draft.reason });
+      toast(s.name + ' 관원을 휴관생으로 바쇠어요 · 복귀하면 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로 이어집니다');
+    });
+  }
+  function resumeStudentPrompt(id) {
+    var s = byId(id);
+    if (!s) { return; }
+    if (!isPaused(s)) { toast(s.name + ' 관원은 이미 재원생이에요.'); return; }
+    openModal({
+      title: s.name + ' 관원을 재원으로 복귀시킬까요?',
+      sub: '복귀하면 출석·원비·단체문자 대상에 다시 포함됩니다.',
+      body: '<div class="help" style="margin-top:0">누적 출석 <b>' + (Number(s.attendCount) || 0) + '회</b> · 띠 <b>' + esc(s.belt || '미지정') +
+        '</b> · 얼굴 등록 <b>' + (app.faces[s.id] ? '있음' : '없음') + '</b>은 그대로 이어집니다.' +
+        (s.pauseReason ? '<br>휴관 사유: ' + esc(s.pauseReason) : '') + '</div>',
+      actions: [
+        { label: '취소', value: null, kind: 'btn-ghost' },
+        { label: '재원 복귀', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      setStudentStatus(id, 'active');
+      toast(s.name + ' 관원을 재원으로 복귀했어요 · 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로');
+    });
   }
 
   /* 띠 체계 편집기 */
@@ -3823,7 +4386,7 @@
 
   function renderPromotion() {
     if (!el('promo-table')) { return; }
-    var targets = app.students.filter(function (s) { return promoState(s).target; });
+    var targets = activeStudents().filter(function (s) { return promoState(s).target; });
     var now = new Date();
     var promoted = app.logs.filter(function (l) {
       return l.kind === 'promotion' && monthKey(new Date(l.at)) === monthKey(now);
@@ -3831,7 +4394,7 @@
     el('ps-target').innerHTML = targets.length + '<small>명</small>';
     el('ps-threshold').innerHTML = promoThreshold() + '<small>회</small>';
     el('ps-promoted').innerHTML = promoted + '<small>명</small>';
-    el('ps-total').innerHTML = app.students.length + '<small>명</small>';
+    el('ps-total').innerHTML = activeStudents().length + '<small>명</small>';
     el('promo-note').textContent = fmtDateKorean(now) + ' 기준';
     if (document.activeElement !== el('p-threshold')) { el('p-threshold').value = promoThreshold(); }
     if (!el('p-exam-date').value) { el('p-exam-date').value = app.settings.examDate || defaultExamDate(); }
@@ -3847,7 +4410,7 @@
     var sel = app.promoSelected || (app.promoSelected = {});
     Object.keys(sel).forEach(function (id) { if (!byId(id)) { delete sel[id]; } });
 
-    var rows = app.students.slice().sort(function (a, b) {
+    var rows = activeStudents().slice().sort(function (a, b) {
       var sa = promoState(a), sb = promoState(b);
       if (sa.target !== sb.target) { return sa.target ? -1 : 1; }
       return (sb.count - sa.count) || a.name.localeCompare(b.name, 'ko');
@@ -3982,12 +4545,12 @@
   function renderGukgiwon() {
     if (!el('gk-table')) { return; }
     var now = new Date();
-    var targets = app.students.filter(function (s) { return gkStatusOf(s) === 'target'; });
-    var docs = app.students.filter(function (s) { return gkStatusOf(s) === 'docs' || gkStatusOf(s) === 'applied'; });
+    var targets = activeStudents().filter(function (s) { return gkStatusOf(s) === 'target'; });
+    var docs = activeStudents().filter(function (s) { return gkStatusOf(s) === 'docs' || gkStatusOf(s) === 'applied'; });
     var passed = app.logs.filter(function (l) {
       return l.kind === 'guk_pass' && monthKey(new Date(l.at)) === monthKey(now);
     }).length;
-    var holders = app.students.filter(function (s) { return s.poomDan && s.poomDan !== '없음'; }).length;
+    var holders = activeStudents().filter(function (s) { return s.poomDan && s.poomDan !== '없음'; }).length;
     el('gk-target').innerHTML = targets.length + '<small>명</small>';
     el('gk-docs').innerHTML = docs.length + '<small>명</small>';
     el('gk-passed').innerHTML = passed + '<small>명</small>';
@@ -3998,7 +4561,7 @@
     if (el('gk-time') && !el('gk-time').value) { el('gk-time').value = app.settings.gukTime || '10:00'; }
     if (el('gk-place') && !el('gk-place').value) { el('gk-place').value = app.settings.gukPlace || (app.settings.dojoName + ' 도장'); }
 
-    var rows = app.students.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
+    var rows = activeStudents().slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
     var tbody = el('gk-table');
     if (!rows.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="6">등록된 관원이 없습니다</td></tr>';
@@ -4059,9 +4622,10 @@
       parts.push('<div class="ki"><span class="ki-label">급수 체계</span><div class="ki-body">' + chips + '</div></div>');
     }
     if (visPublic('promotion')) {
-      var targets = app.students.filter(function (s) { return promoState(s).target; });
+      var targets = activeStudents().filter(function (s) { return promoState(s).target; });
       var best = null;
       app.students.forEach(function (s) {
+        if (isPaused(s)) { return; }
         var st = promoState(s);
         if (st.top) { return; }
         var ratio = st.count / st.threshold;
@@ -4084,7 +4648,7 @@
   }
 
   function setAdminTab(tab) {
-    var tabs = ['overview', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms'];
+    var tabs = ['overview', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms'];
     if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
     app.adminTab = tab;
     tabs.forEach(function (t) {
@@ -4096,16 +4660,19 @@
     el('view-admin').classList.toggle('monthly-mode', tab === 'monthly');
     el('view-admin').classList.toggle('tuition-mode', tab === 'tuition');
     el('view-admin').classList.toggle('sms-mode', tab === 'sms');
+    el('view-admin').classList.toggle('paused-mode', tab === 'paused');
     el('admin-promotion').style.display = tab === 'promotion' ? 'block' : 'none';
     el('admin-gukgiwon').style.display = tab === 'gukgiwon' ? 'block' : 'none';
     el('admin-monthly').style.display = tab === 'monthly' ? 'block' : 'none';
     el('admin-tuition').style.display = tab === 'tuition' ? 'block' : 'none';
     el('admin-bulk-sms').style.display = tab === 'sms' ? 'block' : 'none';
+    el('admin-paused').style.display = tab === 'paused' ? 'block' : 'none';
     if (tab === 'promotion') { renderPromotion(); }
     if (tab === 'gukgiwon') { renderGukgiwon(); }
     if (tab === 'monthly') { renderMonthly(); }
     if (tab === 'tuition') { renderTuition(true); }
     if (tab === 'sms') { renderBulkSms(true); }
+    if (tab === 'paused') { renderPaused(true); }
   }
 
   /* =========================================================
@@ -4150,7 +4717,7 @@
     var m = app.monthly || {};
     var cls = m.className || 'all';
     var q = String(m.q || '').trim();
-    return app.students.filter(function (s) {
+    return activeStudents().filter(function (s) {
       if (cls !== 'all' && String(s.className || '').trim() !== cls) { return false; }
       return matchSearch(s, q);
     }).sort(function (a, b) {
@@ -4508,7 +5075,7 @@
   }
   function tuitionScopeRows() {
     var u = ensureTuition();
-    return app.students.filter(function (s) {
+    return activeStudents().filter(function (s) {
       if (u.className !== 'all' && String(s.className || '').trim() !== u.className) { return false; }
       return matchSearch(s, u.q);
     }).sort(tuitionSort);
@@ -4965,7 +5532,7 @@
   }
   function bulkRows() {
     var u = ensureBulkSms();
-    return app.students.filter(function (s) { return matchSearch(s, u.q); }).sort(tuitionSort);
+    return activeStudents().filter(function (s) { return matchSearch(s, u.q); }).sort(tuitionSort);
   }
   function bulkPreviewStudent() {
     var ids = bulkSelectedIds();
@@ -5089,8 +5656,8 @@
     return Object.keys(sel).length;
   }
   function bulkSelectAll() {
-    var n = bulkSetSelection(app.students.map(function (s) { return s.id; }));
-    toast(n ? '전체 ' + n + '명을 선택했어요' : '선택할 관원이 없어요');
+    var n = bulkSetSelection(activeStudents().map(function (s) { return s.id; }));
+    toast(n ? '재원생 ' + n + '명을 선택했어요' + (pausedStudents().length ? ' (휴관 ' + pausedStudents().length + '명 제외)' : '') : '선택할 관원이 없어요');
   }
   function bulkSelectClass() {
     var u = ensureBulkSms();
@@ -5101,7 +5668,7 @@
       toast('먼저 반을 고르고 「반별 선택」을 눌러 주세요.');
       return;
     }
-    var ids = app.students.filter(function (s) { return String(s.className || '').trim() === cls; }).map(function (s) { return s.id; });
+    var ids = activeStudents().filter(function (s) { return String(s.className || '').trim() === cls; }).map(function (s) { return s.id; });
     var n = bulkSetSelection(ids);
     toast(n ? cls + ' · ' + n + '명을 선택했어요' : cls + ' 반에 등록된 관원이 없어요');
   }
@@ -5114,13 +5681,13 @@
       toast('먼저 띠를 고르고 「띠별 선택」을 눌러 주세요.');
       return;
     }
-    var ids = app.students.filter(function (s) { return String(s.belt || '').trim() === belt; }).map(function (s) { return s.id; });
+    var ids = activeStudents().filter(function (s) { return String(s.belt || '').trim() === belt; }).map(function (s) { return s.id; });
     var n = bulkSetSelection(ids);
     toast(n ? belt + ' · ' + n + '명을 선택했어요' : belt + ' 관원이 없어요');
   }
   function bulkSelectAbsent() {
     var today = todayKey();
-    var ids = app.students.filter(function (s) { return !isPresentOn(s.id, today); }).map(function (s) { return s.id; });
+    var ids = activeStudents().filter(function (s) { return !isPresentOn(s.id, today); }).map(function (s) { return s.id; });
     var n = bulkSetSelection(ids);
     toast(n ? '오늘 미등원 ' + n + '명을 선택했어요' : '오늘은 미등원 관원이 없어요');
   }
@@ -5353,6 +5920,293 @@
   }
 
   /* =========================================================
+     11-H. 휴관생 관리 (재원 / 휴관 분리 · 엑셀 동기화)
+     ========================================================= */
+  var PAUSED_READY_DAYS = 90;
+
+  function ensurePausedUI() {
+    if (!app.pausedUI || typeof app.pausedUI !== 'object') { app.pausedUI = { q: '' }; }
+    if (typeof app.pausedUI.q !== 'string') { app.pausedUI.q = ''; }
+    return app.pausedUI;
+  }
+  function pausedSort(a, b) {
+    var da = a.pausedDate || '', db = b.pausedDate || '';
+    if (da !== db) { return db.localeCompare(da); }
+    return a.name.localeCompare(b.name, 'ko');
+  }
+  function pausedSummary() {
+    var list = pausedStudents();
+    var mk = monthKey(new Date());
+    var out = { total: list.length, thisMonth: 0, ready: 0, noReason: 0, active: activeStudents().length };
+    list.forEach(function (s) {
+      if (String(s.pausedDate || '').slice(0, 7) === mk) { out.thisMonth++; }
+      if (pausedDays(s) >= PAUSED_READY_DAYS) { out.ready++; }
+      if (!String(s.pauseReason || '').trim()) { out.noReason++; }
+    });
+    return out;
+  }
+  function pausedRows() {
+    var u = ensurePausedUI();
+    return pausedStudents().filter(function (s) { return matchSearch(s, u.q); }).sort(pausedSort);
+  }
+
+  /* 복귀 안내 문자 (MacroDroid 무료문자 · addLog 경로 그대로) */
+  function resumeNoticeMessage(s) {
+    var lines = [
+      '[' + app.settings.dojoName + '] 재원 복귀 안내',
+      '',
+      s.name + ' 관원 학부모님, 안녕하세요.',
+      (String(s.className || '').trim() ? s.className + ' 수업으로 다시 함께하게 되었습니다.' : '다시 도장에서 함께하게 되었습니다.')
+    ];
+    if (Number(s.attendCount) > 0) {
+      lines.push('· 그동안의 누적 출석 ' + Number(s.attendCount) + '회 · ' + (s.belt || '띠') + ' 과정은 그대로 이어집니다.');
+    }
+    lines.push('수업 시간에 뵙겠습니다. 감사합니다.');
+    return lines.join('\n');
+  }
+  function sendResumeSms(id, silent) {
+    var s = byId(id);
+    if (!s) { return 'skipped'; }
+    if (!String(s.phone || '').trim()) {
+      if (!silent) { toast(s.name + ' 관원은 보호자 연락처가 없어 문자를 보낼 수 없어요.'); }
+      return 'skipped';
+    }
+    addLog(s, 'in', fmtTime(), { kind: 'resume', text: resumeNoticeMessage(s) });
+    if (!silent) { toast(s.name + ' 관원 학부모님께 복귀 안내 문자' + smsToastTail()); }
+    return 'sent';
+  }
+
+  function pausedCSVText(list) {
+    var lines = [['이름', '반', '띠', '급수', '보호자 연락처', '휴관일', '휴관 사유', '상태']];
+    (list || []).forEach(function (s) {
+      lines.push([
+        s.name, s.className || '', s.belt || '', studentGrade(s), s.phone || '',
+        s.pausedDate || '', s.pauseReason || '', '휴관'
+      ]);
+    });
+    return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
+  }
+  function downloadPausedCSV() {
+    var list = pausedRows();
+    if (!list.length) {
+      toast(pausedStudents().length ? '검색 결과가 없어요. 검색어를 지우고 내려받아 주세요.' : '내려받을 휴관생이 없어요.');
+      return;
+    }
+    if (downloadFile('휴관생명단_' + todayKey() + '.csv', pausedCSVText(list), 'text/csv;charset=utf-8')) {
+      toast('휴관생 ' + list.length + '명 명단을 내려받았어요');
+    }
+  }
+
+  function renderPaused(force) {
+    var tbody = el('pz-table');
+    if (!tbody) { return; }
+    var u = ensurePausedUI();
+    var search = el('pz-search');
+    if (search && document.activeElement !== search && search.value !== (u.q || '')) { search.value = u.q || ''; }
+    var sum = pausedSummary();
+    if (el('pz-total')) { el('pz-total').innerHTML = sum.total + '<small>명</small>'; }
+    if (el('pz-total-sub')) { el('pz-total-sub').textContent = '재원 ' + sum.active + '명 · 전체 ' + (sum.total + sum.active) + '명'; }
+    if (el('pz-month')) { el('pz-month').innerHTML = sum.thisMonth + '<small>명</small>'; }
+    if (el('pz-month-sub')) { el('pz-month-sub').textContent = tuitionMonthLabel(monthKey(new Date())); }
+    if (el('pz-ready')) { el('pz-ready').innerHTML = sum.ready + '<small>명</small>'; }
+    if (el('pz-noreason')) { el('pz-noreason').innerHTML = sum.noReason + '<small>명</small>'; }
+    if (el('pz-label')) { el('pz-label').textContent = '휴관생 ' + sum.total + '명'; }
+
+    var rows = pausedRows();
+    if (el('pz-note')) {
+      el('pz-note').textContent = sum.total
+        ? ((u.q ? '검색 ' + rows.length + '명 · ' : '') + '최근 휴관 순 · 휴관 90일 넘으면 복귀 안내를 보내 보세요')
+        : '휴관생 없음';
+    }
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="7">' +
+        (sum.total ? '검색 결과가 없어요.' : '휴관생이 없습니다. 「📋 출석 · 명단」에서 관원을 휴관 처리하면 여기에 모입니다.') + '</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function (s) {
+      var days = pausedDays(s);
+      var grade = studentGrade(s);
+      var ready = days >= PAUSED_READY_DAYS;
+      return '<tr>' +
+        '<td class="nm"><div class="nm-line">' + esc(s.name) + '<span class="chip pause">휴관</span>' +
+        (app.faces[s.id] ? '<span class="face-badge on">얼굴 보관</span>' : '') + '</div>' +
+        '<div class="pz-days' + (ready ? ' ready' : '') + '">' + (days ? '휴관 ' + days + '일째' : '휴관일 미기록') + '</div></td>' +
+        '<td class="sub">' + esc(s.className || '-') + '</td>' +
+        '<td><span class="belt-badge"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span>' +
+        (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
+        '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
+        '<td><input class="input mini" type="date" data-pzdate="' + esc(s.id) + '" value="' + esc(s.pausedDate || '') + '" aria-label="' + esc(s.name + ' 휴관일') + '"></td>' +
+        '<td><input class="input mini pz-reason" type="text" maxlength="60" data-pzreason="' + esc(s.id) + '" value="' + esc(s.pauseReason || '') + '" placeholder="휴관 사유/메모" aria-label="' + esc(s.name + ' 휴관 사유') + '"></td>' +
+        '<td class="pz-act">' +
+        '<button class="btn btn-sm btn-primary" data-pzresume="' + esc(s.id) + '">🔄 재원 복귀</button>' +
+        '<button class="btn btn-sm btn-mint" data-pzsms="' + esc(s.id) + '">💬 복귀 안내</button>' +
+        '<button class="btn btn-sm btn-danger" data-pzdel="' + esc(s.id) + '" title="명단에서 삭제">🗑</button>' +
+        '</td></tr>';
+    }).join('');
+  }
+
+  /* 휴관생 엑셀/CSV 반영 — 순수 계산(모달 없이 테스트 가능) */
+  function applyPausedRows(rows, mode) {
+    var out = { converted: 0, added: 0, removed: 0, kept: 0, updated: 0 };
+    var list = Array.isArray(rows) ? rows.slice() : [];
+    var byKey = {}, byName = {};
+    app.students.forEach(function (s) {
+      byKey[s.name + '|' + digitsOnly(s.phone)] = s;
+      if (!byName[s.name]) { byName[s.name] = []; }
+      byName[s.name].push(s);
+    });
+    var seen = {};
+    list.forEach(function (r) {
+      if (!r || !String(r.name || '').trim()) { return; }
+      var key = r.name + '|' + digitsOnly(r.phone);
+      var target = byKey[key] || null;
+      if (!target && !digitsOnly(r.phone)) {
+        var cands = byName[r.name] || [];
+        if (cands.length === 1) { target = cands[0]; }
+      }
+      if (target) {
+        seen[target.id] = true;
+        if (isPaused(target)) { out.kept++; } else { out.converted++; }
+        target.status = 'paused';
+        if (isDateKey(r.pausedDate)) { target.pausedDate = String(r.pausedDate); }
+        else if (!isDateKey(target.pausedDate)) { target.pausedDate = todayKey(); }
+        var reason = String(r.pauseReason || '').trim().slice(0, 60);
+        if (reason) { target.pauseReason = reason; }
+        // 빈 칸만 채우고, 누적 출석·띠·얼굴·원비는 건드리지 않는다
+        if (!String(target.className || '').trim() && r.className) { target.className = r.className; }
+        if (!String(target.phone || '').trim() && r.phone) { target.phone = r.phone; }
+        if (!Number(target.attendCount) && Number(r.attendCount)) { target.attendCount = Number(r.attendCount); }
+        out.updated++;
+      } else {
+        var fresh = {
+          id: r.id || uid('stu'),
+          name: String(r.name).trim(),
+          phone: normalizePhone(r.phone || ''),
+          className: String(r.className || '').trim(),
+          belt: String(r.belt || '').trim() || '흰띠',
+          attendCount: Math.max(0, parseInt(r.attendCount, 10) || 0),
+          grade: String(r.grade || '').trim(),
+          poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '',
+          monthlyFee: null,
+          status: 'paused',
+          pausedDate: isDateKey(r.pausedDate) ? String(r.pausedDate) : todayKey(),
+          pauseReason: String(r.pauseReason || '').trim().slice(0, 60)
+        };
+        app.students.push(fresh);
+        seen[fresh.id] = true;
+        out.added++;
+      }
+    });
+    if (mode === 'replace') {
+      var keep = [];
+      app.students.forEach(function (s) {
+        if (isPaused(s) && !seen[s.id]) {
+          out.removed++;
+          if (app.faces[s.id]) { delete app.faces[s.id]; }
+          return;
+        }
+        keep.push(s);
+      });
+      app.students = keep;
+    }
+    saveStudents();
+    saveFaces();
+    return out;
+  }
+
+  function applyPausedImport(students, fileName, mode) {
+    if (!students.length) {
+      openModal({
+        title: '휴관생을 찾지 못했어요',
+        sub: '파일에서 이름 열을 인식하지 못했습니다. 첫 줄에 이름·반·띠·보호자 연락처·휴관일 같은 머리글이 있는지 확인해 주세요.',
+        actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+      });
+      return;
+    }
+    var mode2 = mode === 'replace' ? 'replace' : 'sync';
+    var names = students.slice(0, 5).map(function (s) { return s.name; }).join(', ');
+    var more = students.length > 5 ? ' 외 ' + (students.length - 5) + '명' : '';
+    var pausedNow = pausedStudents().length;
+    openModal({
+      title: '휴관생 ' + students.length + '명을 읽었어요',
+      sub: fileName + ' · ' + names + more,
+      body: '<div class="help" style="margin-top:0">' +
+        (mode2 === 'replace'
+          ? '파일에 <b>없는 휴관생 ' + pausedNow + '명은 명단에서 빠집니다</b>(재원생·얼굴·출석 자료는 그대로). 파일에 있는 관원이 이미 <b>재원생</b>이면 휴관생으로 바뀌고, 새 관원이면 휴관생으로 추가됩니다.'
+          : '기존 명단에 <b>합칩니다</b>. 이름+보호자 연락처가 같은 관원은 <b>휴관생으로 상태만 바뀌고</b>(누적 출석·띠·얼굴 유지), 새 관원이면 휴관생으로 추가됩니다.') +
+        '</div>',
+      actions: [
+        { label: '취소', value: null, kind: 'btn-ghost' },
+        { label: '휴관생 가져오기', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { el('pz-file-name').textContent = ''; return; }
+      var r = applyPausedRows(students, mode2);
+      app.stuFilter = 'all';
+      app.pausedUI = null;
+      renderAll();
+      toast('휴관생 가져오기 완료 · 전환 ' + r.converted + '명 · 추가 ' + r.added + '명' +
+        (r.removed ? ' · 제외 ' + r.removed + '명' : '') + ' · 유지 ' + r.kept + '명');
+      el('pz-file-name').textContent = '✅ ' + fileName + ' 반영 완료';
+    });
+  }
+
+  function handlePausedFile(file) {
+    if (!file) { return; }
+    var name = file.name || '';
+    var ext = name.split('.').pop().toLowerCase();
+    var mode = el('pz-import-mode') ? el('pz-import-mode').value : 'sync';
+    el('pz-file-name').textContent = '📄 ' + name;
+
+    if (ext === 'xlsx' || ext === 'xls') {
+      if (typeof XLSX === 'undefined') {
+        openModal({
+          title: '엑셀 파일을 읽지 못했어요',
+          sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다. 인터넷 연결을 확인하거나, 엑셀에서 [CSV UTF-8]로 저장한 파일을 올려 주세요.',
+          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        });
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+          applyPausedImport(rowsToStudents(rows), name, mode);
+        } catch (err) {
+          toast('엑셀 파일을 해석하지 못했어요: ' + (err && err.message ? err.message : err));
+        }
+      };
+      reader.onerror = function () { toast('파일을 읽는 중 오류가 났어요.'); };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
+
+    var textReader = new FileReader();
+    textReader.onload = function (e) {
+      applyPausedImport(rowsToStudents(parseCSV(e.target.result)), name, mode);
+    };
+    textReader.onerror = function () { toast('파일을 읽는 중 오류가 났어요.'); };
+    textReader.readAsText(file, 'utf-8');
+  }
+
+  function setStudentPausedField(id, field, value) {
+    var s = byId(id);
+    if (!s) { return; }
+    if (field === 'pausedDate') {
+      s.pausedDate = isDateKey(value) ? String(value) : '';
+      if (!s.pausedDate) { toast('휴관일을 날짜로 골라 주세요.(' + s.name + ')'); }
+    } else if (field === 'pauseReason') {
+      s.pauseReason = String(value || '').trim().slice(0, 60);
+    } else {
+      return;
+    }
+    saveStudents();
+    renderPaused(true);
+  }
+
+  /* =========================================================
      12. 파일 가져오기 (SheetJS + CSV 폴백)
      ========================================================= */
   var HEADER_KEYS = {
@@ -5360,13 +6214,39 @@
     className: ['반', '시간', '클래스', '수업', '부', '과정', '요일', 'program', 'class', 'time', 'schedule'],
     belt: ['띠', '급', '벨트', '품', 'belt', 'rank'],
     phone: ['연락처', '전화', '휴대폰', '핸드폰', '보호자', '학부모', '부모', 'phone', 'tel', 'mobile', 'contact'],
-    attendCount: ['누적출석', '출석일수', '출석횟수', '승급출석', '총출석', '출석', 'attend', 'count']
+    attendCount: ['누적출석', '출석일수', '출석횟수', '승급출석', '총출석', '출석', 'attend', 'count'],
+    pausedDate: ['휴관일', '휴관시작', '휴관날짜', 'pausedate', 'pause_date'],
+    pauseReason: ['휴관사유', '사유', '비고', 'reason'],
+    status: ['상태', '구분', 'status', 'state']
   };
+
+  /* 엑셀·CSV의 휴관일 표기를 YYYY-MM-DD로 맞춘다 */
+  function normalizeImportDate(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) { return ''; }
+    if (isDateKey(s)) { return s; }
+    var m = s.match(/^(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/);
+    if (m) {
+      var y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+      var dt = new Date(y, mo - 1, d);
+      if (dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d) {
+        return y + '-' + pad2(mo) + '-' + pad2(d);
+      }
+    }
+    return '';
+  }
+  function importStatusOf(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) { return ''; }
+    if (/휴관|휴원|정지|중단|탈퇴|pause/i.test(s)) { return 'paused'; }
+    if (/재원|정상|출석|active/i.test(s)) { return 'active'; }
+    return '';
+  }
 
   function matchField(text) {
     var t = String(text || '').toLowerCase().replace(/\s+/g, '');
     if (!t) { return null; }
-    var fields = ['name', 'phone', 'className', 'attendCount', 'belt'];
+    var fields = ['name', 'phone', 'className', 'attendCount', 'belt', 'pausedDate', 'pauseReason', 'status'];
     for (var i = 0; i < fields.length; i++) {
       var f = fields[i];
       var keys = HEADER_KEYS[f];
@@ -5419,6 +6299,10 @@
       if (matchField(name) === 'name') { continue; }
       var phoneRaw = map.phone !== undefined ? row[map.phone] : '';
       var countRaw = map.attendCount !== undefined ? String(row[map.attendCount] == null ? '' : row[map.attendCount]) : '';
+      var statusRaw = map.status !== undefined ? String(row[map.status] == null ? '' : row[map.status]) : '';
+      var pausedRaw = map.pausedDate !== undefined ? String(row[map.pausedDate] == null ? '' : row[map.pausedDate]) : '';
+      var reasonRaw = map.pauseReason !== undefined ? String(row[map.pauseReason] == null ? '' : row[map.pauseReason]) : '';
+      var status = importStatusOf(statusRaw);
       out.push({
         id: uid('stu'),
         name: name,
@@ -5430,7 +6314,10 @@
         poomDan: '없음',
         targetPoomDan: '없음',
         gukStatus: 'none',
-        gukExamDate: ''
+        gukExamDate: '',
+        status: status || 'active',
+        pausedDate: normalizeImportDate(pausedRaw) || (status === 'paused' ? todayKey() : ''),
+        pauseReason: reasonRaw.trim().slice(0, 60)
       });
     }
     return out;
@@ -5530,9 +6417,17 @@
         app.students = students;
       } else {
         var existing = {};
-        app.students.forEach(function (s) { existing[s.name + '|' + digitsOnly(s.phone)] = true; });
+        app.students.forEach(function (s) { existing[s.name + '|' + digitsOnly(s.phone)] = s; });
         students.forEach(function (s) {
-          if (!existing[s.name + '|' + digitsOnly(s.phone)]) { app.students.push(s); }
+          var hit = existing[s.name + '|' + digitsOnly(s.phone)];
+          if (!hit) { app.students.push(s); return; }
+          // 파일이 휴관(상태·구분 열)으로 표시한 기존 관원만 휴관생으로 바꾼다
+          if (s.status === 'paused') {
+            hit.status = 'paused';
+            if (isDateKey(s.pausedDate)) { hit.pausedDate = s.pausedDate; }
+            else if (!isDateKey(hit.pausedDate)) { hit.pausedDate = todayKey(); }
+            if (s.pauseReason) { hit.pauseReason = s.pauseReason; }
+          }
         });
       }
       saveStudents();
@@ -5576,6 +6471,14 @@
       attendance: app.attendance,
       tuition: app.tuition,
       smsTemplates: app.smsTemplates || [],
+      admin: app.admin ? {
+        id: app.admin.id,
+        salt: app.admin.salt,
+        hash: app.admin.hash,
+        mustChange: app.admin.mustChange !== false,
+        autoLock: app.admin.autoLock !== false,
+        updatedAt: app.admin.updatedAt || ''
+      } : null,
       logs: app.logs,
       settings: app.settings
     };
@@ -5629,6 +6532,9 @@
     if (data.smsTemplates != null && !Array.isArray(data.smsTemplates)) {
       return { ok: false, reason: '문자 템플릿 형식이 올바르지 않아요.' };
     }
+    if (data.admin != null && (typeof data.admin !== 'object' || Array.isArray(data.admin))) {
+      return { ok: false, reason: '관리자 계정 설정 형식이 올바르지 않아요.' };
+    }
     return { ok: true };
   }
 
@@ -5646,6 +6552,16 @@
     if (data.attendance) { writeJSON(LS.attendance, data.attendance); }
     writeJSON(LS.tuition, (data.tuition && typeof data.tuition === 'object' && !Array.isArray(data.tuition)) ? data.tuition : {});
     writeJSON(LS.smsTemplates, Array.isArray(data.smsTemplates) ? data.smsTemplates : []);
+    if (data.admin && typeof data.admin === 'object' && !Array.isArray(data.admin) && data.admin.hash) {
+      writeJSON(LS.admin, {
+        id: String(data.admin.id || DEFAULT_ADMIN_ID).slice(0, 24),
+        salt: String(data.admin.salt || ''),
+        hash: String(data.admin.hash || '').toLowerCase(),
+        mustChange: data.admin.mustChange !== false,
+        autoLock: data.admin.autoLock !== false,
+        updatedAt: String(data.admin.updatedAt || '')
+      });
+    }
     if (data.logs) { writeJSON(LS.logs, data.logs); }
     if (data.settings) { writeJSON(LS.settings, data.settings); }
 
@@ -5668,6 +6584,8 @@
     renderTuition(true);
     fillTuitionSettings();
     renderBulkSms(true);
+    renderPaused(true);
+    renderAdminAccountState();
     renderPin();
     refreshAiHint();
     toast('백업을 복원했어요 · 관원 ' + app.students.length + '명 · 얼굴 ' + faceCount() + '명');
@@ -5690,11 +6608,13 @@
       var days = (data.attendance && typeof data.attendance === 'object') ? Object.keys(data.attendance).length : 0;
       var tMonths = (data.tuition && typeof data.tuition === 'object') ? Object.keys(data.tuition).length : 0;
       var tplCount = Array.isArray(data.smsTemplates) ? data.smsTemplates.length : 0;
+      var hasAdmin = !!(data.admin && data.admin.hash);
       openModal({
         title: '백업 파일로 복원할까요?',
         sub: '지금 이 브라우저의 데이터가 백업 파일 내용으로 바뀝니다.',
         body: '<div class="help" style="margin-top:0">' +
-          '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 띠 체계·문자·원비 설정 포함<br>' +
+          '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b>' +
+          (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') + ' · 띠 체계·문자·원비 설정 포함<br>' +
           (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
           '</div>',
         actions: [
@@ -5732,8 +6652,11 @@
     // 상단
     el('mode-in').addEventListener('click', function () { setMode('in'); });
     el('mode-out').addEventListener('click', function () { setMode('out'); });
-    el('tab-att').addEventListener('click', function () { setView('attendance'); });
-    el('tab-admin').addEventListener('click', function () { setView('admin'); });
+    el('tab-att').addEventListener('click', function () {
+      // setView가 자동 잠금까지 처리합니다
+      setView('attendance');
+    });
+    el('tab-admin').addEventListener('click', function () { requestAdmin(); });
     el('mute-btn').addEventListener('click', function () {
       app.muted = !app.muted;
       writeJSON(LS.muted, app.muted);
@@ -5822,9 +6745,22 @@
       if (fd) { confirmRemoveFace(fd.getAttribute('data-face-del')); return; }
       var ed = e.target.closest('[data-edit]');
       if (ed) { startEdit(ed.getAttribute('data-edit')); return; }
+      var ps = e.target.closest('[data-pause]');
+      if (ps) { pauseStudentPrompt(ps.getAttribute('data-pause')); return; }
+      var rs = e.target.closest('[data-resume]');
+      if (rs) { resumeStudentPrompt(rs.getAttribute('data-resume')); return; }
       var del = e.target.closest('[data-del]');
       if (del) { deleteStudent(del.getAttribute('data-del')); }
     });
+    if (el('stu-filters')) {
+      el('stu-filters').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-sfilter]');
+        if (!b) { return; }
+        var v = b.getAttribute('data-sfilter');
+        app.stuFilter = (v === 'active' || v === 'paused') ? v : 'all';
+        renderStudentsTable();
+      });
+    }
 
     // 관리자: 오늘 기록 초기화
     el('btn-reset-today').addEventListener('click', function () {
@@ -5982,7 +6918,7 @@
     });
     el('btn-exam-all').addEventListener('click', function () {
       saveExamSettings();
-      var targets = app.students.filter(function (s) { return promoState(s).target; });
+      var targets = activeStudents().filter(function (s) { return promoState(s).target; });
       if (!targets.length) { toast('아직 심사 대상자가 없어요.'); return; }
       openModal({
         title: '심사 안내 문자를 보낼까요?',
@@ -6244,6 +7180,43 @@
     el('btn-bs-tpl-save').addEventListener('click', saveBulkTemplate);
     el('btn-bs-send').addEventListener('click', function () { bulkSmsSend(); });
 
+    // 관리자: 휴관생 관리
+    el('atab-paused').addEventListener('click', function () { setAdminTab('paused'); });
+    el('pz-search').addEventListener('input', function () {
+      ensurePausedUI().q = el('pz-search').value || '';
+      renderPaused();
+    });
+    el('btn-pz-csv').addEventListener('click', downloadPausedCSV);
+    el('btn-pz-import').addEventListener('click', function () {
+      var f = el('pz-file');
+      if (f) { f.click(); }
+    });
+    var pzFile = el('pz-file');
+    if (pzFile) {
+      pzFile.addEventListener('change', function () {
+        if (pzFile.files && pzFile.files[0]) { handlePausedFile(pzFile.files[0]); }
+        pzFile.value = '';
+      });
+    }
+    el('pz-table').addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) { return; }
+      var rs = t.closest('[data-pzresume]');
+      if (rs) { resumeStudentPrompt(rs.getAttribute('data-pzresume')); return; }
+      var sm = t.closest('[data-pzsms]');
+      if (sm) { sendResumeSms(sm.getAttribute('data-pzsms')); return; }
+      var dl = t.closest('[data-pzdel]');
+      if (dl) { deleteStudent(dl.getAttribute('data-pzdel')); return; }
+    });
+    el('pz-table').addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) { return; }
+      var dt = t.closest('[data-pzdate]');
+      if (dt) { setStudentPausedField(dt.getAttribute('data-pzdate'), 'pausedDate', dt.value); return; }
+      var rs = t.closest('[data-pzreason]');
+      if (rs) { setStudentPausedField(rs.getAttribute('data-pzreason'), 'pauseReason', rs.value); }
+    });
+
     // 관리자: 도장폰 무료문자 연동
     el('btn-save-sms').addEventListener('click', function () {
       var conf = readSmsForm();
@@ -6337,6 +7310,26 @@
     el('tab-admin').addEventListener('click', function () {
       el('view-admin').scrollTop = 0;
     });
+
+    // 관리자 잠금 / 계정
+    el('btn-admin-lock').addEventListener('click', function () {
+      lockAdmin();
+      setView('attendance');
+    });
+    el('btn-admin-lock2').addEventListener('click', function () {
+      lockAdmin();
+      setView('attendance');
+    });
+    el('btn-adm-save').addEventListener('click', changeAdminAccount);
+    el('adm-autolock').addEventListener('change', function () {
+      saveAdminAutoLock(el('adm-autolock').value);
+    });
+    el('btn-goto-account').addEventListener('click', function () {
+      var p = el('admin-account-panel');
+      if (p && p.scrollIntoView) { p.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      var f = el('adm-cur-pw');
+      if (f) { setTimeout(function () { try { f.focus(); } catch (e) {} }, 250); }
+    });
   }
 
   function switchTouch(tab) {
@@ -6380,9 +7373,16 @@
     renderTuition(true);
     fillTuitionSettings();
     renderBulkSms(true);
+    renderPaused(true);
     renderKioskInfo();
     renderVisibility();
     renderAdminLog();
+
+    // 관리자 계정: 첫 실행이면 기본 계정(admin/0000)의 SHA-256 해시를 만들어 저장
+    ensureAdminAccount().then(function () {
+      renderAdminAccountState();
+    }, function () {});
+    renderAdminAccountState();
 
     renderFaceAdmin();
     refreshAiHint();
@@ -6504,6 +7504,48 @@
       visible: logVisible,
       kioskLog: renderLog,
       adminLog: renderAdminLog
+    },
+    paused: {
+      readyDays: PAUSED_READY_DAYS,
+      isPaused: isPaused,
+      list: pausedStudents,
+      activeList: activeStudents,
+      setStatus: setStudentStatus,
+      pausePrompt: pauseStudentPrompt,
+      resumePrompt: resumeStudentPrompt,
+      days: pausedDays,
+      summary: pausedSummary,
+      rows: pausedRows,
+      render: renderPaused,
+      ui: ensurePausedUI,
+      notice: resumeNoticeMessage,
+      sendSms: sendResumeSms,
+      csvText: pausedCSVText,
+      download: downloadPausedCSV,
+      applyRows: applyPausedRows,
+      applyImport: applyPausedImport,
+      setField: setStudentPausedField,
+      rowsToStudents: rowsToStudents,
+      counts: counts,
+      filter: function (v) { app.stuFilter = v || 'all'; renderStudentsTable(); return app.stuFilter; }
+    },
+    admin: {
+      account: adminAccount,
+      load: loadAdminAccount,
+      ensure: ensureAdminAccount,
+      verify: adminVerify,
+      hash: sha256Hex,
+      hashSync: sha256HexPure,
+      hmacLike: adminHash,
+      save: saveAdminAccount,
+      change: changeAdminAccount,
+      autoLock: saveAdminAutoLock,
+      lock: lockAdmin,
+      request: requestAdmin,
+      login: openAdminLogin,
+      state: function () { return { authed: app.adminAuthed, account: adminAccount() }; },
+      render: renderAdminAccountState,
+      defaults: function () { return { id: DEFAULT_ADMIN_ID, pw: DEFAULT_ADMIN_PW }; }
     }
   };
 
