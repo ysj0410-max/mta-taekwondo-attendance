@@ -635,6 +635,33 @@
     .admin-grid{grid-template-columns:1fr}
     .stats{grid-template-columns:repeat(2,1fr)}
   }
+  /* 🗒️ 상담기록 탭 */
+  .cs-grid{display:grid; grid-template-columns:minmax(290px,.9fr) 1.25fr; gap:13px; align-items:start}
+  .cs-grid .panel{min-width:0}
+  .cs-method{display:flex; gap:6px; flex-wrap:wrap}
+  .cs-mbtn{flex:1 1 0; min-width:54px; border:1.5px solid #dde3ee; background:#fbfcfe; color:#33405a; border-radius:11px; padding:9px 6px; font-weight:800; font-size:13px; cursor:pointer}
+  .cs-mbtn.active{background:var(--navy); border-color:var(--navy); color:#fff}
+  .cs-picks{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+  .cs-pick{border:1.5px solid #dde3ee; background:#fff; border-radius:999px; padding:6px 11px; font-size:12.5px; font-weight:700; color:#33405a; cursor:pointer}
+  .cs-pick.on{background:#eaf0ff; border-color:#8aa4ff; color:#1b2a5b}
+  .cs-picked{margin-top:8px; font-size:12.5px; font-weight:800; color:#0b7a55}
+  .cs-picked.none{color:#98a2b3; font-weight:700}
+  .cs-list{max-height:520px; overflow:auto; padding:10px 12px}
+  .cs-item{border:1px solid #e8edf4; border-radius:12px; padding:11px 12px; margin-bottom:9px; background:#fff}
+  .cs-item.editing{border-color:#8aa4ff; background:#f7f9ff}
+  .cs-item-head{display:flex; align-items:center; gap:7px; flex-wrap:wrap}
+  .cs-when{font-weight:800; color:#1b2a5b; font-size:13.5px}
+  .cs-mchip{font-size:11.5px; font-weight:800; padding:3px 8px; border-radius:999px; background:#eef2ff; color:#33405a}
+  .cs-mchip.face{background:#e9f7ef; color:#0b7a55}
+  .cs-mchip.phone{background:#e8f4ff; color:#155e9c}
+  .cs-mchip.sms{background:#fdf1e3; color:#a35b00}
+  .cs-who{font-size:12.5px; color:#66738c; font-weight:700}
+  .cs-tools{margin-left:auto; display:flex; gap:5px}
+  .cs-body{white-space:pre-wrap; margin-top:6px; font-size:13.5px; line-height:1.55; color:#2c3446; word-break:break-word}
+  .cs-empty{padding:26px 10px; text-align:center; color:#98a2b3; font-size:13px; line-height:1.6}
+  textarea.cs-text{height:auto; min-height:104px; padding:10px 12px; line-height:1.55; resize:vertical}
+  .cs-actions{display:flex; gap:8px; align-items:center; margin-top:2px; flex-wrap:wrap}
+
   /* 좁은 화면: 관리자 탭은 한 줄 가로 스크롤로 정리 */
   @media (max-width:760px){
     .admin-tabs{width:100%; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none}
@@ -643,6 +670,7 @@
     .bs-grid{grid-template-columns:1fr}
     .bs-row{padding:9px 4px; gap:6px}
     .bs-phone{font-size:11px}
+    .cs-grid{grid-template-columns:1fr}
   }
 </style>
 </head>
@@ -795,6 +823,7 @@
           <button class="admin-tab" id="atab-monthly" data-atab="monthly">📅 월간 출석부</button>
           <button class="admin-tab" id="atab-tuition" data-atab="tuition">💳 원비 관리</button>
           <button class="admin-tab" id="atab-sms" data-atab="sms">📢 단체문자</button>
+          <button class="admin-tab" id="atab-counsel" data-atab="counsel">🗒️ 상담기록</button>
         </div>
 
         <div class="stats ov">
@@ -1432,6 +1461,61 @@
             </div>
           </div>
         </div>
+        <div id="admin-counsel" style="display:none">
+          <div class="cs-grid">
+            <div class="panel">
+              <div class="panel-head"><h3>✍️ 상담 기록 작성</h3><div class="spacer"></div><span class="tiny-note" id="cs-save-note">저장하면 바로 목록에 쌓여요</span></div>
+              <div class="panel-body">
+                <div class="field">
+                  <label>관원</label>
+                  <input class="input" id="cs-name" placeholder="🔍 이름·초성 검색 (예: ㄱㅁㅈ)" autocomplete="off" aria-label="상담할 관원 이름 검색">
+                  <div class="cs-picks" id="cs-picks"></div>
+                  <div class="cs-picked none" id="cs-picked">관원을 골라 주세요</div>
+                </div>
+                <div class="row2">
+                  <div class="field"><label>상담 날짜</label><input class="input" id="cs-date" type="date" aria-label="상담 날짜"></div>
+                  <div class="field"><label>상담 방식</label>
+                    <div class="cs-method" id="cs-method"></div>
+                  </div>
+                </div>
+                <div class="field"><label>상담 내용</label>
+                  <textarea class="input cs-text" id="cs-text" placeholder="예: 11월 18일 전화 상담 — 등원 태도가 좋아졌고, 다음 주부터 화·목 수업으로 바꾸기로 했음."></textarea>
+                </div>
+                <div class="cs-actions">
+                  <button class="btn btn-primary" id="btn-cs-save">🗒️ 상담 기록 저장</button>
+                  <button class="btn btn-ghost" id="btn-cs-reset">입력 지우기</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h3>🗒️ 쌓인 상담 기록</h3><div class="spacer"></div><span class="tiny-note" id="cs-count">0건</span></div>
+              <div class="panel-body" style="padding-bottom:9px">
+                <div class="row2">
+                  <input class="input" id="cs-search" placeholder="🔍 이름·내용 검색" autocomplete="off" aria-label="상담 기록 검색">
+                  <select class="input" id="cs-student" aria-label="관원별 보기"><option value="all">전체 관원</option></select>
+                </div>
+                <div style="display:flex; gap:6px; align-items:center; margin-top:8px; flex-wrap:wrap">
+                  <select class="input" id="cs-period" style="width:auto; min-width:132px" aria-label="기간">
+                    <option value="all">전체 기간</option>
+                    <option value="month">이번 달</option>
+                    <option value="3m">최근 3개월</option>
+                  </select>
+                  <button class="btn btn-sm" id="btn-cs-csv">📥 상담기록 CSV</button>
+                  <span class="tiny-note" id="cs-note">최신순</span>
+                </div>
+              </div>
+              <div class="cs-list" id="cs-list"></div>
+              <div class="panel-body" style="border-top:1px solid #eef1f6">
+                <div class="help" style="margin-top:0">
+                  관원을 고르고 <b>날짜·방식·내용</b>을 적어 저장하면 그 아이 기록으로 계속 쌓입니다.
+                  <b>관원별 보기</b>로 한 아이의 기록만 모아 볼 수 있고, 각 기록에서 <b>수정·삭제</b>할 수 있어요.<br>
+                  상담 기록은 <b>관리자 화면에만</b> 보이고 출석 키오스크에는 나오지 않습니다. 전체 백업(JSON)·CSV에 함께 담깁니다.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div id="admin-paused" style="display:none">
           <div class="mon-bar">
             <div class="mon-nav"><div class="mon-label" id="pz-label">휴관생</div></div>
@@ -1506,7 +1590,8 @@
     faces: 'tdk.faces.v1',
     tuition: 'tdk.tuition.v1',
     smsTemplates: 'tdk.smsTemplates.v1',
-    admin: 'tdk.admin.v1'
+    admin: 'tdk.admin.v1',
+    counsel: 'tdk.counsel.v1'
   };
 
   var SAMPLE_STUDENTS = [
@@ -1589,6 +1674,8 @@
     smsTemplates: [],
     stuFilter: 'all',
     pausedUI: null,
+    counsel: [],
+    counselUI: null,
     admin: null,
     adminAuthed: false
   };
@@ -1795,6 +1882,8 @@
     app.pausedUI = null;
     app.stuFilter = 'all';
     app.smsTemplates = loadBulkTemplates();
+    app.counsel = loadCounsel();
+    app.counselUI = null;
     app.admin = loadAdminAccount();
     app.adminAuthed = false;
 
@@ -4684,7 +4773,7 @@
   }
 
   function setAdminTab(tab) {
-    var tabs = ['overview', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms'];
+    var tabs = ['overview', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'counsel'];
     if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
     app.adminTab = tab;
     tabs.forEach(function (t) {
@@ -4697,18 +4786,21 @@
     el('view-admin').classList.toggle('tuition-mode', tab === 'tuition');
     el('view-admin').classList.toggle('sms-mode', tab === 'sms');
     el('view-admin').classList.toggle('paused-mode', tab === 'paused');
+    el('view-admin').classList.toggle('cs-mode', tab === 'counsel');
     el('admin-promotion').style.display = tab === 'promotion' ? 'block' : 'none';
     el('admin-gukgiwon').style.display = tab === 'gukgiwon' ? 'block' : 'none';
     el('admin-monthly').style.display = tab === 'monthly' ? 'block' : 'none';
     el('admin-tuition').style.display = tab === 'tuition' ? 'block' : 'none';
     el('admin-bulk-sms').style.display = tab === 'sms' ? 'block' : 'none';
     el('admin-paused').style.display = tab === 'paused' ? 'block' : 'none';
+    el('admin-counsel').style.display = tab === 'counsel' ? 'block' : 'none';
     if (tab === 'promotion') { renderPromotion(); }
     if (tab === 'gukgiwon') { renderGukgiwon(); }
     if (tab === 'monthly') { renderMonthly(); }
     if (tab === 'tuition') { renderTuition(true); }
     if (tab === 'sms') { renderBulkSms(true); }
     if (tab === 'paused') { renderPaused(true); }
+    if (tab === 'counsel') { renderCounsel(); }
   }
 
   /* =========================================================
@@ -6245,6 +6337,481 @@
   }
 
   /* =========================================================
+     11-I. 상담기록 (관원별 누적 메모 · 관리자 전용)
+     ========================================================= */
+  var COUNSEL_METHODS = ['대면', '전화', '문자', '기타'];
+  var COUNSEL_METHOD_CLS = { '대면': 'face', '전화': 'phone', '문자': 'sms', '기타': '' };
+
+  function loadCounsel() {
+    var raw = readJSON(LS.counsel, []);
+    var out = [];
+    if (!Array.isArray(raw)) { return out; }
+    raw.forEach(function (r) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) { return; }
+      var text = String(r.text == null ? '' : r.text).trim();
+      var name = String(r.name == null ? '' : r.name).trim().slice(0, 24);
+      if (!text && !name) { return; }
+      var method = String(r.method || '');
+      out.push({
+        id: String(r.id || uid('cs')),
+        studentId: String(r.studentId == null ? '' : r.studentId),
+        name: name,
+        date: isDateKey(r.date) ? String(r.date) : todayKey(),
+        method: COUNSEL_METHODS.indexOf(method) === -1 ? '대면' : method,
+        text: text.slice(0, 4000),
+        createdAt: /^\d{4}-\d{2}-\d{2}T/.test(String(r.createdAt || '')) ? String(r.createdAt) : new Date().toISOString(),
+        updatedAt: /^\d{4}-\d{2}-\d{2}T/.test(String(r.updatedAt || '')) ? String(r.updatedAt) : ''
+      });
+    });
+    return sortCounsel(out);
+  }
+
+  function sortCounsel(list) {
+    return (list || []).slice().sort(function (a, b) {
+      if (a.date !== b.date) { return a.date < b.date ? 1 : -1; }
+      return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+    });
+  }
+
+  function saveCounselFile() {
+    writeJSON(LS.counsel, app.counsel);
+    if (typeof driveTouchData === 'function') { driveTouchData(); }
+  }
+
+  function ensureCounselUI() {
+    if (!app.counselUI || typeof app.counselUI !== 'object') {
+      app.counselUI = { pickQ: '', pickName: '', studentId: '', method: '대면', editId: '', q: '', period: 'all', student: 'all' };
+    }
+    var u = app.counselUI;
+    if (typeof u.pickQ !== 'string') { u.pickQ = ''; }
+    if (typeof u.pickName !== 'string') { u.pickName = ''; }
+    if (typeof u.studentId !== 'string') { u.studentId = ''; }
+    if (typeof u.editId !== 'string') { u.editId = ''; }
+    if (typeof u.q !== 'string') { u.q = ''; }
+    if (COUNSEL_METHODS.indexOf(u.method) === -1) { u.method = '대면'; }
+    if (u.period !== 'month' && u.period !== '3m') { u.period = 'all'; }
+    if (!u.student) { u.student = 'all'; }
+    return u;
+  }
+
+  function counselSelected() {
+    var u = ensureCounselUI();
+    if (u.studentId) { return byId(u.studentId); }
+    var nm = String(u.pickName || '').trim();
+    if (!nm) { return null; }
+    return app.students.filter(function (s) { return s.name === nm; })[0] || null;
+  }
+
+  /* 이름만 적고 저장해도 되도록, 입력한 이름과 같은 관원이 있으면 자동으로 연결합니다 */
+  function counselResolveInput() {
+    var u = ensureCounselUI();
+    var typed = String(u.pickQ || '').trim();
+    var s = u.studentId ? byId(u.studentId) : null;
+    if (!s && typed) {
+      s = app.students.filter(function (x) { return x.name === typed; })[0] || null;
+    }
+    return { studentId: s ? s.id : '', name: s ? s.name : (String(u.pickName || '').trim() || typed) };
+  }
+
+  function counselCountFor(rec) {
+    if (!rec) { return 0; }
+    return app.counsel.filter(function (r) {
+      if (rec.studentId) { return r.studentId === rec.studentId; }
+      var nm = String(rec.name || '').trim();
+      return !r.studentId && String(r.name || '').trim() === nm;
+    }).length;
+  }
+
+  function counselDateLabel(dk) {
+    if (!isDateKey(dk)) { return String(dk || ''); }
+    var y = parseInt(dk.slice(0, 4), 10);
+    var m = parseInt(dk.slice(5, 7), 10);
+    var d = parseInt(dk.slice(8, 10), 10);
+    return (y === new Date().getFullYear() ? '' : y + '년 ') + m + '월 ' + d + '일';
+  }
+
+  function counselMatches(r, q) {
+    var query = String(q || '').replace(/\s+/g, '');
+    if (!query) { return true; }
+    var name = String(r.name || '').replace(/\s+/g, '');
+    if (name.indexOf(query) !== -1) { return true; }
+    if (isChosungQuery(query) && toChosung(name).indexOf(query) !== -1) { return true; }
+    return String(r.text || '').replace(/\s+/g, '').indexOf(query) !== -1;
+  }
+
+  function counselPeriodCutoff(period) {
+    var d = new Date();
+    if (period === 'month') { return monthKey(d) + '-01'; }
+    d.setDate(d.getDate() - 90);
+    return todayKey(d);
+  }
+
+  function counselRows() {
+    var u = ensureCounselUI();
+    var from = (u.period === 'month' || u.period === '3m') ? counselPeriodCutoff(u.period) : '';
+    var list = app.counsel.filter(function (r) {
+      if (u.student === 'none') {
+        if (r.studentId) { return false; }
+      } else if (u.student !== 'all' && r.studentId !== u.student) {
+        return false;
+      }
+      if (from && r.date < from) { return false; }
+      return counselMatches(r, u.q);
+    });
+    return sortCounsel(list);
+  }
+
+  function pickCounselStudent(id) {
+    var u = ensureCounselUI();
+    var s = byId(id);
+    if (!s) {
+      u.studentId = '';
+      renderCounselPicks();
+      return null;
+    }
+    u.studentId = s.id;
+    u.pickName = s.name;
+    u.pickQ = s.name;
+    if (el('cs-name')) { el('cs-name').value = s.name; }
+    renderCounselPicks();
+    return s;
+  }
+
+  function renderCounselPicks() {
+    var u = ensureCounselUI();
+    var box = el('cs-picks');
+    var query = String(u.pickQ || '').trim();
+    var list = app.students.filter(function (s) {
+      return !query || matchSearch(s, query);
+    }).sort(function (a, b) {
+      var pa = isPaused(a) ? 1 : 0, pb = isPaused(b) ? 1 : 0;
+      if (pa !== pb) { return pa - pb; }
+      return String(a.name).localeCompare(String(b.name), 'ko');
+    }).slice(0, 8);
+    if (box) {
+      box.innerHTML = list.length
+        ? list.map(function (s) {
+          var on = (u.studentId && u.studentId === s.id) || (!u.studentId && u.pickName === s.name);
+          return '<button class="cs-pick' + (on ? ' on' : '') + '" data-cpick="' + esc(s.id) + '">' +
+            esc(s.name) + (isPaused(s) ? ' · 휴권' : '') + '</button>';
+        }).join('')
+        : '<span class="tiny-note">맞는 관원이 없어요. 이름을 그대로 적고 저장해도 됩니다.</span>';
+    }
+    var picked = el('cs-picked');
+    if (picked) {
+      var sel = counselSelected();
+      var nm = sel ? sel.name : String(u.pickName || '').trim();
+      var cnt = nm ? counselCountFor({ studentId: sel ? sel.id : '', name: nm }) : 0;
+      picked.className = 'cs-picked' + (nm ? '' : ' none');
+      picked.textContent = nm
+        ? '✍️ ' + nm + (sel && sel.className ? ' · ' + sel.className : '') + ' · 지금까지 상담 ' + cnt + '건'
+        : '관원을 골라 주세요 (이름만 적고 저장해도 됩니다)';
+    }
+  }
+
+  function renderCounselForm() {
+    var u = ensureCounselUI();
+    var box = el('cs-method');
+    if (box) {
+      box.innerHTML = COUNSEL_METHODS.map(function (m) {
+        return '<button class="cs-mbtn' + (u.method === m ? ' active' : '') + '" data-method="' + esc(m) + '">' + esc(m) + '</button>';
+      }).join('');
+    }
+    if (el('cs-date') && !isDateKey(el('cs-date').value)) { el('cs-date').value = todayKey(); }
+    if (el('btn-cs-save')) { el('btn-cs-save').textContent = u.editId ? '✏️ 수정 저장' : '🗒️ 상담 기록 저장'; }
+    if (el('btn-cs-reset')) { el('btn-cs-reset').textContent = u.editId ? '수정 취소' : '입력 지우기'; }
+    if (el('cs-save-note')) { el('cs-save-note').textContent = u.editId ? '수정 중 · 저장하면 이 기록이 바뀝니다' : '저장하면 바로 목록에 쌓여요'; }
+  }
+
+  function renderCounselList() {
+    var u = ensureCounselUI();
+    var sel = el('cs-student');
+    if (sel) {
+      var counts = {};
+      app.counsel.forEach(function (r) {
+        if (!r.studentId) { return; }
+        counts[r.studentId] = (counts[r.studentId] || 0) + 1;
+      });
+      var opts = ['<option value="all">전체 관원 (' + app.counsel.length + '건)</option>'];
+      app.students.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); }).forEach(function (s) {
+        opts.push('<option value="' + esc(s.id) + '">' + esc(s.name) + (isPaused(s) ? ' · 휴권' : '') + ' (' + (counts[s.id] || 0) + '건)</option>');
+      });
+      var loose = app.counsel.filter(function (r) { return !r.studentId; }).length;
+      if (loose) { opts.push('<option value="none">이름만 기록 (' + loose + '건)</option>'); }
+      sel.innerHTML = opts.join('');
+      if (u.student !== 'all' && u.student !== 'none' && !byId(u.student)) { u.student = 'all'; }
+      if (u.student === 'none' && !loose) { u.student = 'all'; }
+      sel.value = u.student;
+    }
+    if (el('cs-search') && document.activeElement !== el('cs-search') && el('cs-search').value !== (u.q || '')) {
+      el('cs-search').value = u.q || '';
+    }
+    if (el('cs-period') && el('cs-period').value !== u.period) { el('cs-period').value = u.period; }
+
+    var rows = counselRows();
+    if (el('cs-count')) {
+      el('cs-count').textContent = (rows.length === app.counsel.length)
+        ? '총 ' + app.counsel.length + '건'
+        : rows.length + '건 / 전체 ' + app.counsel.length + '건';
+    }
+    if (el('cs-note')) {
+      var who = '';
+      if (u.student === 'none') { who = '이름만 기록 · '; }
+      else if (u.student !== 'all') { var s = byId(u.student); who = (s ? s.name : '관원') + ' · '; }
+      el('cs-note').textContent = who + rows.length + '건 · 최신순';
+    }
+
+    var box = el('cs-list');
+    if (!box) { return; }
+    if (!rows.length) {
+      box.innerHTML = '<div class="cs-empty">🗒️ ' + (app.counsel.length
+        ? '조건에 맞는 상담 기록이 없어요.<br>검색어나 기간을 바꿔 보세요.'
+        : '아직 저장된 상담 기록이 없어요.<br>왼쪽에서 관원을 고르고 상담 내용을 적어 저장하면 여기에 쌓입니다.') + '</div>';
+      return;
+    }
+    box.innerHTML = rows.map(function (r) {
+      var s = r.studentId ? byId(r.studentId) : null;
+      var who = r.name || (s ? s.name : '이름 없음');
+      var mcls = COUNSEL_METHOD_CLS[r.method] || '';
+      return '<div class="cs-item' + (u.editId === r.id ? ' editing' : '') + '">' +
+        '<div class="cs-item-head">' +
+        '<span class="cs-when">' + esc(counselDateLabel(r.date)) + '</span>' +
+        '<span class="cs-mchip ' + mcls + '">' + esc(r.method) + ' 상담</span>' +
+        '<span class="cs-who">' + esc(who) + (s && s.className ? ' · ' + esc(s.className) : (r.studentId ? '' : ' · 이름만')) + '</span>' +
+        '<span class="cs-tools">' +
+        '<button class="btn btn-sm btn-ghost" data-cedit="' + esc(r.id) + '">✏️ 수정</button>' +
+        '<button class="btn btn-sm btn-danger" data-cdel="' + esc(r.id) + '">🗑️</button>' +
+        '</span></div>' +
+        '<div class="cs-body">' + esc(r.text) + '</div>' +
+        (r.updatedAt ? '<div class="tiny-note" style="margin-top:5px">수정 ' + esc(String(r.updatedAt).slice(0, 16).replace('T', ' ')) + '</div>' : '') +
+        '</div>';
+    }).join('');
+  }
+
+  function renderCounsel() {
+    ensureCounselUI();
+    renderCounselForm();
+    renderCounselPicks();
+    renderCounselList();
+  }
+
+  function resetCounselForm() {
+    var u = ensureCounselUI();
+    u.editId = '';
+    u.studentId = '';
+    u.pickName = '';
+    u.pickQ = '';
+    u.method = '대면';
+    if (el('cs-name')) { el('cs-name').value = ''; }
+    if (el('cs-text')) { el('cs-text').value = ''; }
+    if (el('cs-date')) { el('cs-date').value = todayKey(); }
+    renderCounsel();
+  }
+
+  function saveCounselFromForm() {
+    var u = ensureCounselUI();
+    var text = String(el('cs-text') ? el('cs-text').value : '').trim();
+    var who = counselResolveInput();
+    if (!who.name) { toast('상담한 관원 이름을 먼저 골라 주세요.'); return null; }
+    if (!text) { toast('상담 내용을 적어 주세요.'); return null; }
+    var date = (el('cs-date') && isDateKey(el('cs-date').value)) ? el('cs-date').value : todayKey();
+    var now = new Date().toISOString();
+
+    if (u.editId) {
+      var rec = app.counsel.filter(function (r) { return r.id === u.editId; })[0];
+      if (!rec) { u.editId = ''; renderCounsel(); toast('수정할 기록을 찾지 못했어요.'); return null; }
+      rec.studentId = who.studentId;
+      rec.name = who.name;
+      rec.date = date;
+      rec.method = u.method;
+      rec.text = text.slice(0, 4000);
+      rec.updatedAt = now;
+      app.counsel = sortCounsel(app.counsel);
+      saveCounselFile();
+      u.editId = '';
+      if (el('cs-text')) { el('cs-text').value = ''; }
+      renderCounsel();
+      toast(rec.name + ' · ' + counselDateLabel(rec.date) + ' 상담 기록을 고쳤어요');
+      return rec;
+    }
+
+    var entry = {
+      id: uid('cs'),
+      studentId: who.studentId,
+      name: who.name,
+      date: date,
+      method: u.method,
+      text: text.slice(0, 4000),
+      createdAt: now,
+      updatedAt: ''
+    };
+    app.counsel.push(entry);
+    app.counsel = sortCounsel(app.counsel);
+    saveCounselFile();
+    // 저장한 아이의 기록이 바로 보이도록 목록을 그 아이 기준으로 맞춥니다.
+    u.student = entry.studentId || 'none';
+    u.q = '';
+    u.period = 'all';
+    if (el('cs-text')) { el('cs-text').value = ''; }
+    renderCounsel();
+    toast(entry.name + ' · ' + counselDateLabel(entry.date) + ' ' + entry.method + ' 상담 저장 (누적 ' + counselCountFor(entry) + '건)');
+    return entry;
+  }
+
+  function startEditCounsel(id) {
+    var u = ensureCounselUI();
+    var r = app.counsel.filter(function (x) { return x.id === id; })[0];
+    if (!r) { return null; }
+    u.editId = r.id;
+    u.studentId = r.studentId || '';
+    u.pickName = r.name || '';
+    u.pickQ = r.name || '';
+    u.method = r.method || '대면';
+    if (el('cs-name')) { el('cs-name').value = r.name || ''; }
+    if (el('cs-text')) { el('cs-text').value = r.text || ''; }
+    if (el('cs-date')) { el('cs-date').value = isDateKey(r.date) ? r.date : todayKey(); }
+    renderCounsel();
+    toast('작성 칸에서 내용을 고쳐 저장하면 수정됩니다.');
+    return r;
+  }
+
+  function deleteCounsel(id) {
+    var rec = app.counsel.filter(function (r) { return r.id === id; })[0];
+    if (!rec) { return Promise.resolve(false); }
+    var u = ensureCounselUI();
+    return openModal({
+      title: '이 상담 기록을 지울까요?',
+      sub: rec.name + ' · ' + counselDateLabel(rec.date) + ' · ' + rec.method + ' 상담',
+      body: '<div class="bs-bubble" style="max-height:190px; overflow:auto; white-space:pre-wrap">' + esc(rec.text) + '</div>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '지우기', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return false; }
+      app.counsel = app.counsel.filter(function (r) { return r.id !== id; });
+      if (u.editId === id) { u.editId = ''; }
+      saveCounselFile();
+      renderCounsel();
+      toast('상담 기록을 지웠어요');
+      return true;
+    });
+  }
+
+  function counselCSVText(list) {
+    var lines = [['관원', '상담일', '상담 방식', '상담 내용']];
+    (list || []).forEach(function (r) {
+      lines.push([r.name || '', r.date || '', r.method || '', r.text || '']);
+    });
+    return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
+  }
+
+  function downloadCounselCSV() {
+    var rows = counselRows();
+    if (!rows.length) {
+      toast(app.counsel.length ? '조건에 맞는 상담 기록이 없어요. 검색어나 기간을 바꿔 주세요.' : '내려받을 상담 기록이 없어요.');
+      return;
+    }
+    if (downloadFile('상담기록_' + todayKey() + '.csv', counselCSVText(rows), 'text/csv;charset=utf-8')) {
+      toast('상담 기록 ' + rows.length + '건을 내려받았어요');
+    }
+  }
+
+  /* 백업 복원: 관원 id가 달라도 이름이 같으면 이어 붙이고, 끝내 모르는 기록은 버리지 않고 이름만 보관합니다 */
+  function remapCounselBackup(raw, students) {
+    var list = Array.isArray(raw) ? raw : [];
+    var byOldId = {}, byName = {};
+    (students || []).forEach(function (s) {
+      if (!s || !s.name) { return; }
+      if (s.id) { byOldId[String(s.id)] = s; }
+      var nm = String(s.name).trim();
+      if (nm && !byName[nm]) { byName[nm] = s; }
+    });
+    return list.map(function (r) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) { return null; }
+      var nm = String(r.name == null ? '' : r.name).trim().slice(0, 24);
+      var m = byOldId[String(r.studentId || '')] || (nm ? byName[nm] : null);
+      var method = String(r.method || '');
+      return {
+        id: String(r.id || uid('cs')),
+        studentId: m ? String(m.id) : '',
+        name: m ? String(m.name) : nm,
+        date: isDateKey(r.date) ? String(r.date) : todayKey(),
+        method: COUNSEL_METHODS.indexOf(method) === -1 ? '대면' : method,
+        text: String(r.text == null ? '' : r.text).slice(0, 4000),
+        createdAt: /^\d{4}-\d{2}-\d{2}T/.test(String(r.createdAt || '')) ? String(r.createdAt) : new Date().toISOString(),
+        updatedAt: /^\d{4}-\d{2}-\d{2}T/.test(String(r.updatedAt || '')) ? String(r.updatedAt) : ''
+      };
+    }).filter(function (r) { return r && (r.name || r.text); });
+  }
+
+  function bindCounselEvents() {
+    var name = el('cs-name');
+    if (name) {
+      name.addEventListener('input', function () {
+        var u = ensureCounselUI();
+        u.pickQ = String(name.value || '');
+        if (u.studentId) {
+          var s = byId(u.studentId);
+          if (!s || (String(name.value || '').trim() && String(name.value).trim() !== s.name)) {
+            u.studentId = '';
+            u.pickName = '';
+          }
+        }
+        renderCounselPicks();
+      });
+    }
+    var method = el('cs-method');
+    if (method) {
+      method.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-method]');
+        if (!b) { return; }
+        var m = b.getAttribute('data-method');
+        if (COUNSEL_METHODS.indexOf(m) === -1) { return; }
+        ensureCounselUI().method = m;
+        renderCounselForm();
+      });
+    }
+    var picks = el('cs-picks');
+    if (picks) {
+      picks.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-cpick]');
+        if (!b) { return; }
+        pickCounselStudent(b.getAttribute('data-cpick'));
+      });
+    }
+    if (el('btn-cs-save')) { el('btn-cs-save').addEventListener('click', function () { saveCounselFromForm(); }); }
+    if (el('btn-cs-reset')) { el('btn-cs-reset').addEventListener('click', function () { resetCounselForm(); }); }
+    if (el('cs-search')) {
+      el('cs-search').addEventListener('input', function () {
+        ensureCounselUI().q = String(el('cs-search').value || '');
+        renderCounselList();
+      });
+    }
+    if (el('cs-student')) {
+      el('cs-student').addEventListener('change', function () {
+        ensureCounselUI().student = el('cs-student').value || 'all';
+        renderCounselList();
+      });
+    }
+    if (el('cs-period')) {
+      el('cs-period').addEventListener('change', function () {
+        ensureCounselUI().period = el('cs-period').value || 'all';
+        renderCounselList();
+      });
+    }
+    if (el('cs-list')) {
+      el('cs-list').addEventListener('click', function (e) {
+        var ed = e.target.closest('[data-cedit]');
+        if (ed) { startEditCounsel(ed.getAttribute('data-cedit')); return; }
+        var del = e.target.closest('[data-cdel]');
+        if (del) { deleteCounsel(del.getAttribute('data-cdel')); return; }
+      });
+    }
+    if (el('btn-cs-csv')) { el('btn-cs-csv').addEventListener('click', function () { downloadCounselCSV(); }); }
+  }
+
+  /* =========================================================
      12. 파일 가져오기 (SheetJS + CSV 폴백)
      ========================================================= */
   var HEADER_KEYS = {
@@ -6509,6 +7076,7 @@
       attendance: app.attendance,
       tuition: app.tuition,
       smsTemplates: app.smsTemplates || [],
+      counsel: app.counsel || [],
       admin: app.admin ? {
         id: app.admin.id,
         salt: app.admin.salt,
@@ -6573,6 +7141,9 @@
     if (data.smsTemplates != null && !Array.isArray(data.smsTemplates)) {
       return { ok: false, reason: '문자 템플릿 형식이 올바르지 않아요.' };
     }
+    if (data.counsel != null && !Array.isArray(data.counsel)) {
+      return { ok: false, reason: '상담 기록 형식이 올바르지 않아요.' };
+    }
     if (data.admin != null && (typeof data.admin !== 'object' || Array.isArray(data.admin))) {
       return { ok: false, reason: '관리자 계정 설정 형식이 올바르지 않아요.' };
     }
@@ -6593,6 +7164,9 @@
     if (data.attendance) { writeJSON(LS.attendance, data.attendance); }
     writeJSON(LS.tuition, (data.tuition && typeof data.tuition === 'object' && !Array.isArray(data.tuition)) ? data.tuition : {});
     writeJSON(LS.smsTemplates, Array.isArray(data.smsTemplates) ? data.smsTemplates : []);
+    if (Array.isArray(data.counsel)) {
+      writeJSON(LS.counsel, remapCounselBackup(data.counsel, data.students));
+    }
     if (data.admin && typeof data.admin === 'object' && !Array.isArray(data.admin) && data.admin.hash) {
       writeJSON(LS.admin, {
         id: String(data.admin.id || DEFAULT_ADMIN_ID).slice(0, 24),
@@ -6643,6 +7217,7 @@
     fillTuitionSettings();
     renderBulkSms(true);
     renderPaused(true);
+    renderCounsel();
     renderAdminAccountState();
     fillDriveForm();
     renderPin();
@@ -6655,9 +7230,10 @@
     var days = (data.attendance && typeof data.attendance === 'object') ? Object.keys(data.attendance).length : 0;
     var tMonths = (data.tuition && typeof data.tuition === 'object') ? Object.keys(data.tuition).length : 0;
     var tplCount = Array.isArray(data.smsTemplates) ? data.smsTemplates.length : 0;
+    var csCount = Array.isArray(data.counsel) ? data.counsel.length : 0;
     var hasAdmin = !!(data.admin && data.admin.hash);
     return '<div class="help" style="margin-top:0">' +
-      '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b>' +
+      '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 상담 기록 <b>' + csCount + '건</b>' +
       (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') + ' · 띠 체계·문자·원비 설정 포함<br>' +
       (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
       '</div>';
@@ -7630,6 +8206,8 @@
 
     // 관리자: 휴관생 관리
     el('atab-paused').addEventListener('click', function () { setAdminTab('paused'); });
+    el('atab-counsel').addEventListener('click', function () { setAdminTab('counsel'); });
+    bindCounselEvents();
     el('pz-search').addEventListener('input', function () {
       ensurePausedUI().q = el('pz-search').value || '';
       renderPaused();
@@ -7862,6 +8440,7 @@
     fillTuitionSettings();
     renderBulkSms(true);
     renderPaused(true);
+    renderCounsel();
     renderKioskInfo();
     renderVisibility();
     renderAdminLog();
@@ -8038,6 +8617,26 @@
       rowsToStudents: rowsToStudents,
       counts: counts,
       filter: function (v) { app.stuFilter = v || 'all'; renderStudentsTable(); return app.stuFilter; }
+    },
+    counsel: {
+      list: function () { return app.counsel; },
+      rows: counselRows,
+      save: saveCounselFromForm,
+      edit: startEditCounsel,
+      remove: deleteCounsel,
+      render: renderCounsel,
+      renderList: renderCounselList,
+      ui: ensureCounselUI,
+      reset: resetCounselForm,
+      methods: COUNSEL_METHODS,
+      csv: counselCSVText,
+      pick: pickCounselStudent,
+      selected: counselSelected,
+      countFor: counselCountFor,
+      remap: remapCounselBackup,
+      dateLabel: counselDateLabel,
+      setTab: setAdminTab,
+      download: downloadCounselCSV
     },
     admin: {
       account: adminAccount,
