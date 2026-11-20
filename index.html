@@ -733,6 +733,140 @@
     .rp-mrow .rp-mname{flex:0 0 62px}
     .rp-mrow .rp-pct{flex:0 0 34px}
   }
+
+  /* =====================================================================
+     📱 폰(≤760px) 전용 레이아웃 — 위/아래 규칙 중 761px 이상(태블릿·PC)은
+     이 블록의 영향을 받지 않습니다. 오직 폰 화면에서만 적용됩니다.
+     · 상단 바 2줄: 도장명+음소거 / 등원·하원 토글 + 출석·관리자 전환
+     · 출석 화면: 카메라 → 번호 키패드 → 문자 로그 세로 1열, 넘침 0
+     ===================================================================== */
+  @media (max-width:760px){
+    /* ---------- 상단 바: 두 줄 컴팩트 ---------- */
+    body{overscroll-behavior:none}
+    .topbar{
+      height:auto; display:grid; gap:6px 8px; padding:6px 10px 8px;
+      padding-top:calc(6px + env(safe-area-inset-top));
+      grid-template-columns:minmax(0,1fr) auto;
+      grid-template-areas:"brand mute" "mode tabs";
+    }
+    .brand{grid-area:brand; flex-direction:row; align-items:center; gap:8px; width:100%}
+    .brand-mark{width:34px; height:34px; border-radius:10px; font-size:18px}
+    .brand-txt{flex:1; min-width:0; width:auto}
+    .dojo-name{width:100%; max-width:100%; font-size:15.5px; letter-spacing:-.4px; padding:1px 3px; border-radius:7px; text-overflow:ellipsis}
+    .brand-sub{display:none}
+    .today-pill{display:none}
+    .clock{display:none}
+    #mute-btn{grid-area:mute; width:36px; height:36px; border-radius:11px; font-size:15px; align-self:center}
+    .mode-toggle{grid-area:mode; width:100%; gap:3px; padding:3px; border-radius:12px}
+    .mode-btn{flex:1; padding:9px 8px; font-size:13.5px; border-radius:9px; min-height:38px}
+    .tabs{grid-area:tabs; gap:3px; padding:3px; border-radius:12px; justify-self:end}
+    .tab-btn{padding:8px 10px; font-size:12px; border-radius:8px; min-height:38px}
+
+    /* ---------- 출석(키오스크) 화면: 세로 1열 ---------- */
+    #view-attendance{padding:8px; gap:8px}
+    #view-attendance.active{
+      display:flex; flex-direction:column; gap:8px;
+      height:100%; min-height:0; overflow-y:auto; overflow-x:hidden;
+      -webkit-overflow-scrolling:touch;
+    }
+    .cam-card, .touch-card, .log-card{min-width:0}
+    .cam-card{flex:0 0 auto}
+    .side{flex:1 1 auto; min-height:0; gap:8px}
+
+    /* 카메라 카드 */
+    .cam-card .card-head{padding:6px 10px 6px; gap:6px; flex-wrap:nowrap}
+    #view-attendance .card-title{font-size:12.5px; gap:5px; letter-spacing:-.2px; min-width:0}
+    #view-attendance .card-title .dot{width:6px; height:6px}
+    #cam-head-note{display:none}
+    .ai-chip{font-size:9.5px; padding:2px 7px}
+    .stage{flex:0 0 auto; height:clamp(76px,10.5dvh,112px); margin:0 9px; border-radius:13px}
+    .stage-ph{gap:4px; padding:9px 10px 22px}
+    .stage-ph .ph-icon{display:none}
+    .stage-ph p{font-size:10.5px; line-height:1.4; max-width:250px; font-weight:700}
+    .stage-ph .ph-sub{display:none}
+    .stage-hud{left:7px; bottom:7px; padding:3px 8px; font-size:9.5px; gap:5px}
+    .stage-tip{display:none}
+    .cam-bar{flex-wrap:wrap; gap:6px; padding:7px 9px 9px}
+    .cam-status{flex:1 1 100%; font-size:10px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .cam-bar .btn{flex:1 1 auto; min-width:0; padding:8px 6px; font-size:11px; border-radius:10px; min-height:38px; letter-spacing:-.3px}
+
+    /* 터치 출석 카드: 키패드가 한 손에 닿는 크기로 */
+    .touch-card{flex:0 0 auto; min-height:0}
+    .touch-card .card-head{padding:6px 10px 6px}
+    .touch-tabs{padding:6px 10px 0; gap:5px}
+    .touch-tab{font-size:11.5px; padding:7px 4px; border-radius:10px; min-height:36px}
+    .touch-body{padding:8px 10px 10px}
+    .pin-slots{gap:8px; margin:0 0 8px}
+    .pin-slot{width:min(64px,18vw); height:clamp(38px,5dvh,44px); font-size:21px; border-radius:12px}
+    .keypad{gap:6px}
+    .key{height:auto; min-height:clamp(44px,5.4dvh,50px); font-size:20px; border-radius:12px}
+    .key.fn{font-size:12.5px}
+    .key.fn.del{font-size:14.5px}
+    .pin-hint{font-size:10.5px; margin-top:6px; line-height:1.4}
+    .cand-list{gap:5px; margin-top:8px}
+    .search-input{height:46px; font-size:15px}
+    .stu-list{max-height:min(36dvh,250px)}
+    .stu-name{font-size:13.5px}
+
+    /* 문자 로그: 남는 높이를 모두 쓰고 안에서 스크롤 */
+    .log-card{flex:1 1 0; min-height:88px}
+    .log-card .card-head{padding:6px 10px 6px}
+    .log-scroll{padding:8px; gap:8px}
+    .sms-bubble{font-size:12px; padding:9px 11px 7px}
+    .log-empty{padding:16px 12px; font-size:11.5px}
+
+    /* 하단 공개 정보 바: 한 줄 가로 스크롤 */
+    .kiosk-info{grid-column:auto; flex:0 0 auto; gap:7px; overflow-x:auto; scrollbar-width:none}
+    .kiosk-info::-webkit-scrollbar{display:none}
+    .ki{padding:5px 9px; gap:7px; border-radius:11px; flex:0 0 auto; max-width:88vw}
+    .ki-label{font-size:9.5px; letter-spacing:-.3px}
+    .ki-chip{font-size:9.5px; padding:2px 6px}
+    .ki-num{font-size:13px}
+    .ki-body{gap:5px}
+
+    /* ---------- 관리자 화면 폰 정리 ---------- */
+    #view-admin{padding:10px 10px 32px}
+    .admin-lockbar{padding:7px 9px; font-size:11px; gap:7px; border-radius:10px}
+    .admin-pw-banner{padding:9px 10px; font-size:11px; gap:7px; line-height:1.45}
+    .stats{gap:8px; margin-bottom:10px}
+    .stat{padding:10px 11px; border-radius:13px}
+    .stat-label{font-size:10.5px}
+    .stat-val{font-size:23px}
+    .panel-head{padding:11px 12px; flex-wrap:wrap; gap:7px}
+    .panel-head h3{font-size:13px}
+    .panel-body{padding:11px 12px 13px}
+    .row2, .row3{grid-template-columns:1fr 1fr; gap:8px}
+    .field label{font-size:11px}
+    .help{font-size:11px; padding:10px 11px}
+    .modal{padding:18px 16px 14px; border-radius:16px; width:min(520px,92vw)}
+    .pick-grid{grid-template-columns:repeat(2,1fr); max-height:52vh}
+    .banner-card{width:min(560px,92vw); padding:24px 20px 22px}
+    .banner-name{font-size:26px}
+    .belt-head, .belt-row{grid-template-columns:16px 30px minmax(44px,1fr) 42px 48px 24px 24px 24px; gap:3px}
+    /* 표는 칸을 눌러 담지 말고 표 안에서 옆으로 넘겨 봄 */
+    #view-admin .tablewrap > table.tb{min-width:540px}
+    .tablewrap{-webkit-overflow-scrolling:touch}
+    .mon-tablewrap{max-height:min(58vh,520px)}
+    table.mtb .c-name{width:112px; min-width:112px; max-width:112px; padding:6px 7px}
+    .mon-label{font-size:15px; min-width:96px}
+    select.input.mon-select{min-width:140px}
+    .mon-search, input.input.pz-search{width:100%}
+    .cs-list{max-height:60vh}
+    .bs-grid{gap:10px}
+    .rp-mrow .rp-mname{flex:0 0 56px}
+    .rp-dbig{font-size:16px}
+    .dash-grid{grid-template-columns:1fr}
+  }
+
+  /* 아주 좁은 폰(≤400px)은 폼을 1열로 */
+  @media (max-width:400px){
+    .row2, .row3{grid-template-columns:1fr}
+    .brand-mark{width:30px; height:30px; font-size:16px}
+    .dojo-name{font-size:14.5px}
+    .mode-btn{font-size:13px; padding:8px 6px}
+    .tab-btn{font-size:11.5px; padding:8px 8px}
+    .stage{height:clamp(72px,9.5dvh,96px)}
+  }
 </style>
 </head>
 <body>
