@@ -318,6 +318,21 @@
   .chip.wait{background:#fff4e6; color:#a35b00}
   .chip.off{background:#fdecec; color:#c0392b}
   .chip.pause{background:#f1ecfb; color:#6b4fa8}
+  .chip.sib{background:#eaf3ff; color:#155e9c}
+  .sib-check{display:flex; align-items:center; gap:8px; height:42px; border:1.5px solid #dde3ee; border-radius:11px; padding:0 12px; background:#fbfcfe; font-size:12.5px; font-weight:800; color:#33405a; cursor:pointer; user-select:none; white-space:nowrap}
+  .sib-check input{width:17px; height:17px; accent-color:var(--navy); margin:0; flex:0 0 auto}
+  .sib-check.on{border-color:#8aa4ff; background:#f2f6ff; color:#1b2a5b}
+  .fee-calc{margin:0 0 11px; font-size:12px; font-weight:800; color:#155e9c; background:#f2f7ff; border:1px solid #dfe9fb; border-radius:11px; padding:9px 12px; line-height:1.55}
+  .fee-calc b{color:#1b2a5b}
+  .fee-calc .dc{color:#0b7a55}
+  .fee-calc.muted{color:#8a94a6; background:#f8fafd; border-color:#eef1f6; font-weight:700}
+  .tu-dedcell{display:flex; flex-direction:column; gap:4px}
+  .tu-ded{width:88px; text-align:right; font-variant-numeric:tabular-nums; font-weight:800}
+  .tu-ded-reason{width:100%; min-width:108px; height:29px; font-size:11.5px; padding:0 9px}
+  .tu-charge{font-variant-numeric:tabular-nums; font-weight:800; color:#1b2a5b; white-space:nowrap}
+  .tu-charge small{display:block; font-size:10px; font-weight:700; color:#0b7a55}
+  .tu-charge.zero{color:#c0392b}
+  .tu-tablewrap > table.tub{min-width:1000px}
   .empty-row td{text-align:center; color:#9aa4b5; padding:22px; font-weight:600}
 
   .field{margin-bottom:11px}
@@ -1038,7 +1053,7 @@
               </div>
               <div class="tablewrap">
                 <table class="tb">
-                  <thead><tr><th>관원</th><th>반 / 시간</th><th>등원</th><th>하원</th><th>문자</th></tr></thead>
+                  <thead><tr><th>관원</th><th>부서 · 수업</th><th>등원</th><th>하원</th><th>문자</th></tr></thead>
                   <tbody id="att-table"></tbody>
                 </table>
               </div>
@@ -1053,7 +1068,18 @@
                   <div class="field"><label>보호자 연락처</label><input class="input" id="f-phone" placeholder="010-1234-5678" inputmode="tel"></div>
                 </div>
                 <div class="row3">
-                  <div class="field"><label>반 / 시간</label><input class="input" id="f-class" placeholder="예: 초등 1부 (월수금 5:00)"></div>
+                  <div class="field"><label>부서</label>
+                    <select class="input" id="f-division">
+                      <option>유치부</option><option>초등부</option><option>중등부</option><option>고등부</option><option>성인부</option>
+                    </select>
+                  </div>
+                  <div class="field"><label>수업 (횟수 · 과정)</label>
+                    <select class="input" id="f-course">
+                      <option value="">수업 선택</option>
+                      <option>8회</option><option>12회</option><option>16회</option>
+                      <option>시범단</option><option>선수단</option><option>입시반</option>
+                    </select>
+                  </div>
                   <div class="field"><label>띠</label>
                     <select class="input" id="f-belt">
                       <option>흰띠</option><option>노란띠</option><option>주황띠</option><option>초록띠</option>
@@ -1061,13 +1087,19 @@
                       <option>품띠</option><option>검정띠</option>
                     </select>
                   </div>
-                  <div class="field"><label>누적 출석(회)</label><input class="input" id="f-count" type="number" min="0" step="1" value="0" inputmode="numeric"></div>
                 </div>
                 <div class="row3">
+                  <div class="field"><label>누적 출석(회)</label><input class="input" id="f-count" type="number" min="0" step="1" value="0" inputmode="numeric"></div>
                   <div class="field"><label>급수 (비우면 띠 기준 자동)</label><input class="input" id="f-grade" list="grade-list" placeholder="예: 7급, 품, 단"></div>
                   <div class="field"><label>현재 품·단</label><select class="input" id="f-poomdan"></select></div>
-                  <div class="field"><label>월 원비 (비우면 기본 원비)</label><input class="input" id="f-fee" type="number" min="0" step="1000" inputmode="numeric" placeholder="예: 150000"></div>
                 </div>
+                <div class="row2">
+                  <div class="field"><label>월 원비 (원) · 자동 계산</label><input class="input" id="f-fee" type="number" min="0" step="1000" inputmode="numeric" placeholder="수업을 고르면 자동" data-auto="1"></div>
+                  <div class="field"><label>형제 할인</label>
+                    <label class="sib-check" id="sib-wrap"><input type="checkbox" id="f-sibling"> 형제 할인 −10,000원</label>
+                  </div>
+                </div>
+                <div class="fee-calc muted" id="fee-calc">부서와 수업을 고르면 원비가 자동으로 계산됩니다.</div>
                 <div class="row3">
                   <div class="field"><label>상태</label>
                     <select class="input" id="f-status">
@@ -1094,7 +1126,7 @@
                     <span class="tiny-note" id="stu-filter-note"></span>
                   </div>
                   <table class="tb">
-                    <thead><tr><th>이름</th><th>반 / 시간</th><th>띠</th><th>보호자</th><th>얼굴</th><th style="width:132px"></th></tr></thead>
+                    <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>보호자</th><th>얼굴</th><th style="width:132px"></th></tr></thead>
                     <tbody id="stu-table"></tbody>
                   </table>
                 </div>
@@ -1452,9 +1484,12 @@
               <button class="btn btn-ghost btn-sm" id="mon-this" style="margin-left:4px">이번 달</button>
             </div>
             <div class="spacer"></div>
-            <select class="input mon-select" id="mon-class" aria-label="반 필터"><option value="all">전체 반</option></select>
+            <select class="input mon-select" id="mon-class" aria-label="부서 필터"><option value="all">전체 부서</option></select>
             <input class="input mon-search" id="mon-search" placeholder="🔍 이름·초성 검색" autocomplete="off" aria-label="관원 이름 검색">
             <button class="btn btn-primary" id="btn-mon-csv">📥 월간 출석부 CSV 다운로드</button>
+            <button class="btn" id="btn-att-import">📥 출결 엑셀 동기화</button>
+            <button class="btn btn-ghost" id="btn-att-template">📄 출결 양식 CSV</button>
+            <input type="file" id="att-import-file" accept=".csv,.xlsx,.xls,text/csv" style="display:none" aria-label="출결기록 파일 선택">
           </div>
 
           <div class="stats mon-stats">
@@ -1484,7 +1519,8 @@
                 칸을 누르면 그 날 출석을 <b>켜고 끌 수 있어요</b>. 키오스크에서 못 찍은 날은 한 번 누르면 <b>주황색 ●</b>로 표시되고, 다시 누르면 지워집니다.
                 등·하원 시각이 있는 기록을 지울 때는 확인을 한 번 묻습니다.<br>
                 보정은 <b>이 출석부에만</b> 적용되고, 관원의 <b>누적 출석(회)</b>과 승급 진행률은 바뀌지 않아요. 승급 진행률까지 맞추려면 「👥 관원 명단 관리」의 <b>누적 출석(회)</b> 칸을 직접 고쳐 주세요.<br>
-                <b>평균 출석</b>은 그 달에 한 번이라도 출석한 관원을 기준으로 하고, <b>CSV</b>는 화면에 보이는 목록(반 필터·검색 결과) 그대로 내려받습니다.
+                <b>평균 출석</b>은 그 달에 한 번이라도 출석한 관원을 기준으로 하고, <b>CSV</b>는 화면에 보이는 목록(부서 필터·검색 결과) 그대로 내려받습니다.<br>
+                <b>📥 출결 엑셀 동기화</b>는 학원 관리 프로그램에서 내려받은 1년치 출결기록을 한 번에 옮겨 옵니다. <b>이름+날짜</b> 목록형과 <b>이름+1~31일</b> 달력형을 모두 읽고, 저장 전에 미리보기로 건수를 확인할 수 있어요.
               </div>
             </div>
           </div>
@@ -1499,7 +1535,7 @@
               <button class="btn btn-ghost btn-sm" id="tu-this" style="margin-left:4px">이번 달</button>
             </div>
             <div class="spacer"></div>
-            <select class="input mon-select" id="tu-class" aria-label="반 필터"><option value="all">전체 반</option></select>
+            <select class="input mon-select" id="tu-class" aria-label="부서 필터"><option value="all">전체 부서</option></select>
             <input class="input mon-search" id="tu-search" placeholder="🔍 이름·초성 검색" autocomplete="off" aria-label="관원 이름 검색">
             <button class="btn" id="btn-tu-settings">⚙️ 원비 설정</button>
             <button class="btn btn-primary" id="btn-tu-csv">📥 원비 내역 CSV 다운로드</button>
@@ -1564,9 +1600,11 @@
                   <tr>
                     <th style="width:28px"><input type="checkbox" class="ck" id="tu-check-all" aria-label="전체 선택"></th>
                     <th>관원</th>
-                    <th style="width:104px">월 원비</th>
-                    <th style="width:104px">납부 상태</th>
-                    <th style="width:138px">납부일</th>
+                    <th style="width:104px">기본 원비</th>
+                    <th style="width:190px">차감 (금액 · 사유)</th>
+                    <th style="width:112px">실 청구액</th>
+                    <th style="width:96px">납부 상태</th>
+                    <th style="width:134px">납부일</th>
                     <th style="width:196px">결제 수단</th>
                     <th>메모</th>
                     <th style="width:158px"></th>
@@ -1579,8 +1617,9 @@
               <div class="help" style="margin-top:0">
                 <b>결제 수단을 누르면 바로 완납</b>으로 처리되고 납부일이 오늘로 찍힙니다. 이미 완납된 관원은 누른 수단으로 바뀌기만 해요.
                 칸에서 금액·납부일·메모를 직접 고칠 수 있고, <b>✅ 완납</b>으로 미납↔완납을 오갈 수 있습니다(미납으로 되돌리면 납부일·수단이 지워집니다).
+                <b>차감</b> 칸에 금액과 사유(예: 결석 2회, 이월 정산)를 적으면 <b>실 청구액 = 기본 원비 − 차감</b>으로 바로 다시 계산되고, 위 요약·수납 리포트·CSV까지 함께 바뀝니다.<br>
                 <b>면제·휴원</b>은 예상 원비·수납률 계산에서 빠집니다.<br>
-                위 <b>수단별 집계</b>는 반 필터·검색 기준이고, 수단 칩을 누르면 그 수단으로 낸 관원만 표에 남습니다(다시 누르면 해제).
+                위 <b>수단별 집계</b>는 부서 필터·검색 기준이고, 수단 칩을 누르면 그 수단으로 낸 관원만 표에 남습니다(다시 누르면 해제).
                 안내 문자는 도장폰 무료문자 설정을 그대로 쓰며, 금액이 들어가므로 <b>출석 화면의 학부모 로그에는 나오지 않고</b> 여기 관리자 로그에만 쌓입니다.
               </div>
             </div>
@@ -1623,8 +1662,8 @@
             </div>
             <div class="admin-col">
               <div class="panel">
-                <div class="panel-head"><h3>🏷️ 반별 수납 소계</h3></div>
-                <div class="tablewrap"><table class="tb rp-tab"><thead><tr><th>반</th><th class="rp-num">인원</th><th class="rp-num">수납액</th></tr></thead><tbody id="rp-class"></tbody></table></div>
+                <div class="panel-head"><h3>🏷️ 부서별 수납 소계</h3></div>
+                <div class="tablewrap"><table class="tb rp-tab"><thead><tr><th>부서</th><th class="rp-num">인원</th><th class="rp-num">수납액</th></tr></thead><tbody id="rp-class"></tbody></table></div>
               </div>
               <div class="panel">
                 <div class="panel-head"><h3>🥋 띠별 수납 소계</h3></div>
@@ -1648,7 +1687,7 @@
             <div class="panel-head"><h3>🧾 관원별 수납 내역</h3><div class="spacer"></div><span class="tiny-note" id="rp-note">-</span></div>
             <div class="tablewrap tu-tablewrap">
               <table class="tb rp-tab">
-                <thead><tr><th>관원</th><th>반</th><th>띠</th><th class="rp-num">원비 단가</th><th>결제수단</th><th>납부일</th><th>상태</th><th class="rp-num">수납액</th></tr></thead>
+                <thead><tr><th>관원</th><th>부서 · 수업</th><th>띠</th><th class="rp-num">기본 원비</th><th class="rp-num">차감</th><th>결제수단</th><th>납부일</th><th>상태</th><th class="rp-num">수납액</th></tr></thead>
                 <tbody id="rp-table"></tbody>
               </table>
             </div>
@@ -1674,8 +1713,8 @@
                 <div class="bs-count" id="bs-count">선택 0명 (발송 가능 0명)</div>
                 <div class="bs-quick">
                   <button class="btn btn-sm" id="btn-bs-all">전체 선택</button>
-                  <select class="input bs-select" id="bs-class" aria-label="반 선택"><option value="all">전체 반</option></select>
-                  <button class="btn btn-sm" id="btn-bs-class">반별 선택</button>
+                  <select class="input bs-select" id="bs-class" aria-label="부서 선택"><option value="all">전체 부서</option></select>
+                  <button class="btn btn-sm" id="btn-bs-class">부서별 선택</button>
                   <select class="input bs-select" id="bs-belt" aria-label="띠 선택"><option value="all">전체 띠</option></select>
                   <button class="btn btn-sm" id="btn-bs-belt">띠별 선택</button>
                   <button class="btn btn-sm" id="btn-bs-absent">미등원자만</button>
@@ -1698,10 +1737,10 @@
                   <input class="input" id="bs-tpl-name" placeholder="템플릿 이름 (예: 여름방학 안내)" maxlength="24" autocomplete="off">
                   <button class="btn btn-sm" id="btn-bs-tpl-save">템플릿으로 저장</button>
                 </div>
-                <textarea class="input bs-text" id="bs-text" rows="7" placeholder="보낼 문구를 적어 주세요. {도장명} {이름} {반} {띠} 를 넣으면 관원마다 다르게 채워집니다."></textarea>
+                <textarea class="input bs-text" id="bs-text" rows="7" placeholder="보낼 문구를 적어 주세요. {도장명} {이름} {부서} {수업} {띠} 를 넣으면 관원마다 다르게 채워집니다."></textarea>
                 <div class="bs-meta">
                   <span class="bs-badge" id="bs-type">단문 SMS (90B 이내)</span>
-                  <span class="bs-vars">치환 변수 · {도장명} {이름} {반} {띠}</span>
+                  <span class="bs-vars">치환 변수 · {도장명} {이름} {부서} {수업} {반} {띠}</span>
                 </div>
                 <div class="bs-preview" id="bs-preview"></div>
                 <div class="bs-send-row">
@@ -1725,7 +1764,7 @@
             </div>
             <div class="panel-body" style="border-top:1px solid #eef1f6">
               <div class="help" style="margin-top:0">
-                고른 관원마다 <b>{이름}·{반}·{띠}·{도장명}</b>이 그 관원 정보로 채워져 발송됩니다. 연락처가 없는 관원은 목록에서 <b>번호 없음</b>으로 표시되고 발송 대상에서 빠집니다.<br>
+                고른 관원마다 <b>{이름}·{부서}·{수업}·{띠}·{도장명}</b>이 그 관원 정보로 채워져 발송됩니다. 연락처가 없는 관원은 목록에서 <b>번호 없음</b>으로 표시되고 발송 대상에서 빠집니다.<br>
                 단체문자는 도장폰 무료문자 설정(웹훅)을 그대로 쓰고 <b>0.7초 간격으로 한 명씩</b> 나가며, 자동발송이 꺼져 있거나 웹훅이 없으면 로그에 기록되고 각 줄의 <b>📲 문자</b> 버튼으로 직접 보낼 수 있어요.<br>
                 보낸 내역은 <b>관리자 로그에만</b> 쌓이고, 출석 화면(학부모 대기 화면)에는 나오지 않습니다.
               </div>
@@ -1866,12 +1905,12 @@
   };
 
   var SAMPLE_STUDENTS = [
-    { id: 's1', name: '김민준', className: '초등 1부 (월수금 5:00)', belt: '파란띠', phone: '010-2345-6789', attendCount: 22, poomDan: '없음', targetPoomDan: '1품', gukStatus: 'target' },
-    { id: 's2', name: '이서연', className: '유치부 (화목 4:00)', belt: '노란띠', phone: '010-3456-7890', attendCount: 8, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
-    { id: 's3', name: '박지호', className: '초등 2부 (월수금 6:00)', belt: '빨간띠', phone: '010-4567-8901', attendCount: 17, poomDan: '1품', targetPoomDan: '2품', gukStatus: 'docs' },
-    { id: 's4', name: '최수아', className: '초등 1부 (월수금 5:00)', belt: '초록띠', phone: '010-5678-9012', attendCount: 20, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
-    { id: 's5', name: '정도윤', className: '중등부 (화목 7:00)', belt: '검정띠', phone: '010-6789-0123', attendCount: 26, poomDan: '2단', targetPoomDan: '3단', gukStatus: 'applied' },
-    { id: 's6', name: '한유진', className: '유치부 (화목 4:00)', belt: '흰띠', phone: '010-7890-1234', attendCount: 4, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' }
+    { id: 's1', name: '김민준', division: '초등부', course: '16회', siblingDiscount: false, belt: '파란띠', phone: '010-2345-6789', attendCount: 22, poomDan: '없음', targetPoomDan: '1품', gukStatus: 'target' },
+    { id: 's2', name: '이서연', division: '유치부', course: '8회', siblingDiscount: true, belt: '노란띠', phone: '010-3456-7890', attendCount: 8, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
+    { id: 's3', name: '박지호', division: '초등부', course: '12회', siblingDiscount: false, belt: '빨간띠', phone: '010-4567-8901', attendCount: 17, poomDan: '1품', targetPoomDan: '2품', gukStatus: 'docs' },
+    { id: 's4', name: '최수아', division: '초등부', course: '입시반', siblingDiscount: false, belt: '초록띠', phone: '010-5678-9012', attendCount: 20, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
+    { id: 's5', name: '정도윤', division: '고등부', course: '선수단', siblingDiscount: false, belt: '검정띠', phone: '010-6789-0123', attendCount: 26, poomDan: '2단', targetPoomDan: '3단', gukStatus: 'applied' },
+    { id: 's6', name: '한유진', division: '유치부', course: '시범단', siblingDiscount: false, belt: '흰띠', phone: '010-7890-1234', attendCount: 4, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' }
   ];
 
   var BELT_ORDER = ['흰띠', '노란띠', '주황띠', '초록띠', '파란띠', '보라띠', '갈색띠', '빨간띠', '품띠', '검정띠'];
@@ -1896,6 +1935,91 @@
   var TUITION_STATUS_ORDER = ['unpaid', 'paid', 'exempt'];
   var TUITION_METHODS = ['카드', '현금', '입금'];
   var TUITION_METHOD_ICON = { '카드': '💳', '현금': '💵', '입금': '🏦' };
+
+  /* =========================================================
+     부서(유치부~성인부) · 수업(8회/12회/16회/시범단/선수단/입시반) · 형제할인
+     원비 = 수업 기준 단가 − (형제할인 10,000원)   [최소 0원]
+     · 관원별 월 원비(monthlyFee)를 직접 넣으면 그 금액이 우선한다(수동 수정).
+     ========================================================= */
+  var DIVISIONS = ['유치부', '초등부', '중등부', '고등부', '성인부'];
+  var COURSES = ['8회', '12회', '16회', '시범단', '선수단', '입시반'];
+  var SIBLING_DISCOUNT = 10000;
+  var COURSE_FEES = { '8회': 160000, '12회': 180000, '16회': 200000, '시범단': 200000, '선수단': 220000 };
+  var EXAM_FEES = { '유치부': 300000, '초등부': 300000, '중등부': 400000, '고등부': 400000, '성인부': 300000 };
+
+  function normalizeDivision(v) {
+    var s = String(v == null ? '' : v).trim();
+    return DIVISIONS.indexOf(s) !== -1 ? s : '';
+  }
+  function normalizeCourse(v) {
+    var s = String(v == null ? '' : v).trim();
+    return COURSES.indexOf(s) !== -1 ? s : '';
+  }
+  /* 예전 반/시간 이름에서 부서만 뽑아낸다 (마이그레이션용) */
+  function divisionFromText(txt) {
+    var t = String(txt == null ? '' : txt);
+    if (/유치/.test(t)) { return '유치부'; }
+    if (/초등/.test(t)) { return '초등부'; }
+    if (/중등/.test(t)) { return '중등부'; }
+    if (/고등/.test(t)) { return '고등부'; }
+    if (/성인|어른|일반/.test(t)) { return '성인부'; }
+    return '';
+  }
+  function divisionOf(s) {
+    var d = normalizeDivision(s && s.division);
+    if (d) { return d; }
+    return divisionFromText(s && s.className) || '초등부';
+  }
+  function courseOf(s) { return normalizeCourse(s && s.course); }
+  function siblingOf(s) { return !!(s && s.siblingDiscount); }
+  function courseBaseFee(division, course) {
+    var c = normalizeCourse(course);
+    if (!c) { return 0; }
+    if (c === '입시반') { return EXAM_FEES[normalizeDivision(division) || '초등부'] || 300000; }
+    return COURSE_FEES[c] || 0;
+  }
+  function calcMonthlyFee(division, course, sibling) {
+    var base = courseBaseFee(division, course);
+    if (base <= 0) { return 0; }
+    return Math.max(0, base - (sibling ? SIBLING_DISCOUNT : 0));
+  }
+  /* 초등부 + 입시반 → '초등입시반' 처럼 부서를 붙여 보여 준다 */
+  function courseLabel(division, course) {
+    var c = normalizeCourse(course);
+    if (c !== '입시반') { return c; }
+    var d = normalizeDivision(division) || '초등부';
+    return (d === '유치부' || d === '성인부') ? (d + ' 입시반') : (d.slice(0, 2) + '입시반');
+  }
+  function studentLabel(s) {
+    if (!s) { return ''; }
+    var d = divisionOf(s);
+    var c = courseLabel(s.division, s.course);
+    return c ? (d + ' · ' + c) : d;
+  }
+  function divisionRank(d) { var i = DIVISIONS.indexOf(d); return i < 0 ? 99 : i; }
+  function courseRank(c) { var i = COURSES.indexOf(c); return i < 0 ? 99 : i; }
+  /* 명단 정렬: 부서(유치부→성인부) → 수업(8회→입시반) → 이름 */
+  function rosterSort(a, b) {
+    var da = divisionRank(divisionOf(a)), db = divisionRank(divisionOf(b));
+    if (da !== db) { return da - db; }
+    var ca = courseRank(courseOf(a)), cb = courseRank(courseOf(b));
+    if (ca !== cb) { return ca - cb; }
+    return String(a.name).localeCompare(String(b.name), 'ko');
+  }
+  function siblingBadge(s) {
+    return siblingOf(s)
+      ? '<span class="chip sib" title="형제 할인 10,000원 적용">형제 −1만</span>'
+      : '';
+  }
+  function feeInfoOf(s) {
+    var division = divisionOf(s), course = courseOf(s), sibling = siblingOf(s);
+    return {
+      division: division, course: course,
+      base: courseBaseFee(division, course),
+      discount: sibling ? SIBLING_DISCOUNT : 0,
+      total: calcMonthlyFee(division, course, sibling)
+    };
+  }
 
   function defaultBelts(th) {
     var t = Math.max(1, parseInt(th, 10) || 20);
@@ -2031,7 +2155,9 @@
     if (isChosungQuery(q)) {
       if (toChosung(name).indexOf(q) !== -1) { return true; }
     }
-    if ((student.className || '').replace(/\s+/g, '').indexOf(q) !== -1) { return true; }
+    var hay = [divisionOf(student), courseLabel(student.division, student.course), String(student.className || '')]
+      .join(' ').replace(/\s+/g, '');
+    if (hay.indexOf(q) !== -1) { return true; }
     return false;
   }
 
@@ -2062,10 +2188,18 @@
       return {
         id: s.id || ('s' + (i + 1) + '_' + Math.random().toString(36).slice(2, 6)),
         name: String(s.name || '').trim(),
+        // 예전 '반/시간'은 이름만 남겨 두고(복구 호환), 화면·집계는 부서·수업을 쓴다
         className: String(s.className || '').trim(),
+        division: normalizeDivision(s.division) || divisionFromText(s.className) || '초등부',
+        course: normalizeCourse(s.course),
+        siblingDiscount: (s.siblingDiscount === true || s.siblingDiscount === 1 ||
+          s.siblingDiscount === '1' || s.siblingDiscount === 'true' || s.siblingDiscount === 'TRUE' ||
+          s.siblingDiscount === '예' || s.siblingDiscount === 'Y' || s.siblingDiscount === 'y' ||
+          s.siblingDiscount === 'on' || s.siblingDiscount === 'O'),
         belt: String(s.belt || '').trim() || '흰띠',
         phone: String(s.phone || '').trim(),
         attendCount: Math.max(0, parseInt(s.attendCount, 10) || 0),
+        lastAttendanceDate: isDateKey(s.lastAttendanceDate) ? String(s.lastAttendanceDate) : '',
         grade: String(s.grade || '').trim(),
         poomDan: String(s.poomDan || '없음').trim(),
         targetPoomDan: String(s.targetPoomDan || '없음').trim(),
@@ -2236,10 +2370,11 @@
         Object.keys(day).forEach(function (sid) {
           var e = day[sid];
           if (!e || typeof e !== 'object') { return; }
-          var rec = {
-            inTime: String(e.inTime || '').trim().slice(0, 5),
-            outTime: String(e.outTime || '').trim().slice(0, 5)
-          };
+          var rec = {};
+          var inT = String(e.inTime || '').trim().slice(0, 5);
+          var outT = String(e.outTime || '').trim().slice(0, 5);
+          if (inT) { rec.inTime = inT; }
+          if (outT) { rec.outTime = outT; }
           if (e.manual) { rec.manual = true; }
           if (e.src) { rec.src = String(e.src); }
           if (e.updatedAt) { rec.updatedAt = String(e.updatedAt); }
@@ -2262,7 +2397,7 @@
     if (!isDateKey(dateKey) || !sid) { return null; }
     patch = patch || {};
     var day = app.attendance[dateKey] || (app.attendance[dateKey] = {});
-    var cur = day[sid] || { inTime: '', outTime: '' };
+    var cur = day[sid] || {};
     if (patch.inTime !== undefined) { cur.inTime = String(patch.inTime || '').slice(0, 5); }
     if (patch.outTime !== undefined) { cur.outTime = String(patch.outTime || '').slice(0, 5); }
     if (patch.manual !== undefined) { cur.manual = !!patch.manual; }
@@ -2478,7 +2613,7 @@
       '<div class="banner-badge">' + (isIn ? '👊' : '🏠') + '</div>' +
       '<div class="banner-kicker">' + (isIn ? '등원 완료' : '하원 완료') + '</div>' +
       '<h2 class="banner-name">' + esc(student.name) + '<small>관원</small></h2>' +
-      '<div class="banner-time">' + timeStr + ' · ' + esc(student.className || '반 미지정') + '</div>' +
+      '<div class="banner-time">' + timeStr + ' · ' + esc(studentLabel(student)) + '</div>' +
       '<div class="banner-sms"><span class="kk">📱</span>' +
       '<div class="kt" id="banner-sms-text">' + smsBannerText(entry) + '</div></div>' +
       '<div class="banner-tip">화면을 누르면 바로 닫힙니다</div>' +
@@ -2839,7 +2974,7 @@
         '<span class="stu-belt" style="background:' + beltColor(s.belt) + '"></span>' +
         '<span class="stu-main">' +
         '<span class="stu-name">' + esc(s.name) + statusBadge(s) + '</span>' +
-        '<span class="stu-sub">' + esc(s.className || '반 미지정') + (s.belt ? ' · ' + esc(s.belt) : '') + '</span>' +
+        '<span class="stu-sub">' + esc(studentLabel(s)) + (s.belt ? ' · ' + esc(s.belt) : '') + '</span>' +
         '</span>' +
         '<span class="stu-go">출석</span>' +
         '</button>';
@@ -2897,7 +3032,7 @@
       listEl.innerHTML = '<div class="tiny-note" style="margin:4px 0 2px">같은 번호가 ' + matches.length + '명이에요. 관원을 선택하세요.</div>' +
         matches.map(function (s) {
           return '<button class="cand" data-student="' + esc(s.id) + '">🥋 ' + esc(s.name) +
-            ' <span class="sub">' + esc(s.className || '') + '</span></button>';
+            ' <span class="sub">' + esc(studentLabel(s)) + '</span></button>';
         }).join('');
       playKey();
       return;
@@ -3088,7 +3223,7 @@
     var body = '<div class="pick-grid">' + app.students.map(function (s) {
       return '<button class="pick" data-pick="' + esc(s.id) + '">' +
         '<b>' + esc(s.name) + '</b><span>' + esc(s.belt || '') + '</span>' +
-        '<span>' + esc(s.className || '반 미지정') + '</span></button>';
+        '<span>' + esc(studentLabel(s)) + '</span></button>';
     }).join('') + '</div>';
     openModal({
       title: '카메라 앞에 설 관원을 선택하세요',
@@ -3761,7 +3896,7 @@
       var sent = todayLogsFor(s.id);
       return '<tr>' +
         '<td><div class="nm">' + esc(s.name) + '</div></td>' +
-        '<td><div class="sub">' + esc(s.className || '-') + (s.belt ? ' · ' + esc(s.belt) : '') + '</div></td>' +
+        '<td><div class="sub">' + esc(studentLabel(s)) + (s.belt ? ' · ' + esc(s.belt) : '') + '</div></td>' +
         '<td class="cell-time">' + (recInText(r) ? esc(recInText(r)) : '<span class="chip off">미등원</span>') + '</td>' +
         '<td class="cell-time">' + (recOutText(r) ? esc(recOutText(r)) : '<span class="chip">-</span>') + '</td>' +
         '<td>' + (sent ? '<span class="chip ok">' + sent + '건 발송</span>' : '<span class="chip wait">없음</span>') + '</td>' +
@@ -3820,7 +3955,7 @@
       return '<tr' + (paused ? ' class="paused-row"' : '') + '>' +
         '<td class="nm">' + esc(s.name) +
         (paused ? ' <span class="chip pause">휴관</span>' : '') + '</td>' +
-        '<td><span class="sub">' + esc(s.className || '-') + '</span></td>' +
+        '<td><div class="sub">' + esc(studentLabel(s)) + '</div>' + siblingBadge(s) + '</td>' +
         '<td><span class="chip">' + esc(s.belt || '-') + (studentGrade(s) ? ' · ' + esc(studentGrade(s)) : '') + '</span></td>' +
         '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
         '<td>' + faceCell(s) + '</td>' +
@@ -3944,20 +4079,60 @@
     });
   }
 
+  /* 부서·수업·형제할인 → 월 원비 자동 계산 + 계산식 표시 */
+  function updateFeeCalc() {
+    var box = el('fee-calc');
+    var feeEl = el('f-fee');
+    var division = normalizeDivision(el('f-division') ? el('f-division').value : '') || '초등부';
+    var course = normalizeCourse(el('f-course') ? el('f-course').value : '');
+    var sibling = !!(el('f-sibling') && el('f-sibling').checked);
+    var base = courseBaseFee(division, course);
+    var auto = calcMonthlyFee(division, course, sibling);
+    var isAuto = !feeEl || feeEl.getAttribute('data-auto') !== '0';
+    if (feeEl && isAuto) {
+      feeEl.value = auto ? String(auto) : '';
+      feeEl.setAttribute('data-auto', '1');
+    }
+    var wrap = el('sib-wrap');
+    if (wrap) { wrap.classList.toggle('on', sibling); }
+    if (!box) { return; }
+    if (!course) {
+      box.className = 'fee-calc muted';
+      box.innerHTML = '수업(횟수·과정)을 고르면 원비가 자동으로 계산됩니다.';
+      return;
+    }
+    var calcHtml = '<b>' + esc(courseLabel(division, course)) + '</b> ' + fmtWon(base) + '원';
+    if (sibling) { calcHtml += ' − 형제할인 ' + fmtWon(SIBLING_DISCOUNT) + '원'; }
+    calcHtml += ' = <span class="dc"><b>' + fmtWon(auto) + '원</b></span>';
+    if (!isAuto && feeEl) {
+      var typed = parseInt(String(feeEl.value || '').replace(/[,\s]/g, ''), 10);
+      if (!isNaN(typed) && typed >= 0) {
+        calcHtml += ' · 직접 입력 <b>' + fmtWon(typed) + '원</b>' +
+          (typed === auto ? '' : ' (자동 계산과 달라요)');
+      }
+    }
+    box.className = 'fee-calc';
+    box.innerHTML = calcHtml;
+  }
+
   function resetStudentForm() {
     app.editingId = '';
     el('edit-id').value = '';
     el('f-name').value = '';
     el('f-phone').value = '';
-    el('f-class').value = '';
+    if (el('f-division')) { el('f-division').value = '초등부'; }
+    if (el('f-course')) { el('f-course').value = ''; }
+    if (el('f-sibling')) { el('f-sibling').checked = false; }
     el('f-count').value = '0';
     el('f-grade').value = '';
     el('f-fee').value = '';
+    el('f-fee').setAttribute('data-auto', '1');
     if (el('f-status')) { el('f-status').value = 'active'; }
     if (el('f-paused-date')) { el('f-paused-date').value = ''; }
     if (el('f-pause-reason')) { el('f-pause-reason').value = ''; }
     renderBeltOptions('');
     renderPoomOptions('없음');
+    updateFeeCalc();
     el('btn-cancel-edit').style.display = 'none';
     el('btn-save-student').textContent = '관원 저장';
   }
@@ -3969,10 +4144,14 @@
     el('edit-id').value = id;
     el('f-name').value = s.name;
     el('f-phone').value = s.phone;
-    el('f-class').value = s.className;
+    if (el('f-division')) { el('f-division').value = divisionOf(s); }
+    if (el('f-course')) { el('f-course').value = courseOf(s); }
+    if (el('f-sibling')) { el('f-sibling').checked = siblingOf(s); }
     el('f-count').value = String(Number(s.attendCount) || 0);
     el('f-grade').value = s.grade || '';
     el('f-fee').value = (s.monthlyFee == null ? '' : String(s.monthlyFee));
+    el('f-fee').setAttribute('data-auto', s.monthlyFee == null ? '1' : '0');
+    updateFeeCalc();
     if (el('f-status')) { el('f-status').value = isPaused(s) ? 'paused' : 'active'; }
     if (el('f-paused-date')) { el('f-paused-date').value = isPaused(s) ? (s.pausedDate || '') : ''; }
     if (el('f-pause-reason')) { el('f-pause-reason').value = isPaused(s) ? (s.pauseReason || '') : ''; }
@@ -3987,14 +4166,22 @@
   function saveStudent() {
     var name = el('f-name').value.trim();
     var phone = normalizePhone(el('f-phone').value.trim());
-    var className = el('f-class').value.trim();
+    var division = normalizeDivision(el('f-division') ? el('f-division').value : '') || '초등부';
+    var course = normalizeCourse(el('f-course') ? el('f-course').value : '');
+    var siblingDiscount = !!(el('f-sibling') && el('f-sibling').checked);
     var belt = el('f-belt').value;
     var attendCount = Math.max(0, parseInt(el('f-count').value, 10) || 0);
     var grade = el('f-grade').value.trim();
     var poomDan = el('f-poomdan').value || '없음';
     var feeRaw = String(el('f-fee').value == null ? '' : el('f-fee').value).trim();
+    var feeAuto = el('f-fee').getAttribute('data-auto') !== '0';
+    if (feeAuto && feeRaw !== '') {
+      // 자동으로 채운 금액과 다른 값을 직접 넣었다면 그 금액을 관원 단가로 저장한다
+      var autoNow = calcMonthlyFee(division, course, siblingDiscount);
+      if ((parseInt(feeRaw.replace(/[,\s]/g, ''), 10) || 0) !== autoNow) { feeAuto = false; }
+    }
     var monthlyFee = null;
-    if (feeRaw !== '') {
+    if (!feeAuto && feeRaw !== '') {
       var feeVal = parseInt(feeRaw.replace(/[,\s]/g, ''), 10);
       if (isNaN(feeVal) || feeVal < 0) {
         toast('월 원비는 0원 이상 숫자로 입력해 주세요.'); el('f-fee').focus(); return;
@@ -4013,7 +4200,8 @@
     if (app.editingId) {
       var s = app.students.filter(function (x) { return x.id === app.editingId; })[0];
       if (s) {
-        s.name = name; s.phone = phone; s.className = className; s.belt = belt;
+        s.name = name; s.phone = phone; s.belt = belt;
+        s.className = ''; s.division = division; s.course = course; s.siblingDiscount = siblingDiscount;
         s.attendCount = attendCount; s.grade = grade; s.poomDan = poomDan;
         s.monthlyFee = monthlyFee;
         s.status = status;
@@ -4023,7 +4211,8 @@
       toast(name + ' 관원 정보를 수정했어요.' + (status === 'paused' ? ' (휴관생)' : ''));
     } else {
       app.students.push({
-        id: uid('stu'), name: name, phone: phone, className: className, belt: belt,
+        id: uid('stu'), name: name, phone: phone, className: '', belt: belt,
+        division: division, course: course, siblingDiscount: siblingDiscount, lastAttendanceDate: '',
         attendCount: attendCount, grade: grade, poomDan: poomDan,
         targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '', monthlyFee: monthlyFee,
         status: status, pausedDate: pausedDate, pauseReason: pauseReason
@@ -4836,7 +5025,7 @@
       var expected = app.settings.examDate && st.target ? '<div class="sub">' + esc(examDateText()) + '</div>' : '';
       return '<tr>' +
         '<td><input type="checkbox" class="ck" data-check="' + esc(s.id) + '"' + (sel[s.id] ? ' checked' : '') + ' aria-label="' + esc(s.name) + ' 선택"></td>' +
-        '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(s.className || '-') + '</div></td>' +
+        '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(studentLabel(s)) + '</div></td>' +
         '<td><span class="belt-badge"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span>' +
         (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
         '<td><div class="bar' + (st.target ? ' full' : '') + '"><i style="width:' + pct + '%"></i></div>' +
@@ -5106,28 +5295,25 @@
   function shortDate(dateKey) {
     return Number(dateKey.slice(5, 7)) + '월 ' + Number(dateKey.slice(8, 10)) + '일';
   }
+  /* 필터에 쓰는 부서 목록 (유치부 → 성인부 순) */
   function monthClasses() {
     var seen = Object.create(null), out = [];
     app.students.forEach(function (s) {
-      var c = String(s.className || '').trim();
-      if (!c || seen[c]) { return; }
-      seen[c] = true;
-      out.push(c);
+      var d = divisionOf(s);
+      if (!d || seen[d]) { return; }
+      seen[d] = true;
+      out.push(d);
     });
-    return out.sort(function (a, b) { return a.localeCompare(b, 'ko'); });
+    return out.sort(function (a, b) { return divisionRank(a) - divisionRank(b); });
   }
   function monthRows() {
     var m = app.monthly || {};
     var cls = m.className || 'all';
     var q = String(m.q || '').trim();
     return activeStudents().filter(function (s) {
-      if (cls !== 'all' && String(s.className || '').trim() !== cls) { return false; }
+      if (cls !== 'all' && divisionOf(s) !== cls) { return false; }
       return matchSearch(s, q);
-    }).sort(function (a, b) {
-      var ca = String(a.className || ''), cb = String(b.className || '');
-      if (ca !== cb) { return ca.localeCompare(cb, 'ko'); }
-      return a.name.localeCompare(b.name, 'ko');
-    });
+    }).sort(rosterSort);
   }
   function monthCellTitle(dateKey, e, future) {
     var head = shortDate(dateKey) + ' (' + DOW_KO[dowOf(dateKey)] + ')';
@@ -5159,7 +5345,7 @@
     var note = el('mon-note');
     if (!note) { return; }
     var label = ym.slice(0, 4) + '년 ' + pad2(parseInt(ym.slice(5, 7), 10)) + '월';
-    note.textContent = label + ' · ' + (filtered ? '필터 적용' : '전체 반') + ' · ' + count + '명';
+    note.textContent = label + ' · ' + (filtered ? '필터 적용' : '전체 부서') + ' · ' + count + '명';
   }
 
   function renderMonthly() {
@@ -5174,7 +5360,7 @@
     var sel = el('mon-class');
     var classes = monthClasses();
     if (sel) {
-      var want = '<option value="all">전체 반</option>' + classes.map(function (c) {
+      var want = '<option value="all">전체 부서</option>' + classes.map(function (c) {
         return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
       }).join('');
       if (sel.getAttribute('data-opts') !== want) {
@@ -5206,7 +5392,7 @@
 
     if (!rows.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="' + (days + 2) + '">' +
-        (app.students.length ? '조건에 맞는 관원이 없어요. 반 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다') +
+        (app.students.length ? '조건에 맞는 관원이 없어요. 부서 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다') +
         '</td></tr>';
       renderMonthStats(0, 0, [], 0);
       setMonthNote(ym, 0, filtered);
@@ -5239,11 +5425,11 @@
       else if (cnt === topDays && cnt > 0) { topNames.push(s.name); }
       var grade = studentGrade(s);
       return '<tr>' +
-        '<td class="c-name" title="' + esc(s.name + ' · ' + (s.className || '반 미지정') + (grade ? ' · ' + grade : '')) + '">' +
+        '<td class="c-name" title="' + esc(s.name + ' · ' + studentLabel(s) + (grade ? ' · ' + grade : '')) + '">' +
         '<div class="nm">' + esc(s.name) +
         '<span class="belt-badge mtb-belt"><i style="background:' + beltColor(s.belt) + '"></i>' +
         esc(s.belt || '미지정') + '</span></div>' +
-        '<div class="sub">' + esc(s.className || '반 미지정') + (grade ? ' · ' + esc(grade) : '') + '</div></td>' +
+        '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) + '</div></td>' +
         cells +
         '<td class="c-sum mtb-sum">' + cnt + '<small>일</small></td>' +
         '</tr>';
@@ -5311,7 +5497,7 @@
     return str;
   }
   function monthCSVText(ym, days, rows) {
-    var head = ['관원', '반', '띠'];
+    var head = ['관원', '부서', '수업', '띠', '형제할인'];
     for (var d = 1; d <= days; d++) {
       var dk = ym + '-' + pad2(d);
       head.push(d + '일(' + DOW_KO[dowOf(dk)] + ')');
@@ -5319,7 +5505,7 @@
     head.push('월 합계');
     var lines = [head.map(csvCell).join(',')];
     (rows || []).forEach(function (s) {
-      var line = [s.name, s.className || '', s.belt || ''];
+      var line = [s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', siblingOf(s) ? '형제' : ''];
       var cnt = 0;
       for (var i = 1; i <= days; i++) {
         var key = ym + '-' + pad2(i);
@@ -5354,12 +5540,520 @@
     var days = monthDaysOf(ym);
     var rows = monthRows();
     if (!rows.length) {
-      toast('이 달에 내려받을 관원이 없어요. 반 필터나 검색을 확인해 주세요.');
+      toast('이 달에 내려받을 관원이 없어요. 부서 필터나 검색을 확인해 주세요.');
       return;
     }
     var csv = monthCSVText(ym, days, rows);
     if (downloadFile('월간출석부_' + ym + '.csv', csv, 'text/csv;charset=utf-8')) {
       toast(rows.length + '명 · ' + ym + ' 월간 출석부를 내려받았어요');
+    }
+  }
+
+  /* =========================================================
+     11-E-2. 과거 출결기록 일괄 동기화 (엑셀 · CSV)
+     · 세로 목록형: 이름 + 날짜(YYYY-MM-DD / YYYY.MM.DD / 엑셀 일련번호) + (등원·하원·상태)
+     · 가로 달력형: 이름 + 1~31일(또는 날짜) 열 — O/○/✓/출석/1/시간 이면 출석
+     · 저장 전 미리보기 → 합치기(기본) / 교체 선택 → 누적 출석 재집계
+     ========================================================= */
+  var ATT_NAME_KEYS = ['이름', '성명', '관원명', '관원', '수련생', '학생', '회원명', '회원', '원생', 'name'];
+  var ATT_DATE_KEYS = ['날짜', '일자', '수업일', '출석일', '등원일', 'date', 'day'];
+  var ATT_IN_KEYS = ['등원시간', '등원시각', '등원', '입관', 'intime', 'in'];
+  var ATT_OUT_KEYS = ['하원시간', '하원시각', '하원', '퇴관', 'outtime', 'out'];
+  var ATT_STATUS_KEYS = ['상태', '출결', '출석상태', '구분', 'status', 'state'];
+
+  function attNormHeader(v) {
+    return String(v == null ? '' : v).toLowerCase().replace(/[\s()\[\]]/g, '');
+  }
+  function attNameKey(name) { return String(name == null ? '' : name).replace(/\s+/g, '').trim(); }
+  function attMakeDate(y, m, d) {
+    if (!(y >= 1900 && y <= 2100) || !(m >= 1 && m <= 12) || !(d >= 1 && d <= 31)) { return ''; }
+    var dt = new Date(y, m - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) { return ''; }
+    return y + '-' + pad2(m) + '-' + pad2(d);
+  }
+  /* 엑셀 날짜 일련번호(1900 체계) → YYYY-MM-DD */
+  function attSerialToDate(n) {
+    var ms = Date.UTC(1899, 11, 30) + Math.round(Number(n)) * 86400000;
+    var d = new Date(ms);
+    return attMakeDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  }
+  /* 여러 표기의 날짜를 YYYY-MM-DD 로 (실패하면 '') */
+  function attParseDate(v, fallbackMonth) {
+    if (v == null || v === '') { return ''; }
+    if (Object.prototype.toString.call(v) === '[object Date]') {
+      return attMakeDate(v.getFullYear(), v.getMonth() + 1, v.getDate());
+    }
+    if (typeof v === 'number') {
+      return (v > 20000 && v < 80000) ? attSerialToDate(v) : '';
+    }
+    var s = String(v).trim();
+    if (!s) { return ''; }
+    var fm = String(fallbackMonth || '');
+    if (/^\d{4,5}$/.test(s)) {
+      var serial = Number(s);
+      if (serial > 20000 && serial < 80000) { return attSerialToDate(serial); }
+    }
+    var m = s.match(/^(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})\s*일?/);
+    if (m) { return attMakeDate(Number(m[1]), Number(m[2]), Number(m[3])); }
+    if (/^\d{8}$/.test(s)) { return attMakeDate(Number(s.slice(0, 4)), Number(s.slice(4, 6)), Number(s.slice(6, 8))); }
+    m = s.match(/^(\d{1,2})\s*[.\-\/]\s*(\d{1,2})\s*일?$/);
+    if (m && fm) {
+      var ym = fm.split('-');
+      var a = Number(m[1]), b = Number(m[2]);
+      var mo = a > 12 ? b : a, dd = a > 12 ? a : b;
+      return attMakeDate(Number(ym[0]), mo, dd);
+    }
+    m = s.match(/^(\d{1,2})\s*월\s*(\d{1,2})\s*일?$/);
+    if (m && fm) { return attMakeDate(Number(fm.split('-')[0]), Number(m[1]), Number(m[2])); }
+    return '';
+  }
+  /* 시간 표기 → HH:MM (엑셀 시간 일련값 0~1 포함) */
+  function attTimeText(v) {
+    if (v == null || v === '') { return ''; }
+    if (typeof v === 'number') {
+      if (v > 0 && v < 1) {
+        var mins = Math.round(v * 1440);
+        return pad2(Math.floor(mins / 60) % 24) + ':' + pad2(mins % 60);
+      }
+      return '';
+    }
+    if (Object.prototype.toString.call(v) === '[object Date]') {
+      return pad2(v.getHours()) + ':' + pad2(v.getMinutes());
+    }
+    var s = String(v).trim();
+    var m = s.match(/(\d{1,2})\s*[:시]\s*(\d{1,2})/);
+    if (m) { return pad2(Number(m[1])) + ':' + pad2(Number(m[2])); }
+    return '';
+  }
+  /* 칸 하나의 의미 — 출석/결석/빈칸 */
+  function attCellState(v) {
+    if (v == null) { return null; }
+    if (typeof v === 'number') {
+      if (v === 0) { return null; }
+      if (v > 0 && v < 1) { return { present: true, inTime: attTimeText(v) }; }
+      return { present: true };
+    }
+    var s = String(v).trim();
+    if (!s) { return null; }
+    if (/^[-–—\s]+$/.test(s)) { return null; }
+    var span = s.match(/^(\d{1,2}[:시]\d{1,2})\s*[-~∼]\s*(\d{1,2}[:시]\d{1,2})$/);
+    if (span) { return { present: true, inTime: attTimeText(span[1]), outTime: attTimeText(span[2]) }; }
+    if (/^(결석|미출석|무단|결과|휴원|휴관|x|×|n|no|0)$/i.test(s)) { return { present: false }; }
+    var t = attTimeText(s);
+    if (t) { return { present: true, inTime: t }; }
+    if (/^(출석|등원|참석|o|○|●|✓|✔|√|v|y|예|on|true|1)$/i.test(s)) { return { present: true }; }
+    if (/결석/.test(s)) { return { present: false }; }
+    if (/출석|등원|참석/.test(s)) { return { present: true }; }
+    return null;
+  }
+  /* 머리글 칸이 '1일'·'11/05' 같은 날짜 열이면 그 정보를 돌려준다 */
+  function attDayFromHeader(v) {
+    if (v == null || v === '') { return null; }
+    if (typeof v === 'number') {
+      return (v >= 1 && v <= 31 && Math.round(v) === v) ? { day: Math.round(v), dateKey: '', month: 0 } : null;
+    }
+    var s = String(v).trim();
+    if (!s) { return null; }
+    var full = attParseDate(s, '');
+    if (full) { return { day: Number(full.slice(8, 10)), dateKey: full, month: Number(full.slice(5, 7)) }; }
+    var m = s.match(/^(\d{1,2})\s*일?$/);
+    if (m) {
+      var d = Number(m[1]);
+      if (d >= 1 && d <= 31) { return { day: d, dateKey: '', month: 0 }; }
+    }
+    m = s.match(/^(\d{1,2})\s*[.\-\/]\s*(\d{1,2})\s*일?$/);
+    if (m) {
+      var mo = Number(m[1]), dd = Number(m[2]);
+      if (mo >= 1 && mo <= 12 && dd >= 1 && dd <= 31) { return { day: dd, dateKey: '', month: mo }; }
+    }
+    m = s.match(/^(\d{1,2})\s*월\s*(\d{1,2})\s*일?$/);
+    if (m) {
+      var mo2 = Number(m[1]), dd2 = Number(m[2]);
+      if (mo2 >= 1 && mo2 <= 12 && dd2 >= 1 && dd2 <= 31) { return { day: dd2, dateKey: '', month: mo2 }; }
+    }
+    return null;
+  }
+  function attHeaderInfo(row) {
+    var info = { name: -1, date: -1, inTime: -1, outTime: -1, status: -1, days: [] };
+    (row || []).forEach(function (cell, i) {
+      var t = attNormHeader(cell);
+      if (!t) { return; }
+      if (info.name < 0 && ATT_NAME_KEYS.indexOf(t) !== -1) { info.name = i; return; }
+      if (info.date < 0 && ATT_DATE_KEYS.indexOf(t) !== -1) { info.date = i; return; }
+      if (info.inTime < 0 && ATT_IN_KEYS.indexOf(t) !== -1) { info.inTime = i; return; }
+      if (info.outTime < 0 && ATT_OUT_KEYS.indexOf(t) !== -1) { info.outTime = i; return; }
+      if (info.status < 0 && ATT_STATUS_KEYS.indexOf(t) !== -1) { info.status = i; return; }
+      var day = attDayFromHeader(cell);
+      if (day) { info.days.push({ index: i, day: day.day, dateKey: day.dateKey, month: day.month }); }
+    });
+    return info;
+  }
+  /* 파일 이름에서 연·월 추정: 2026년 3월, 2026-03, 26.03 … */
+  function attMonthFromFile(fileName) {
+    var s = String(fileName || '');
+    var m = s.match(/(20\d{2})\s*[년.\-_\/]?\s*(\d{1,2})\s*월/);
+    if (m) { return m[1] + '-' + pad2(Number(m[2])); }
+    m = s.match(/(20\d{2})[.\-_\/]?(0[1-9]|1[0-2])(?![0-9])/);
+    if (m) { return m[1] + '-' + m[2]; }
+    return '';
+  }
+
+  /* rows(2차원 배열) → { format, records[], names, dates, months, minDate, maxDate, skipped, needMonth } */
+  function parseAttendanceRows(rows, opts) {
+    opts = opts || {};
+    var out = {
+      format: 'none', records: [], nameCount: 0, dateCount: 0,
+      months: [], minDate: '', maxDate: '', skipped: 0, needMonth: false, headerRow: -1
+    };
+    var list = [];
+    (rows || []).forEach(function (r) {
+      if (!r) { return; }
+      var any = false;
+      for (var i = 0; i < r.length; i++) {
+        if (String(r[i] == null ? '' : r[i]).trim() !== '') { any = true; break; }
+      }
+      if (any) { list.push(r); }
+    });
+    if (!list.length) { return out; }
+
+    var info = null, headerRow = -1;
+    var limit = Math.min(list.length, 20);
+    for (var hi = 0; hi < limit; hi++) {
+      var cand = attHeaderInfo(list[hi]);
+      if (cand.name >= 0 && (cand.date >= 0 || cand.days.length >= 2)) { info = cand; headerRow = hi; break; }
+    }
+    if (!info) {
+      info = { name: 0, date: 1, inTime: 2, outTime: 3, status: -1, days: [] };
+      headerRow = -1;
+    }
+    out.headerRow = headerRow;
+    var fallbackMonth = /^\d{4}-\d{2}$/.test(String(opts.month || '')) ? String(opts.month) : '';
+    var seen = {};
+    var pushRec = function (name, dateKey, inTime, outTime) {
+      if (!dateKey || !name) { return; }
+      var key = attNameKey(name) + '|' + dateKey;
+      if (seen[key]) {
+        var prev = seen[key];
+        if (!prev.inTime && inTime) { prev.inTime = inTime; }
+        if (!prev.outTime && outTime) { prev.outTime = outTime; }
+        return;
+      }
+      var rec = { name: name, date: dateKey, inTime: inTime || '', outTime: outTime || '' };
+      seen[key] = rec;
+      out.records.push(rec);
+    };
+
+    var matrix = info.days.length >= 2 && info.date < 0;
+    out.format = matrix ? 'matrix' : 'vertical';
+
+    if (matrix) {
+      // 열마다 날짜를 정한다: 완전한 날짜 > 파일/선택 월 > 머리글의 월
+      var colDates = info.days.map(function (col) {
+        if (col.dateKey) { return col.dateKey; }
+        if (fallbackMonth) { return fallbackMonth + '-' + pad2(col.day); }
+        return '';
+      });
+      if (!fallbackMonth && info.days.every(function (c) { return !c.dateKey; })) {
+        out.needMonth = true;
+      }
+      for (var r2 = headerRow + 1; r2 < list.length; r2++) {
+        var row = list[r2];
+        var nm = String(row[info.name] == null ? '' : row[info.name]).trim();
+        if (!nm || attNormHeader(nm) === '이름') { continue; }
+        for (var c2 = 0; c2 < info.days.length; c2++) {
+          var dk = colDates[c2];
+          if (!dk) { continue; }
+          var st = attCellState(row[info.days[c2].index]);
+          if (!st || !st.present) { continue; }
+          pushRec(nm, dk, st.inTime, st.outTime);
+        }
+      }
+    } else {
+      for (var r3 = headerRow + 1; r3 < list.length; r3++) {
+        var row3 = list[r3];
+        var name3 = String(row3[info.name] == null ? '' : row3[info.name]).trim();
+        if (!name3 || attNormHeader(name3) === '이름' || attNormHeader(name3) === '성명') { continue; }
+        var dateKey = attParseDate(info.date >= 0 ? row3[info.date] : '', fallbackMonth);
+        if (!dateKey) { out.skipped++; continue; }
+        var stateCol = info.status >= 0 ? attCellState(row3[info.status]) : null;
+        if (stateCol && !stateCol.present) { out.skipped++; continue; }
+        var inT = info.inTime >= 0 ? attTimeText(row3[info.inTime]) : (stateCol ? (stateCol.inTime || '') : '');
+        var outT = info.outTime >= 0 ? attTimeText(row3[info.outTime]) : (stateCol ? (stateCol.outTime || '') : '');
+        pushRec(name3, dateKey, inT, outT);
+      }
+    }
+
+    var names = {}, months = {};
+    out.records.forEach(function (rec) {
+      names[attNameKey(rec.name)] = true;
+      months[rec.date.slice(0, 7)] = true;
+      if (!out.minDate || rec.date < out.minDate) { out.minDate = rec.date; }
+      if (!out.maxDate || rec.date > out.maxDate) { out.maxDate = rec.date; }
+    });
+    out.nameCount = Object.keys(names).length;
+    out.dateCount = Object.keys(months).length;
+    out.months = Object.keys(months).sort();
+    return out;
+  }
+
+  /* 이름 → 관원 (공백 무시). 없으면 null */
+  function attFindStudent(name, byName) {
+    return byName[attNameKey(name)] || null;
+  }
+  function attCreateStudent(name) {
+    var s = {
+      id: uid('stu'), name: String(name).trim(), phone: '', className: '', division: '초등부',
+      course: '', siblingDiscount: false, belt: '흰띠', attendCount: 0, lastAttendanceDate: '',
+      grade: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '',
+      monthlyFee: null, status: 'active', pausedDate: '', pauseReason: ''
+    };
+    app.students.push(s);
+    return s;
+  }
+
+  /* 실제 반영 — parsed(records) + opts { mode: 'merge'|'replace', createMissing } */
+  function applyAttendanceImport(parsed, opts) {
+    opts = opts || {};
+    var mode = opts.mode === 'replace' ? 'replace' : 'merge';
+    var out = { added: 0, filled: 0, kept: 0, skipped: 0, created: 0, students: 0, cleared: 0, records: 0 };
+    if (!parsed || !parsed.records || !parsed.records.length) { return out; }
+
+    var byName = {};
+    app.students.forEach(function (s) { byName[attNameKey(s.name)] = s; });
+    var touched = {};
+
+    /* 1) 이름 매칭 (필요하면 명단 외 관원 생성) */
+    var plan = [];
+    parsed.records.forEach(function (rec) {
+      var s = attFindStudent(rec.name, byName);
+      if (!s && opts.createMissing) {
+        s = attCreateStudent(rec.name);
+        byName[attNameKey(rec.name)] = s;
+        out.created++;
+      }
+      if (!s) { out.skipped++; return; }
+      touched[s.id] = true;
+      plan.push({ s: s, rec: rec });
+    });
+    out.records = plan.length;
+
+    /* 2) 교체 모드: 파일이 다루는 날짜 범위에서 그 관원 기록을 먼저 지운다 */
+    if (mode === 'replace' && parsed.minDate && parsed.maxDate) {
+      Object.keys(app.attendance).forEach(function (d) {
+        if (d < parsed.minDate || d > parsed.maxDate) { return; }
+        var day = app.attendance[d];
+        Object.keys(day).forEach(function (sid) {
+          if (!touched[sid]) { return; }
+          delete day[sid];
+          out.cleared++;
+        });
+        if (!Object.keys(day).length) { delete app.attendance[d]; }
+      });
+    }
+
+    /* 3) 기록 넣기 (합치기는 빠진 날짜만, 있으면 빈 시간만 채움) */
+    plan.forEach(function (item) {
+      var s = item.s, rec = item.rec;
+      var cur = attendanceEntry(s.id, rec.date);
+      if (cur && (cur.inTime || cur.outTime || cur.manual)) {
+        var patch = null;
+        if (!cur.inTime && rec.inTime) { patch = patch || {}; patch.inTime = rec.inTime; }
+        if (!cur.outTime && rec.outTime) { patch = patch || {}; patch.outTime = rec.outTime; }
+        if (patch) { setAttendance(s.id, rec.date, patch); out.filled++; }
+        else { out.kept++; }
+        return;
+      }
+      var day = app.attendance[rec.date] || (app.attendance[rec.date] = {});
+      var entry = {};
+      if (rec.inTime) { entry.inTime = String(rec.inTime).slice(0, 5); }
+      if (rec.outTime) { entry.outTime = String(rec.outTime).slice(0, 5); }
+      if (!rec.inTime && !rec.outTime) { entry.manual = true; }
+      entry.src = 'import';
+      entry.updatedAt = new Date().toISOString();
+      day[s.id] = entry;
+      out.added++;
+    });
+    out.students = Object.keys(touched).length;
+
+    /* 4) 누적 출석 · 최근 출석일 재집계 */
+    if (out.added || out.filled || out.cleared) {
+      recountAttendance();
+      saveAttendance();
+      saveStudents();
+    }
+    return out;
+  }
+
+  /* tdk.attendance.v1 을 기준으로 모든 관원의 누적 출석과 최근 출석일을 다시 센다 */
+  function recountAttendance() {
+    var counts = {}, last = {};
+    Object.keys(app.attendance || {}).forEach(function (d) {
+      if (!isDateKey(d)) { return; }
+      var day = app.attendance[d] || {};
+      Object.keys(day).forEach(function (sid) {
+        var e = day[sid];
+        if (!(e && (e.inTime || e.outTime || e.manual))) { return; }
+        counts[sid] = (counts[sid] || 0) + 1;
+        if (!last[sid] || d > last[sid]) { last[sid] = d; }
+      });
+    });
+    app.students.forEach(function (s) {
+      s.attendCount = counts[s.id] || 0;
+      s.lastAttendanceDate = last[s.id] || '';
+    });
+    return { counts: counts, last: last };
+  }
+
+  /* 파일 읽기 (엑셀 · CSV 공통) */
+  function attReadFile(file, cb) {
+    if (!file) { return; }
+    var name = String(file.name || '');
+    var ext = name.split('.').pop().toLowerCase();
+    if (ext === 'xlsx' || ext === 'xls') {
+      if (typeof XLSX === 'undefined') {
+        openModal({
+          title: '엑셀 파일을 읽지 못했어요',
+          sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다. 인터넷 연결을 확인하거나 엑셀에서 [CSV UTF-8]로 저장한 파일을 올려 주세요.',
+          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        });
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          cb(XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }), name);
+        } catch (err) {
+          toast('엑셀 파일을 해석하지 못했어요: ' + (err && err.message ? err.message : err));
+        }
+      };
+      reader.onerror = function () { toast('파일을 읽는 중 오류가 났어요.'); };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
+    var tr = new FileReader();
+    tr.onload = function (e) { cb(parseCSV(e.target.result), name); };
+    tr.onerror = function () { toast('파일을 읽는 중 오류가 났어요.'); };
+    tr.readAsText(file, 'utf-8');
+  }
+
+  /* 미리보기 문구 */
+  function attendanceImportSummaryHtml(parsed, fileName) {
+    var known = {}, unknown = {}, byName = {};
+    app.students.forEach(function (s) { byName[attNameKey(s.name)] = s; });
+    var unknownCount = 0;
+    parsed.records.forEach(function (rec) {
+      var k = attNameKey(rec.name);
+      if (byName[k]) { known[k] = true; } else { unknown[k] = true; }
+    });
+    unknownCount = Object.keys(unknown).length;
+    var range = parsed.months.length
+      ? (parsed.months.length === 1 ? parsed.months[0] : parsed.months[0] + ' ~ ' + parsed.months[parsed.months.length - 1])
+      : '월 미확인';
+    return '<div class="help" style="margin-top:0">' +
+      '📄 <b>' + esc(fileName || '파일') + '</b> · ' + (parsed.format === 'matrix' ? '달력형' : '목록형') + '<br>' +
+      '총 <b>' + fmtWon(parsed.records.length) + '건</b> · 대상 관원 <b>' + parsed.nameCount + '명</b>' +
+      ' (명단에 있음 ' + Object.keys(known).length + '명 · <b>명단 외 ' + unknownCount + '명</b>)<br>' +
+      '기간 <b>' + range + '</b>' + (parsed.minDate ? ' · ' + parsed.minDate + ' ~ ' + parsed.maxDate : '') +
+      (parsed.skipped ? '<br>결석·날짜 없음으로 건너뛴 줄 <b>' + parsed.skipped + '건</b>' : '') +
+      (Object.keys(unknown).length ? '<br>명단 외 이름: ' + esc(Object.keys(unknown).slice(0, 8).join(', ')) +
+        (Object.keys(unknown).length > 8 ? ' 외 ' + (Object.keys(unknown).length - 8) + '명' : '') : '') +
+      '</div>';
+  }
+
+  /* 미리보기 모달 → 적용 */
+  function openAttendanceImport(file) {
+    if (!file) { return; }
+    attReadFile(file, function (rows, fileName) {
+      var guessMonth = attMonthFromFile(fileName);
+      var parsed = parseAttendanceRows(rows, { month: guessMonth });
+      if (!parsed.records.length && !parsed.needMonth) {
+        openModal({
+          title: '출결기록을 찾지 못했어요',
+          sub: '이름 열과 날짜(또는 1~31일) 열이 있는 파일인지 확인해 주세요. 「📄 출결 양식 CSV」를 내려받아 형식을 참고하셔도 좋아요.',
+          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        });
+        return;
+      }
+      var body = attendanceImportSummaryHtml(parsed, fileName) +
+        '<div class="row2" style="margin-top:10px">' +
+        '<div class="field"><label>저장 방식</label><select class="input" id="attimp-mode">' +
+        '<option value="merge">합치기 — 기존 기록 유지, 빠진 날짜만 추가</option>' +
+        '<option value="replace">교체 — 이 기간 기록을 파일 내용으로 바꾸기</option>' +
+        '</select></div>' +
+        '<div class="field"><label>명단 외 이름</label><select class="input" id="attimp-missing">' +
+        '<option value="skip">건너뛰기</option>' +
+        '<option value="create">관원으로 새로 등록</option>' +
+        '</select></div>' +
+        '</div>' +
+        '<div class="field"><label>달력형 파일의 연·월 (날짜 열이 숫자만 있을 때)</label>' +
+        '<input class="input" id="attimp-month" type="month" value="' + esc(guessMonth || (parsed.needMonth ? monthKey(new Date()) : '')) + '"></div>' +
+        '<div class="help">저장하면 <b>누적 출석(회)</b>과 <b>최근 출석일</b>이 이 기기에 저장된 출석 이력 기준으로 다시 계산됩니다.</div>';
+      var chosen = { mode: 'merge', createMissing: false, month: '' };
+      openModal({
+        title: '출결기록 ' + fmtWon(parsed.records.length) + '건을 동기화할까요?',
+        body: body,
+        actions: [
+          { label: '취소', value: null, kind: 'btn-ghost' },
+          { label: '동기화', value: 'go', kind: 'btn-primary' }
+        ],
+        onAction: function (value) {
+          if (value !== 'go') { return; }
+          chosen.mode = el('attimp-mode') ? el('attimp-mode').value : 'merge';
+          chosen.createMissing = el('attimp-missing') ? el('attimp-missing').value === 'create' : false;
+          var monthEl = el('attimp-month');
+          if (monthEl && /^\d{4}-\d{2}$/.test(String(monthEl.value || ''))) {
+            chosen.month = String(monthEl.value);
+          }
+        }
+      }).then(function (value) {
+        if (value !== 'go') { return; }
+        if (parsed.needMonth) {
+          if (!chosen.month) {
+            toast('달력형 파일은 연·월을 골라야 날짜를 계산할 수 있어요.');
+            return;
+          }
+          parsed = parseAttendanceRows(rows, { month: chosen.month });
+        }
+        var res = applyAttendanceImport(parsed, chosen);
+        renderAll();
+        renderMonthly();
+        var msg = '출결기록 동기화 완료 · 새 기록 ' + fmtWon(res.added) + '건' +
+          (res.filled ? ' · 시간 채움 ' + res.filled + '건' : '') +
+          (res.kept ? ' · 이미 있던 기록 ' + res.kept + '건 유지' : '') +
+          (res.created ? ' · 관원 ' + res.created + '명 새로 등록' : '') +
+          (res.skipped ? ' · 명단 외 ' + res.skipped + '건 건너뜀' : '') +
+          ' · 관원 ' + res.students + '명 누적 출석 재계산';
+        openModal({
+          title: '동기화를 마쳤어요',
+          sub: msg,
+          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        });
+        toast('출결기록 ' + fmtWon(res.added) + '건을 동기화했어요');
+      });
+    });
+  }
+
+  /* 샘플 양식 내려받기 */
+  function downloadAttendanceTemplate() {
+    var lines = [['이름', '날짜', '상태', '등원시간', '하원시간']];
+    var sample = [
+      ['김민준', '2026-09-01', '출석', '17:05', '18:10'],
+      ['김민준', '2026-09-03', '출석', '17:02', '18:05'],
+      ['김민준', '2026-09-05', '결석', '', ''],
+      ['이서연', '2026-09-01', '등원', '16:05', '17:00'],
+      ['이서연', '2026-09-03', '출석', '', ''],
+      ['박지호', '2026/09/02', '출석', '18:00', '19:05'],
+      ['박지호', '2026.09.04', 'O', '18:02', '19:00'],
+      ['최수아', '2026-09-01', '출석', '17:00', '18:20'],
+      ['정도윤', '2026-09-02', '출석', '19:00', '20:10'],
+      ['한유진', '2026-09-01', '출석', '16:00', '16:50']
+    ];
+    sample.forEach(function (r) { lines.push(r); });
+    var csv = '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
+    if (downloadFile('출결기록_동기화_양식.csv', csv, 'text/csv;charset=utf-8')) {
+      toast('출결 양식을 내려받았어요 · 이름·날짜·상태 순서로 적으면 됩니다');
     }
   }
 
@@ -5384,9 +6078,12 @@
   function tuitionBankAccount() {
     return String(tuitionConf().bankAccount || '').trim();
   }
+  /* 이 달 기본 단가: 직접 넣은 금액 → 부서·수업·형제할인 자동 계산 → 도장 기본 원비 */
   function studentFee(s) {
     var v = (s && typeof s.monthlyFee === 'number') ? s.monthlyFee : null;
-    return (v === null || isNaN(v) || v < 0) ? tuitionDefaultFee() : v;
+    if (v !== null && !isNaN(v) && v >= 0) { return v; }
+    var auto = calcMonthlyFee(divisionOf(s), courseOf(s), siblingOf(s));
+    return auto > 0 ? auto : tuitionDefaultFee();
   }
   function fmtWon(n) {
     var v = Math.round(Number(n) || 0);
@@ -5411,6 +6108,10 @@
     var out = { status: TUITION_STATUS[r.status] ? r.status : 'unpaid' };
     var amt = parseInt(r.amount, 10);
     if (!isNaN(amt) && amt >= 0) { out.amount = amt; }
+    var ded = parseInt(r.deduction, 10);
+    if (!isNaN(ded) && ded > 0) { out.deduction = ded; }
+    var dres = String(r.deductionReason == null ? '' : r.deductionReason).trim().slice(0, 40);
+    if (dres) { out.deductionReason = dres; }
     if (TUITION_METHODS.indexOf(String(r.method || '')) !== -1) { out.method = String(r.method); }
     if (out.status === 'paid' && isDateKey(r.paidDate)) { out.paidDate = String(r.paidDate); }
     var memo = String(r.memo == null ? '' : r.memo).trim().slice(0, 40);
@@ -5449,12 +6150,29 @@
     var r = tuitionOf(mk, sid);
     return (r && TUITION_STATUS[r.status]) ? r.status : 'unpaid';
   }
-  function tuitionAmountOf(mk, sid) {
+  /* 이 달의 기본 원비(차감 전) — 기록에 직접 넣은 금액이 있으면 그 금액 */
+  function tuitionBaseAmount(mk, sid) {
     var r = tuitionOf(mk, sid);
     if (r && typeof r.amount === 'number' && !isNaN(r.amount) && r.amount >= 0) { return r.amount; }
     var s = byId(sid);
     return s ? studentFee(s) : tuitionDefaultFee();
   }
+  /* 이 달의 차감 금액 (0원 이상) */
+  function tuitionDeduction(mk, sid) {
+    var r = tuitionOf(mk, sid);
+    var v = parseInt(r && r.deduction, 10);
+    return (isNaN(v) || v < 0) ? 0 : v;
+  }
+  function tuitionDeductionReason(mk, sid) {
+    var r = tuitionOf(mk, sid);
+    return String((r && r.deductionReason) || '').trim();
+  }
+  /* 실 청구액 = 기본 원비 − 차감 (0원 밑으로는 내려가지 않음) */
+  function tuitionCharge(mk, sid) {
+    return Math.max(0, tuitionBaseAmount(mk, sid) - tuitionDeduction(mk, sid));
+  }
+  /* 화면·집계·문자·CSV가 모두 쓰는 "이 달 청구 금액" = 차감 반영 금액 */
+  function tuitionAmountOf(mk, sid) { return tuitionCharge(mk, sid); }
   function setTuition(mk, sid, patch) {
     if (!mk || !sid) { return null; }
     if (!app.tuition[mk]) { app.tuition[mk] = {}; }
@@ -5471,15 +6189,11 @@
     return cur;
   }
 
-  function tuitionSort(a, b) {
-    var ca = String(a.className || ''), cb = String(b.className || '');
-    if (ca !== cb) { return ca.localeCompare(cb, 'ko'); }
-    return a.name.localeCompare(b.name, 'ko');
-  }
+  function tuitionSort(a, b) { return rosterSort(a, b); }
   function tuitionScopeRows() {
     var u = ensureTuition();
     return activeStudents().filter(function (s) {
-      if (u.className !== 'all' && String(s.className || '').trim() !== u.className) { return false; }
+      if (u.className !== 'all' && divisionOf(s) !== u.className) { return false; }
       return matchSearch(s, u.q);
     }).sort(tuitionSort);
   }
@@ -5498,14 +6212,19 @@
     var u = ensureTuition(), mk = u.month;
     var out = {
       expected: 0, paid: 0, paidCount: 0, unpaid: 0, unpaidCount: 0,
+      base: 0, deduction: 0,
       exempt: 0, exemptCount: 0, rate: 0, noMethod: 0, noMethodCount: 0,
       byMethod: { '카드': 0, '현금': 0, '입금': 0 },
       byMethodCount: { '카드': 0, '현금': 0, '입금': 0 }
     };
     (rows || []).forEach(function (s) {
       var st = tuitionStatusOf(mk, s.id);
-      var amt = tuitionAmountOf(mk, s.id);
+      var baseAmt = tuitionBaseAmount(mk, s.id);
+      var dedAmt = tuitionDeduction(mk, s.id);
+      var amt = Math.max(0, baseAmt - dedAmt);
       if (st === 'exempt') { out.exemptCount++; return; }
+      out.base += baseAmt;
+      out.deduction += dedAmt;
       out.expected += amt;
       if (st === 'paid') {
         out.paid += amt; out.paidCount++;
@@ -5542,7 +6261,7 @@
     var mk = u.month;
     var act = document.activeElement;
     if (!force && act && act.getAttribute) {
-      var f = ['data-tfee', 'data-tdate', 'data-tmemo', 'data-tstatus', 'data-tcheck'];
+      var f = ['data-tfee', 'data-tdate', 'data-tmemo', 'data-tstatus', 'data-tcheck', 'data-tded', 'data-tdedreason'];
       for (var i = 0; i < f.length; i++) {
         if (act.getAttribute(f[i])) { return; }
       }
@@ -5554,7 +6273,7 @@
     var sel = el('tu-class');
     var classes = monthClasses();
     if (sel) {
-      var want = '<option value="all">전체 반</option>' + classes.map(function (c) {
+      var want = '<option value="all">전체 부서</option>' + classes.map(function (c) {
         return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
       }).join('');
       if (sel.getAttribute('data-opts') !== want) {
@@ -5580,7 +6299,10 @@
     var scope = tuitionScopeRows();
     var sum = tuitionSummary(scope);
     if (el('tu-expected')) { el('tu-expected').innerHTML = fmtWon(sum.expected) + '<small>원</small>'; }
-    if (el('tu-expected-n')) { el('tu-expected-n').textContent = (scope.length - sum.exemptCount) + '명 기준'; }
+    if (el('tu-expected-n')) {
+      el('tu-expected-n').textContent = (scope.length - sum.exemptCount) + '명 기준' +
+        (sum.deduction ? ' · 차감 ' + fmtWon(sum.deduction) + '원' : '');
+    }
     if (el('tu-paid')) { el('tu-paid').innerHTML = fmtWon(sum.paid) + '<small>원</small>'; }
     if (el('tu-paid-n')) { el('tu-paid-n').textContent = sum.paidCount + '명'; }
     if (el('tu-unpaid')) { el('tu-unpaid').innerHTML = fmtWon(sum.unpaid) + '<small>원</small>'; }
@@ -5599,20 +6321,24 @@
     if (el('tu-note')) {
       var filtered = (u.status !== 'all' || u.method !== 'all');
       el('tu-note').textContent = tuitionMonthLabel(mk) + ' · 납부 기한 매월 ' + tuitionDueDay() + '일 · ' +
-        (u.className === 'all' ? '전체 반' : u.className) + ' ' + scope.length + '명' +
+        (u.className === 'all' ? '전체 부서' : u.className) + ' ' + scope.length + '명' +
+        (sum.deduction ? ' · 차감 ' + fmtWon(sum.deduction) + '원 반영' : '') +
         (filtered ? ' · 표는 필터 적용' : '');
     }
 
     var rows = tuitionTableRows();
     var selMap = u.selected || {};
     if (!rows.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="8">' +
-        (app.students.length ? '조건에 맞는 관원이 없어요. 반·상태 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다') +
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="10">' +
+        (app.students.length ? '조건에 맞는 관원이 없어요. 부서·상태 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다') +
         '</td></tr>';
     } else {
       tbody.innerHTML = rows.map(function (s) {
         var st = tuitionStatusOf(mk, s.id);
-        var amt = tuitionAmountOf(mk, s.id);
+        var base = tuitionBaseAmount(mk, s.id);
+        var ded = tuitionDeduction(mk, s.id);
+        var dedReason = tuitionDeductionReason(mk, s.id);
+        var amt = Math.max(0, base - ded);
         var rec = tuitionOf(mk, s.id) || {};
         var grade = studentGrade(s);
         var methods = TUITION_METHODS.map(function (m) {
@@ -5626,9 +6352,17 @@
           ' aria-label="' + esc(s.name + ' 선택') + '"></td>' +
           '<td class="nm"><div class="nm-line">' + esc(s.name) +
           '<span class="belt-badge tub-belt"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span></div>' +
-          '<div class="sub">' + esc(s.className || '반 미지정') + (grade ? ' · ' + esc(grade) : '') + '</div></td>' +
-          '<td><input class="input mini tu-fee" type="number" min="0" step="1000" inputmode="numeric" value="' + amt + '"' +
-          ' data-tfee="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 월 원비') + '"></td>' +
+          '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) + '</div></td>' +
+          '<td><input class="input mini tu-fee" type="number" min="0" step="1000" inputmode="numeric" value="' + base + '"' +
+          ' data-tfee="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 기본 월 원비') + '"></td>' +
+          '<td><div class="tu-dedcell">' +
+          '<input class="input mini tu-ded" type="number" min="0" step="1000" inputmode="numeric" value="' + (ded ? ded : '') + '"' +
+          ' data-tded="' + esc(s.id) + '" placeholder="0" aria-label="' + esc(s.name + ' 차감 금액') + '" title="기본 원비에서 뺄 금액">' +
+          '<input class="input mini tu-ded-reason" type="text" maxlength="40" value="' + esc(dedReason) + '"' +
+          ' data-tdedreason="' + esc(s.id) + '" placeholder="차감 사유 (예: 결석 2회)" aria-label="' + esc(s.name + ' 차감 사유') + '">' +
+          '</div></td>' +
+          '<td class="tu-charge' + (amt ? '' : ' zero') + '">' + fmtWon(amt) + '원' +
+          (ded ? '<small>−' + fmtWon(ded) + '원</small>' : '') + '</td>' +
           '<td><select class="input mini tu-status" data-tstatus="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 납부 상태') + '">' +
           '<option value="unpaid"' + (st === 'unpaid' ? ' selected' : '') + '>미납</option>' +
           '<option value="paid"' + (st === 'paid' ? ' selected' : '') + '>완납</option>' +
@@ -5692,8 +6426,11 @@
 
   function tuitionNoticeMessage(s, mk) {
     var bank = tuitionBankAccount();
+    var ded = tuitionDeduction(mk, s.id);
+    var dedReason = tuitionDeductionReason(mk, s.id);
     return '[' + app.settings.dojoName + '] ' + s.name + ' 관원 ' + tuitionMonthLabel(mk) + ' 원비 납부 안내입니다.\n' +
       '· 원비: ' + fmtWon(tuitionAmountOf(mk, s.id)) + '원\n' +
+      (ded ? '· 차감: ' + fmtWon(ded) + '원' + (dedReason ? ' (' + dedReason + ')' : '') + '\n' : '') +
       '· 납부 기한: ' + tuitionMonthLabel(mk) + ' ' + tuitionDueDay() + '일까지\n' +
       (bank ? '· 입금 계좌: ' + bank + '\n' : '') +
       '이미 납부하셨다면 이 문자는 넘겨 주세요.';
@@ -5798,7 +6535,7 @@
     var sum = tuitionSummary(rows);
     var pad = function (arr) {
       var out = arr.slice();
-      while (out.length < 8) { out.push(''); }
+      while (out.length < 12) { out.push(''); }
       return out;
     };
     var lines = [];
@@ -5806,18 +6543,23 @@
     lines.push(pad(['구분', '카드', '현금', '입금', '합계']));
     lines.push(pad(['수납 금액(원)', sum.byMethod['카드'], sum.byMethod['현금'], sum.byMethod['입금'], sum.paid]));
     lines.push(pad(['수납 인원(명)', sum.byMethodCount['카드'], sum.byMethodCount['현금'], sum.byMethodCount['입금'], sum.paidCount]));
-    lines.push(pad(['예상 총 원비(원)', '', '', '', sum.expected]));
+    lines.push(pad(['기본 원비 합계(원)', '', '', '', sum.base]));
+    lines.push(pad(['차감 합계(원)', '', '', '', sum.deduction]));
+    lines.push(pad(['실 청구 합계(원)', '', '', '', sum.expected]));
     lines.push(pad(['미납 금액(원)', '', '', '', sum.unpaid]));
     lines.push(pad(['면제·휴원(명)', '', '', '', sum.exemptCount]));
     lines.push(pad(['수납률', sum.rate + '%']));
     lines.push(pad(['수단 미기록(원)', '', '', '', sum.noMethod]));
     lines.push(pad([]));
-    lines.push(pad(['관원', '반', '띠', '월 원비(원)', '납부 상태', '납부일', '결제 수단', '메모']));
+    lines.push(pad(['관원', '부서', '수업', '띠', '기본 원비(원)', '차감액(원)', '차감사유', '실 청구액(원)', '납부 상태', '납부일', '결제 수단', '메모']));
     (rows || []).forEach(function (s) {
       var st = tuitionStatusOf(mk, s.id);
       var rec = tuitionOf(mk, s.id) || {};
+      var base = tuitionBaseAmount(mk, s.id);
+      var ded = tuitionDeduction(mk, s.id);
       lines.push(pad([
-        s.name, s.className || '', s.belt || '', tuitionAmountOf(mk, s.id),
+        s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '',
+        base, ded, tuitionDeductionReason(mk, s.id), Math.max(0, base - ded),
         TUITION_STATUS[st],
         (st === 'paid' ? (rec.paidDate || '') : ''),
         (st === 'paid' ? (rec.method || '') : ''),
@@ -5830,7 +6572,7 @@
     var u = ensureTuition();
     var rows = tuitionScopeRows();
     if (!rows.length) {
-      toast('이 달에 내려받을 관원이 없어요. 반 필터나 검색을 확인해 주세요.');
+      toast('이 달에 내려받을 관원이 없어요. 부서 필터나 검색을 확인해 주세요.');
       return;
     }
     var csv = tuitionCSVText(u.month, rows);
@@ -5886,12 +6628,12 @@
     return app.reportUI;
   }
 
-  /* 반별·띠별 소계 (수납이 발생한 관원만) */
+  /* 부서별·띠별 소계 (수납이 발생한 관원만) */
   function reportGroup(rows, key) {
     var map = {}, order = [];
     (rows || []).forEach(function (r) {
       if (r.status !== 'paid') { return; }
-      var name = r[key] || (key === 'className' ? '반 미지정' : '띠 미지정');
+      var name = r[key] || (key === 'belt' ? '띠 미지정' : '부서 미지정');
       if (!map[name]) { map[name] = { name: name, total: 0, count: 0 }; order.push(name); }
       map[name].total += r.amount;
       map[name].count++;
@@ -5915,18 +6657,22 @@
     mk = String(mk || '');
     var out = {
       month: mk, total: 0, paidRoster: 0, expected: 0, unpaid: 0,
+      base: 0, deduction: 0,
       paidCount: 0, unpaidCount: 0, exemptCount: 0, pausedCount: 0,
       noMethod: 0, noMethodCount: 0, orphanCount: 0, rate: 0,
       byMethod: emptyMethodMap(), byMethodCount: emptyMethodMap(),
-      byClass: [], byBelt: [], rows: []
+      byDivision: [], byBelt: [], rows: []
     };
     var seen = {};
     var list = (app.students || []).slice().sort(tuitionSort);
     list.forEach(function (s) {
       seen[s.id] = true;
       var row = {
-        id: s.id, name: s.name, className: s.className || '', belt: s.belt || '',
-        fee: studentFee(s), status: 'unpaid', statusLabel: '미납',
+        id: s.id, name: s.name, division: divisionOf(s),
+        course: courseLabel(s.division, s.course), sibling: siblingOf(s),
+        className: s.className || '', belt: s.belt || '',
+        fee: studentFee(s), base: studentFee(s), deduction: 0, deductionReason: '',
+        status: 'unpaid', statusLabel: '미납',
         method: '', paidDate: '', amount: 0, orphan: false
       };
       if (isPaused(s)) {
@@ -5938,7 +6684,15 @@
         return;
       }
       var st = tuitionStatusOf(mk, s.id);
-      var amt = tuitionAmountOf(mk, s.id);
+      var baseAmt = tuitionBaseAmount(mk, s.id);
+      var dedAmt = tuitionDeduction(mk, s.id);
+      var amt = Math.max(0, baseAmt - dedAmt);
+      row.base = baseAmt;
+      row.fee = baseAmt;
+      row.deduction = dedAmt;
+      row.deductionReason = tuitionDeductionReason(mk, s.id);
+      out.base += baseAmt;
+      out.deduction += dedAmt;
       if (st === 'exempt') {
         row.status = 'exempt';
         row.statusLabel = '면제';
@@ -5992,14 +6746,15 @@
         out.noMethodCount++;
       }
       out.rows.push({
-        id: sid, name: '명단 외', className: '기타', belt: '', fee: 0,
+        id: sid, name: '명단 외', division: '기타', course: '', sibling: false, className: '기타',
+        belt: '', fee: 0, base: 0, deduction: 0, deductionReason: '',
         status: 'paid', statusLabel: '완납', method: m || '미기록',
         paidDate: rec.paidDate || '', amount: amt, orphan: true
       });
     });
 
     out.rate = out.expected ? Math.round(out.paidRoster / out.expected * 100) : 0;
-    out.byClass = reportGroup(out.rows, 'className');
+    out.byDivision = reportGroup(out.rows, 'division');
     out.byBelt = reportGroup(out.rows, 'belt');
     return out;
   }
@@ -6048,7 +6803,7 @@
   /* ---- CSV (엑셀 바로 열기: BOM + CRLF, 기존 원비 CSV와 같은 방식) ---- */
   function reportPad(arr) {
     var out = arr.slice();
-    while (out.length < 8) { out.push(''); }
+    while (out.length < 12) { out.push(''); }
     return out;
   }
   function reportMonthCSVText(mk, data) {
@@ -6063,6 +6818,8 @@
     lines.push(reportPad(['총 수납액(원)', '', '', '', d.total]));
     lines.push(reportPad(['미납 금액(원)', '', '', '', d.unpaid]));
     lines.push(reportPad(['미납 인원(명)', '', '', '', d.unpaidCount]));
+    lines.push(reportPad(['차감 합계(원)', '', '', '', d.deduction]));
+    lines.push(reportPad(['기본 원비 합계(원)', '', '', '', d.base]));
     lines.push(reportPad(['수납률', d.rate + '%']));
     lines.push(reportPad(['면제(명)', '', '', '', d.exemptCount]));
     lines.push(reportPad(['휴관 제외(명)', '', '', '', d.pausedCount]));
@@ -6071,14 +6828,21 @@
     lines.push(reportPad(['전월 대비(원)', '', '', '', del.amount]));
     lines.push(reportPad(['전월 대비(%)', del.pct === null ? '' : del.pct + '%']));
     lines.push(reportPad([]));
-    lines.push(reportPad(['관원', '반', '띠', '월 원비(원)', '상태', '결제 수단', '납부일', '수납 금액(원)']));
+    lines.push(reportPad(['관원', '부서', '수업', '띠', '기본 원비(원)', '차감액(원)', '차감사유', '실 청구액(원)', '상태', '결제 수단', '납부일', '수납 금액(원)']));
     (d.rows || []).forEach(function (r) {
       var paid = r.status === 'paid';
+      var skip = (r.status === 'paused' || r.status === 'exempt');
+      var base = skip ? 0 : (r.base || r.fee || 0);
+      var ded = skip ? 0 : (r.deduction || 0);
       lines.push(reportPad([
         r.orphan ? '명단 외' : r.name,
-        r.className || '',
+        r.division || '',
+        r.course || '',
         r.belt || '',
-        r.status === 'paused' ? '' : r.fee,
+        skip ? '' : base,
+        skip ? '' : ded,
+        skip ? '' : (r.deductionReason || ''),
+        skip ? '' : Math.max(0, base - ded),
         r.statusLabel,
         paid ? r.method : '',
         paid ? r.paidDate : '',
@@ -6159,17 +6923,21 @@
 
   function reportMonthRows(d) {
     if (!d.rows.length) {
-      return '<tr class="empty-row"><td colspan="8">등록된 관원이 없어요. 「출석 · 명단」에서 관원을 먼저 등록해 주세요.</td></tr>';
+      return '<tr class="empty-row"><td colspan="9">등록된 관원이 없어요. 「출석 · 명단」에서 관원을 먼저 등록해 주세요.</td></tr>';
     }
     return d.rows.map(function (r) {
       var stateCls = r.status === 'paid' ? 'paid' : (r.status === 'unpaid' ? 'unpaid' : (r.status === 'paused' ? 'paused' : 'exempt'));
       var feeTxt = (r.status === 'paused' || r.status === 'exempt') ? '-' : (fmtWon(r.fee) + '원');
       var amtTxt = (r.status === 'paid') ? (fmtWon(r.amount) + '원') : (r.status === 'unpaid' ? '0원' : '-');
+      var dedTxt = r.deduction
+        ? ('−' + fmtWon(r.deduction) + '원' + (r.deductionReason ? '<div class="sub">' + esc(r.deductionReason) + '</div>' : ''))
+        : '-';
       return '<tr class="rp-' + r.status + '">' +
         '<td class="nm">' + esc(r.name) + '</td>' +
-        '<td>' + esc(r.className || '반 미지정') + '</td>' +
+        '<td>' + esc(r.division || '부서 미지정') + (r.course ? ' · ' + esc(r.course) : '') + '</td>' +
         '<td>' + esc(r.belt || '-') + '</td>' +
         '<td class="rp-num">' + feeTxt + '</td>' +
+        '<td class="rp-num">' + dedTxt + '</td>' +
         '<td>' + (r.status === 'paid' ? esc(r.method) : '-') + '</td>' +
         '<td>' + (r.status === 'paid' ? esc(r.paidDate || '-') : '-') + '</td>' +
         '<td><span class="rp-state ' + stateCls + '">' + esc(r.statusLabel) + '</span></td>' +
@@ -6236,7 +7004,7 @@
     }
     if (el('rp-delta')) { el('rp-delta').innerHTML = reportDeltaHTML(del); }
 
-    if (el('rp-class')) { el('rp-class').innerHTML = reportSubtotalRows(d.byClass, '이 달 수납한 반이 없어요.'); }
+    if (el('rp-class')) { el('rp-class').innerHTML = reportSubtotalRows(d.byDivision, '이 달 수납한 부서가 없어요.'); }
     if (el('rp-belt')) { el('rp-belt').innerHTML = reportSubtotalRows(d.byBelt, '이 달 수납한 띠가 없어요.'); }
 
     var yd = reportYear(ui.year);
@@ -6253,6 +7021,7 @@
     if (el('rp-table')) { el('rp-table').innerHTML = reportMonthRows(d); }
     if (el('rp-note')) {
       el('rp-note').textContent = tuitionMonthLabel(mk) + ' · ' + d.rows.length + '명' +
+        (d.deduction ? ' · 차감 ' + fmtWon(d.deduction) + '원 반영' : '') +
         (d.orphanCount ? ' · 명단 외 납부 ' + d.orphanCount + '건 포함' : '');
     }
     if (el('rp-print-head')) {
@@ -6319,7 +7088,7 @@
        발송 로그  = app.logs[].kind === 'bulk_sms' (logVisible → false)
      ========================================================= */
   var BULK_SMS_LIMIT = 90;
-  var BULK_SMS_VARS = ['도장명', '이름', '반', '띠'];
+  var BULK_SMS_VARS = ['도장명', '이름', '부서', '수업', '반', '띠'];
   var BULK_SMS_TEMPLATES = [
     {
       id: 'btpl_holiday', name: '휴관 안내',
@@ -6327,7 +7096,7 @@
     },
     {
       id: 'btpl_event', name: '특강/행사 안내',
-      text: '[{도장명}] 특강·행사 안내\n\n{이름} 관원 학부모님, 안녕하세요.\n{반} 반 특강/행사 일정을 안내드립니다.\n\n· 일시: (날짜와 시간을 적어 주세요)\n· 장소: (장소를 적어 주세요)\n· 준비물: (준비물을 적어 주세요)\n\n참석 여부를 문자로 회신해 주시면 준비에 반영하겠습니다.'
+      text: '[{도장명}] 특강·행사 안내\n\n{이름} 관원 학부모님, 안녕하세요.\n{반} 특강/행사 일정을 안내드립니다.\n\n· 일시: (날짜와 시간을 적어 주세요)\n· 장소: (장소를 적어 주세요)\n· 준비물: (준비물을 적어 주세요)\n\n참석 여부를 문자로 회신해 주시면 준비에 반영하겠습니다.'
     },
     {
       id: 'btpl_uniform', name: '준비물/도복 안내',
@@ -6392,15 +7161,17 @@
     return null;
   }
 
-  /* {도장명} {이름} {반} {띠} 치환 */
+  /* {도장명} {이름} {부서} {수업} {반} {띠} 치환 · {반}은 예전 문구 호환용(부서 · 수업) */
   function bulkFill(text, s) {
     var map = {
       '도장명': String(app.settings.dojoName || DEFAULT_SETTINGS.dojoName),
       '이름': s ? String(s.name || '') : '{이름}',
-      '반': s ? String(s.className || '반 미지정') : '{반}',
+      '부서': s ? divisionOf(s) : '{부서}',
+      '수업': s ? (courseLabel(s.division, s.course) || '수업 미지정') : '{수업}',
+      '반': s ? studentLabel(s) : '{반}',
       '띠': s ? String(s.belt || '띠 미지정') : '{띠}'
     };
-    return String(text == null ? '' : text).replace(/\{(도장명|이름|반|띠)\}/g, function (m, k) {
+    return String(text == null ? '' : text).replace(/\{(도장명|이름|부서|수업|반|띠)\}/g, function (m, k) {
       return map[k] === undefined ? m : map[k];
     });
   }
@@ -6512,12 +7283,12 @@
     u.className = cls;
     if (cls === 'all') {
       renderBulkSms(true);
-      toast('먼저 반을 고르고 「반별 선택」을 눌러 주세요.');
+      toast('먼저 부서를 고르고 「부서별 선택」을 눌러 주세요.');
       return;
     }
-    var ids = activeStudents().filter(function (s) { return String(s.className || '').trim() === cls; }).map(function (s) { return s.id; });
+    var ids = activeStudents().filter(function (s) { return divisionOf(s) === cls; }).map(function (s) { return s.id; });
     var n = bulkSetSelection(ids);
-    toast(n ? cls + ' · ' + n + '명을 선택했어요' : cls + ' 반에 등록된 관원이 없어요');
+    toast(n ? cls + ' · ' + n + '명을 선택했어요' : cls + '에 등록된 관원이 없어요');
   }
   function bulkSelectBelt() {
     var u = ensureBulkSms();
@@ -6555,7 +7326,7 @@
     var sel = el('bs-class');
     var classes = monthClasses();
     if (sel) {
-      var opts = '<option value="all">전체 반</option>' + classes.map(function (c) {
+      var opts = '<option value="all">전체 부서</option>' + classes.map(function (c) {
         return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
       }).join('');
       if (sel.getAttribute('data-opts') !== opts) {
@@ -6615,7 +7386,7 @@
           (on ? ' checked' : '') + ' aria-label="' + esc(s.name + ' 발송 대상') + '">' +
           '<span class="bs-belt" style="background:' + beltColor(s.belt) + '"></span>' +
           '<span class="bs-main"><span class="bs-name">' + esc(s.name) + '</span>' +
-          '<span class="bs-sub">' + esc(s.className || '반 미지정') + ' · ' + esc(s.belt || '띠 미지정') + '</span></span>' +
+          '<span class="bs-sub">' + esc(studentLabel(s)) + ' · ' + esc(s.belt || '띠 미지정') + '</span></span>' +
           '<span class="bs-phone">' + (phone ? esc(normalizePhone(phone)) : '<i>번호 없음</i>') + '</span>' +
           '</label>';
       }).join('');
@@ -6676,7 +7447,7 @@
     if (!box) { return; }
     box.innerHTML = '<div class="bs-preview-head"><b>미리보기</b>' +
       (first
-        ? '<span>' + esc(first.name) + ' · ' + esc(first.className || '반 미지정') + ' 기준</span>'
+        ? '<span>' + esc(first.name) + ' · ' + esc(studentLabel(first)) + ' 기준</span>'
         : '<span class="bs-note" style="color:#a35b00">관원을 선택하면 {이름}이 채워집니다</span>') +
       '<span class="bs-note" style="flex:0 0 auto">' + bytes + ' B · ' + smsKindLabel(bytes) + '</span></div>' +
       '<div class="bs-bubble' + (filled ? '' : ' empty') + '">' + (filled ? esc(filled) : '문구를 입력하면 여기에 보입니다.') + '</div>';
@@ -6742,7 +7513,7 @@
     var preview = esc(bulkFill(text, first));
     return openModal({
       title: '선택한 ' + cnt.ok + '명에게 단체문자를 보낼까요?',
-      sub: kind + ' · ' + bytes + 'B · ' + (first ? first.name + ' 관원 기준으로 이름·반·띠가 채워집니다' : '관원 정보로 치환됩니다'),
+      sub: kind + ' · ' + bytes + 'B · ' + (first ? first.name + ' 관원 기준으로 이름·부서·수업·띠가 채워집니다' : '관원 정보로 치환됩니다'),
       body: '<div class="bs-bubble" style="max-height:210px; overflow:auto">' + preview + '</div>' +
         '<div class="help" style="margin-top:10px">발송 인원 <b>' + cnt.ok + '명</b>' +
         (cnt.noPhone ? ' · 번호가 없어 제외 <b>' + cnt.noPhone + '명</b>' : '') +
@@ -6803,7 +7574,7 @@
       '[' + app.settings.dojoName + '] 재원 복귀 안내',
       '',
       s.name + ' 관원 학부모님, 안녕하세요.',
-      (String(s.className || '').trim() ? s.className + ' 수업으로 다시 함께하게 되었습니다.' : '다시 도장에서 함께하게 되었습니다.')
+      (String(s.course || '').trim() ? studentLabel(s) + ' 수업으로 다시 함께하게 되었습니다.' : divisionOf(s) + ' 수업으로 다시 함께하게 되었습니다.')
     ];
     if (Number(s.attendCount) > 0) {
       lines.push('· 그동안의 누적 출석 ' + Number(s.attendCount) + '회 · ' + (s.belt || '띠') + ' 과정은 그대로 이어집니다.');
@@ -6824,10 +7595,10 @@
   }
 
   function pausedCSVText(list) {
-    var lines = [['이름', '반', '띠', '급수', '보호자 연락처', '휴관일', '휴관 사유', '상태']];
+    var lines = [['이름', '부서', '수업', '띠', '급수', '보호자 연락처', '휴관일', '휴관 사유', '상태']];
     (list || []).forEach(function (s) {
       lines.push([
-        s.name, s.className || '', s.belt || '', studentGrade(s), s.phone || '',
+        s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', studentGrade(s), s.phone || '',
         s.pausedDate || '', s.pauseReason || '', '휴관'
       ]);
     });
@@ -6880,7 +7651,7 @@
         '<td class="nm"><div class="nm-line">' + esc(s.name) + '<span class="chip pause">휴관</span>' +
         (app.faces[s.id] ? '<span class="face-badge on">얼굴 보관</span>' : '') + '</div>' +
         '<div class="pz-days' + (ready ? ' ready' : '') + '">' + esc(dayTxt) + '</div></td>' +
-        '<td class="sub">' + esc(s.className || '-') + '</td>' +
+        '<td class="sub">' + esc(studentLabel(s)) + siblingBadge(s) + '</td>' +
         '<td><span class="belt-badge"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span>' +
         (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
         '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
@@ -6922,7 +7693,9 @@
         var reason = String(r.pauseReason || '').trim().slice(0, 60);
         if (reason) { target.pauseReason = reason; }
         // 빈 칸만 채우고, 누적 출석·띠·얼굴·원비는 건드리지 않는다
-        if (!String(target.className || '').trim() && r.className) { target.className = r.className; }
+        if (r.division && !normalizeDivision(target.division)) { target.division = normalizeDivision(r.division); }
+        if (r.course && !courseOf(target)) { target.course = normalizeCourse(r.course); }
+        if (r.className && !divisionFromText(target.className)) { target.className = String(r.className).trim(); }
         if (!String(target.phone || '').trim() && r.phone) { target.phone = r.phone; }
         if (!Number(target.attendCount) && Number(r.attendCount)) { target.attendCount = Number(r.attendCount); }
         out.updated++;
@@ -6932,6 +7705,9 @@
           name: String(r.name).trim(),
           phone: normalizePhone(r.phone || ''),
           className: String(r.className || '').trim(),
+          division: normalizeDivision(r.division) || divisionFromText(r.className) || '초등부',
+          course: normalizeCourse(r.course),
+          siblingDiscount: r.siblingDiscount === true || r.siblingDiscount === '예' || r.siblingDiscount === 'Y',
           belt: String(r.belt || '').trim() || '흰띠',
           attendCount: Math.max(0, parseInt(r.attendCount, 10) || 0),
           grade: String(r.grade || '').trim(),
@@ -7223,7 +7999,7 @@
       var cnt = nm ? counselCountFor({ studentId: sel ? sel.id : '', name: nm }) : 0;
       picked.className = 'cs-picked' + (nm ? '' : ' none');
       picked.textContent = nm
-        ? '✍️ ' + nm + (sel && sel.className ? ' · ' + sel.className : '') + ' · 지금까지 상담 ' + cnt + '건'
+        ? '✍️ ' + nm + (sel ? ' · ' + studentLabel(sel) : '') + ' · 지금까지 상담 ' + cnt + '건'
         : '관원을 골라 주세요 (이름만 적고 저장해도 됩니다)';
     }
   }
@@ -7296,7 +8072,7 @@
         '<div class="cs-item-head">' +
         '<span class="cs-when">' + esc(counselDateLabel(r.date)) + '</span>' +
         '<span class="cs-mchip ' + mcls + '">' + esc(r.method) + ' 상담</span>' +
-        '<span class="cs-who">' + esc(who) + (s && s.className ? ' · ' + esc(s.className) : (r.studentId ? '' : ' · 이름만')) + '</span>' +
+        '<span class="cs-who">' + esc(who) + (s ? ' · ' + esc(studentLabel(s)) : (r.studentId ? '' : ' · 이름만')) + '</span>' +
         '<span class="cs-tools">' +
         '<button class="btn btn-sm btn-ghost" data-cedit="' + esc(r.id) + '">✏️ 수정</button>' +
         '<button class="btn btn-sm btn-danger" data-cdel="' + esc(r.id) + '">🗑️</button>' +
@@ -7535,7 +8311,10 @@
      ========================================================= */
   var HEADER_KEYS = {
     name: ['이름', '성명', '관원명', '관원', '수련생', '학생', '회원명', '회원', '원생', '아동', 'name'],
-    className: ['반', '시간', '클래스', '수업', '부', '과정', '요일', 'program', 'class', 'time', 'schedule'],
+    division: ['부서', '부서명', '부'],
+    course: ['수업', '수업횟수', '횟수', '과정', 'course'],
+    siblingDiscount: ['형제할인', '형제 할인', '형제', 'sibling'],
+    className: ['반', '시간', '클래스', '요일', 'program', 'class', 'time', 'schedule'],
     belt: ['띠', '급', '벨트', '품', 'belt', 'rank'],
     phone: ['연락처', '전화', '휴대폰', '핸드폰', '보호자', '학부모', '부모', 'phone', 'tel', 'mobile', 'contact'],
     attendCount: ['누적출석', '출석일수', '출석횟수', '승급출석', '총출석', '출석', 'attend', 'count'],
@@ -7570,7 +8349,7 @@
   function matchField(text) {
     var t = String(text || '').toLowerCase().replace(/\s+/g, '');
     if (!t) { return null; }
-    var fields = ['name', 'phone', 'className', 'attendCount', 'belt', 'pausedDate', 'pauseReason', 'status'];
+    var fields = ['name', 'phone', 'division', 'course', 'siblingDiscount', 'className', 'attendCount', 'belt', 'pausedDate', 'pauseReason', 'status'];
     for (var i = 0; i < fields.length; i++) {
       var f = fields[i];
       var keys = HEADER_KEYS[f];
@@ -7627,10 +8406,21 @@
       var pausedRaw = map.pausedDate !== undefined ? String(row[map.pausedDate] == null ? '' : row[map.pausedDate]) : '';
       var reasonRaw = map.pauseReason !== undefined ? String(row[map.pauseReason] == null ? '' : row[map.pauseReason]) : '';
       var status = importStatusOf(statusRaw);
+      var cellOf = function (f) {
+        return map[f] === undefined ? '' : String(row[map[f]] == null ? '' : row[map[f]]).trim();
+      };
+      var importClass = cellOf('className');
+      var importDivision = normalizeDivision(cellOf('division')) || divisionFromText(importClass) || divisionFromText(cellOf('course'));
+      var importCourse = normalizeCourse(cellOf('course'));
+      var sibRaw = cellOf('siblingDiscount');
+      var importSibling = /^(y|yes|o|예|형제|true|1|체크)$/i.test(sibRaw) || sibRaw.indexOf('형제') !== -1;
       out.push({
         id: uid('stu'),
         name: name,
-        className: map.className !== undefined ? String(row[map.className] == null ? '' : row[map.className]).trim() : '',
+        className: importClass,
+        division: importDivision || '초등부',
+        course: importCourse,
+        siblingDiscount: importSibling,
         belt: map.belt !== undefined ? (String(row[map.belt] == null ? '' : row[map.belt]).trim() || '흰띠') : '흰띠',
         phone: normalizePhone(String(phoneRaw == null ? '' : phoneRaw).trim()),
         attendCount: Math.max(0, parseInt(countRaw.replace(/[^0-9]/g, ''), 10) || 0),
@@ -7763,9 +8553,10 @@
   }
 
   function downloadSampleCSV() {
-    var lines = ['이름,반,띠,보호자 연락처,누적 출석'];
+    var lines = ['이름,부서,수업,띠,보호자 연락처,누적 출석,형제할인'];
     SAMPLE_STUDENTS.forEach(function (s) {
-      lines.push([s.name, s.className, s.belt, s.phone, s.attendCount || 0].join(','));
+      lines.push([s.name, s.division || '', s.course || '', s.belt, s.phone, s.attendCount || 0,
+        s.siblingDiscount ? 'Y' : ''].join(','));
     });
     var csv = '\uFEFF' + lines.join('\r\n');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -7786,7 +8577,7 @@
   function buildBackup() {
     return {
       app: 'mta-taekwondo-attendance',
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       dojoName: app.settings.dojoName,
       students: app.students,
@@ -8467,6 +9258,26 @@
     // 관리자: 관원
     el('btn-save-student').addEventListener('click', saveStudent);
     el('btn-cancel-edit').addEventListener('click', resetStudentForm);
+    ['f-division', 'f-course'].forEach(function (fid) {
+      if (!el(fid)) { return; }
+      el(fid).addEventListener('change', function () { updateFeeCalc(); });
+    });
+    if (el('f-sibling')) {
+      el('f-sibling').addEventListener('change', function () {
+        el('f-fee').setAttribute('data-auto', '1');
+        updateFeeCalc();
+      });
+    }
+    if (el('f-fee')) {
+      el('f-fee').addEventListener('input', function () {
+        el('f-fee').setAttribute('data-auto', '0');
+        updateFeeCalc();
+      });
+      el('f-fee').addEventListener('change', function () {
+        el('f-fee').setAttribute('data-auto', '0');
+        updateFeeCalc();
+      });
+    }
     el('btn-sample').addEventListener('click', function () {
       openModal({
         title: '샘플 관원 6명으로 복원할까요?',
@@ -8739,6 +9550,17 @@
       renderMonthly();
     });
     el('btn-mon-csv').addEventListener('click', downloadMonthlyCSV);
+    if (el('btn-att-import')) {
+      el('btn-att-import').addEventListener('click', function () { el('att-import-file').click(); });
+      el('att-import-file').addEventListener('change', function () {
+        var f = el('att-import-file').files && el('att-import-file').files[0];
+        el('att-import-file').value = '';
+        if (f) { openAttendanceImport(f); }
+      });
+    }
+    if (el('btn-att-template')) {
+      el('btn-att-template').addEventListener('click', downloadAttendanceTemplate);
+    }
     el('mon-tbody').addEventListener('click', function (e) {
       var cell = e.target.closest('[data-md]');
       if (!cell) { return; }
@@ -8867,9 +9689,44 @@
         }
         var fv = parseInt(raw, 10);
         if (isNaN(fv) || fv < 0) { toast('월 원비는 0원 이상 숫자로 입력해 주세요.'); renderTuition(true); return; }
-        setTuition(mk, fsid, { amount: fv });
+        var dedCur = tuitionDeduction(mk, fsid);
+        var patch = { amount: fv };
+        if (dedCur > fv) { patch.deduction = fv; }
+        setTuition(mk, fsid, patch);
         renderTuition(true);
-        toast((fs ? fs.name : '') + ' · ' + tuitionMonthLabel(mk) + ' 원비 ' + fmtWon(fv) + '원으로 저장했어요');
+        toast((fs ? fs.name : '') + ' · ' + tuitionMonthLabel(mk) + ' 기본 원비 ' + fmtWon(fv) + '원' +
+          (dedCur > fv ? ' (차감을 ' + fmtWon(fv) + '원으로 맞췄어요)' : '') + ' · 실 청구 ' + fmtWon(tuitionCharge(mk, fsid)) + '원');
+        return;
+      }
+      var de = t.closest('[data-tded]');
+      if (de) {
+        var dsid = de.getAttribute('data-tded'), ds = byId(dsid);
+        var draw = String(de.value == null ? '' : de.value).replace(/[,\s]/g, '');
+        if (draw === '') {
+          setTuition(mk, dsid, { deduction: undefined });
+          renderTuition(true);
+          toast((ds ? ds.name : '') + ' · 차감을 지웠어요 · 실 청구 ' + fmtWon(tuitionCharge(mk, dsid)) + '원');
+          return;
+        }
+        var dnum = parseInt(draw, 10);
+        if (isNaN(dnum) || dnum < 0) { toast('차감 금액은 0원 이상 숫자로 입력해 주세요.'); renderTuition(true); return; }
+        var baseNow = tuitionBaseAmount(mk, dsid);
+        if (dnum > baseNow) {
+          setTuition(mk, dsid, { deduction: baseNow });
+          renderTuition(true);
+          toast('차감은 기본 원비(' + fmtWon(baseNow) + '원)까지만 넣을 수 있어요. ' + fmtWon(baseNow) + '원으로 맞췄어요.');
+          return;
+        }
+        setTuition(mk, dsid, { deduction: dnum });
+        renderTuition(true);
+        toast((ds ? ds.name : '') + ' · 차감 ' + fmtWon(dnum) + '원 → 실 청구 ' + fmtWon(tuitionCharge(mk, dsid)) + '원');
+        return;
+      }
+      var dr = t.closest('[data-tdedreason]');
+      if (dr) {
+        var rsid = dr.getAttribute('data-tdedreason');
+        setTuition(mk, rsid, { deductionReason: String(dr.value || '').trim().slice(0, 40) });
+        renderTuition(true);
         return;
       }
       var me = t.closest('[data-tmemo]');
@@ -9251,9 +10108,48 @@
       confirm: confirmRestoreBackup,
       readJson: driveReadJson
     },
+    attendance: {
+      parse: parseAttendanceRows,
+      apply: applyAttendanceImport,
+      recount: recountAttendance,
+      readFile: attReadFile,
+      open: openAttendanceImport,
+      template: downloadAttendanceTemplate,
+      monthFromFile: attMonthFromFile,
+      dateOf: attParseDate,
+      timeOf: attTimeText,
+      cell: attCellState,
+      summary: attendanceImportSummaryHtml
+    },
+    roster: {
+      divisions: DIVISIONS,
+      courses: COURSES,
+      siblingDiscount: SIBLING_DISCOUNT,
+      courseFees: COURSE_FEES,
+      examFees: EXAM_FEES,
+      baseFee: courseBaseFee,
+      calc: calcMonthlyFee,
+      info: feeInfoOf,
+      of: studentFee,
+      label: studentLabel,
+      divisionOf: divisionOf,
+      courseOf: courseOf,
+      siblingOf: siblingOf,
+      divisionFromText: divisionFromText,
+      sample: function () { return SAMPLE_STUDENTS; },
+      save: saveStudent,
+      edit: startEdit,
+      reset: resetStudentForm,
+      updateFee: updateFeeCalc,
+      sort: rosterSort
+    },
     tuition: {
       status: TUITION_STATUS,
       methods: TUITION_METHODS,
+      baseOf: tuitionBaseAmount,
+      deductionOf: tuitionDeduction,
+      deductionReasonOf: tuitionDeductionReason,
+      chargeOf: tuitionCharge,
       conf: tuitionConf,
       defaultFee: tuitionDefaultFee,
       dueDay: tuitionDueDay,
