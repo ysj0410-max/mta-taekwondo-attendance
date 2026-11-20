@@ -387,10 +387,10 @@
   .pick span{font-size:10.5px; color:var(--muted); font-weight:600}
 
   /* 승급심사 */
-  .admin-tabs{display:flex; gap:5px; margin-bottom:14px; background:#e8edf7; padding:5px; border-radius:14px; width:fit-content}
+  .admin-tabs{display:flex; gap:5px; margin-bottom:14px; background:#e8edf7; padding:5px; border-radius:14px; width:fit-content; max-width:100%; overflow-x:auto; flex-wrap:wrap}
   .admin-tab{border:0; background:transparent; color:#5b6b85; font-weight:800; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer}
   .admin-tab.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.10)}
-  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov{display:none}
+  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov{display:none}
   .belt-badge{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:800; background:#f6f8fc; border:1px solid #e6ebf4; padding:4px 9px 4px 6px; border-radius:999px; white-space:nowrap}
   .belt-badge i{width:12px; height:12px; border-radius:3px; display:inline-block; box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
   .bar{width:104px; height:7px; background:#edf0f7; border-radius:6px; overflow:hidden; margin-bottom:4px}
@@ -517,6 +517,36 @@
   .range-row{display:flex; align-items:center; gap:10px}
   .range-row input[type="range"]{flex:1; accent-color:var(--navy); height:26px}
   .range-row b{font-size:13px; font-variant-numeric:tabular-nums; color:var(--navy); min-width:38px; text-align:right}
+
+  /* ---------- 원비 관리 ---------- */
+  .tu-stats .stat-val{font-size:24px; letter-spacing:-.5px}
+  .tu-sub{font-size:11px; font-weight:800; color:var(--muted); margin-top:2px}
+  .tu-methods{display:flex; align-items:center; gap:8px; margin:-2px 0 13px; flex-wrap:wrap}
+  .tu-mb-label{font-size:11px; font-weight:800; color:var(--muted)}
+  .tu-mchip{border:1px solid #e3e8f2; background:#fff; color:#475467; font-weight:800; font-size:11.5px; padding:7px 12px; border-radius:999px; cursor:pointer; display:inline-flex; gap:7px; align-items:center}
+  .tu-mchip b{font-size:11.5px; color:var(--navy); font-variant-numeric:tabular-nums}
+  .tu-mchip.active{background:var(--navy); border-color:var(--navy); color:#fff}
+  .tu-mchip.active b{color:#fff}
+  .tu-mchip:hover{border-color:#c6d5ef}
+  .tu-tablewrap{max-height:min(64vh,660px); overflow:auto}
+  table.tub td{padding:7px 8px}
+  table.tub tbody tr.paid{background:#f7fdfa}
+  table.tub tbody tr.exempt{background:#fbfcfe}
+  table.tub tbody tr.sel{background:#eef4ff}
+  table.tub .nm-line{display:flex; align-items:center; gap:5px; white-space:nowrap}
+  table.tub .tub-belt{font-size:10px; padding:2px 7px 2px 4px}
+  table.tub .tub-belt i{width:9px; height:9px}
+  .tu-fee{width:96px; text-align:right; font-variant-numeric:tabular-nums; font-weight:800}
+  .tu-date{width:128px}
+  .tu-memo{width:100%; min-width:96px}
+  .tu-mgroup{display:flex; gap:4px}
+  .tu-mbtn{border:1px solid #e3e8f2; background:#f8fafd; color:#5b6b85; font-weight:800; font-size:10.5px; padding:5px 7px; border-radius:9px; cursor:pointer; white-space:nowrap; line-height:1.2}
+  .tu-mbtn:hover{background:#eef4ff; border-color:#c6d5ef}
+  .tu-mbtn.on{background:var(--mint); border-color:var(--mint); color:#fff; box-shadow:0 1px 4px rgba(18,184,134,.28)}
+  .tu-act{white-space:nowrap}
+  .tu-act .btn{margin-right:3px}
+  .tu-note{font-size:10.5px; font-weight:700; color:#8a94a6}
+  .tu-status{width:100%}
 
   /* 스크롤바 */
   ::-webkit-scrollbar{width:8px; height:8px}
@@ -677,6 +707,7 @@
           <button class="admin-tab" id="atab-promotion" data-atab="promotion">🎖️ 승급심사 관리</button>
           <button class="admin-tab" id="atab-gukgiwon" data-atab="gukgiwon">🏅 국기원 심사</button>
           <button class="admin-tab" id="atab-monthly" data-atab="monthly">📅 월간 출석부</button>
+          <button class="admin-tab" id="atab-tuition" data-atab="tuition">💳 원비 관리</button>
         </div>
 
         <div class="stats ov">
@@ -721,9 +752,10 @@
                   </div>
                   <div class="field"><label>누적 출석(회)</label><input class="input" id="f-count" type="number" min="0" step="1" value="0" inputmode="numeric"></div>
                 </div>
-                <div class="row2">
+                <div class="row3">
                   <div class="field"><label>급수 (비우면 띠 기준 자동)</label><input class="input" id="f-grade" list="grade-list" placeholder="예: 7급, 품, 단"></div>
                   <div class="field"><label>현재 품·단</label><select class="input" id="f-poomdan"></select></div>
+                  <div class="field"><label>월 원비 (비우면 기본 원비)</label><input class="input" id="f-fee" type="number" min="0" step="1000" inputmode="numeric" placeholder="예: 150000"></div>
                 </div>
                 <datalist id="grade-list"></datalist>
                 <div class="form-actions">
@@ -1078,6 +1110,103 @@
             </div>
           </div>
         </div>
+
+        <div id="admin-tuition" style="display:none">
+          <div class="mon-bar">
+            <div class="mon-nav">
+              <button class="btn" id="tu-prev" title="이전 달" aria-label="이전 달">◀</button>
+              <div class="mon-label" id="tu-label">-</div>
+              <button class="btn" id="tu-next" title="다음 달" aria-label="다음 달">▶</button>
+              <button class="btn btn-ghost btn-sm" id="tu-this" style="margin-left:4px">이번 달</button>
+            </div>
+            <div class="spacer"></div>
+            <select class="input mon-select" id="tu-class" aria-label="반 필터"><option value="all">전체 반</option></select>
+            <input class="input mon-search" id="tu-search" placeholder="🔍 이름·초성 검색" autocomplete="off" aria-label="관원 이름 검색">
+            <button class="btn" id="btn-tu-settings">⚙️ 원비 설정</button>
+            <button class="btn btn-primary" id="btn-tu-csv">📥 원비 내역 CSV 다운로드</button>
+          </div>
+
+          <div class="stats tu-stats">
+            <div class="stat"><div class="stat-label">🧾 예상 총 원비</div><div class="stat-val" id="tu-expected">0<small>원</small></div><div class="tu-sub" id="tu-expected-n">0명 기준</div></div>
+            <div class="stat in"><div class="stat-label">✅ 수납 완료</div><div class="stat-val" id="tu-paid">0<small>원</small></div><div class="tu-sub" id="tu-paid-n">0명</div></div>
+            <div class="stat absent"><div class="stat-label">⏳ 미납</div><div class="stat-val" id="tu-unpaid">0<small>원</small></div><div class="tu-sub" id="tu-unpaid-n">0명</div></div>
+            <div class="stat out"><div class="stat-label">📈 수납률</div><div class="stat-val" id="tu-rate">0<small>%</small></div><div class="tu-sub" id="tu-rate-n">면제·휴원 0명</div></div>
+          </div>
+
+          <div class="tu-methods" id="tu-methods" role="group" aria-label="결제 수단별 집계 및 필터">
+            <span class="tu-mb-label">결제 수단별</span>
+            <button class="tu-mchip active" data-mfilter="all" id="tu-m-all">전체 <b id="tu-m-all-v">0원</b></button>
+            <button class="tu-mchip" data-mfilter="카드" id="tu-m-card">💳 카드 <b id="tu-m-card-v">0원</b></button>
+            <button class="tu-mchip" data-mfilter="현금" id="tu-m-cash">💵 현금 <b id="tu-m-cash-v">0원</b></button>
+            <button class="tu-mchip" data-mfilter="입금" id="tu-m-bank">🏦 입금 <b id="tu-m-bank-v">0원</b></button>
+            <span class="tu-note" id="tu-missing"></span>
+          </div>
+
+          <div class="panel" id="tu-settings" style="display:none">
+            <div class="panel-head"><h3>⚙️ 원비 설정</h3><div class="spacer"></div><span class="tiny-note">저장하면 모든 달에 적용</span></div>
+            <div class="panel-body">
+              <div class="row3">
+                <div class="field"><label>기본 월 원비 (원)</label><input class="input" id="tu-default-fee" type="number" min="0" step="1000" inputmode="numeric" value="150000"></div>
+                <div class="field"><label>납부 기한 (매월 며칠)</label><input class="input" id="tu-due-day" type="number" min="1" max="31" step="1" inputmode="numeric" value="5"></div>
+                <div class="field"><label>입금 계좌 안내 (선택)</label><input class="input" id="tu-bank-account" placeholder="예: 국민 123-45-678910 (경희대MTA)"></div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary" id="btn-tu-save-settings">설정 저장</button>
+                <div class="spacer"></div>
+                <span class="tiny-note">관원별 단가는 「관원 명단 관리」의 월 원비 칸에서 정할 수 있어요.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>💳 원비 관리</h3><div class="spacer"></div>
+              <span class="tiny-note" id="tu-note">-</span>
+            </div>
+            <div class="panel-body" style="padding-bottom:10px">
+              <div class="promo-filters" id="tu-status-filters">
+                <button class="pchip active" data-tfilter="all">전체</button>
+                <button class="pchip" data-tfilter="unpaid">미납</button>
+                <button class="pchip" data-tfilter="paid">완납</button>
+                <button class="pchip" data-tfilter="exempt">면제·휴원</button>
+              </div>
+              <div class="bulk-bar" id="tu-bulk">
+                <b id="tu-bulk-count">선택 없음</b>
+                <button class="btn btn-sm" id="btn-tu-select-unpaid">미납자 전체 선택</button>
+                <button class="btn btn-sm btn-primary" id="btn-tu-bulk-paid" disabled>선택 인원 일괄 완납</button>
+                <button class="btn btn-sm btn-mint" id="btn-tu-bulk-sms" disabled>📨 선택 인원 원비 안내 문자</button>
+                <div class="spacer"></div>
+                <button class="btn btn-sm btn-ghost" id="btn-tu-bulk-clear" disabled>선택 해제</button>
+              </div>
+            </div>
+            <div class="tablewrap tu-tablewrap">
+              <table class="tb tub">
+                <thead>
+                  <tr>
+                    <th style="width:28px"><input type="checkbox" class="ck" id="tu-check-all" aria-label="전체 선택"></th>
+                    <th>관원</th>
+                    <th style="width:104px">월 원비</th>
+                    <th style="width:104px">납부 상태</th>
+                    <th style="width:138px">납부일</th>
+                    <th style="width:196px">결제 수단</th>
+                    <th>메모</th>
+                    <th style="width:158px"></th>
+                  </tr>
+                </thead>
+                <tbody id="tu-table"></tbody>
+              </table>
+            </div>
+            <div class="panel-body" style="border-top:1px solid #eef1f6">
+              <div class="help" style="margin-top:0">
+                <b>결제 수단을 누르면 바로 완납</b>으로 처리되고 납부일이 오늘로 찍힙니다. 이미 완납된 관원은 누른 수단으로 바뀌기만 해요.
+                칸에서 금액·납부일·메모를 직접 고칠 수 있고, <b>✅ 완납</b>으로 미납↔완납을 오갈 수 있습니다(미납으로 되돌리면 납부일·수단이 지워집니다).
+                <b>면제·휴원</b>은 예상 원비·수납률 계산에서 빠집니다.<br>
+                위 <b>수단별 집계</b>는 반 필터·검색 기준이고, 수단 칩을 누르면 그 수단으로 낸 관원만 표에 남습니다(다시 누르면 해제).
+                안내 문자는 도장폰 무료문자 설정을 그대로 쓰며, 금액이 들어가므로 <b>출석 화면의 학부모 로그에는 나오지 않고</b> 여기 관리자 로그에만 쌓입니다.
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -1101,7 +1230,8 @@
     logs: 'tdk.logs.v1',
     muted: 'tdk.muted.v1',
     attendance: 'tdk.attendance.v1',
-    faces: 'tdk.faces.v1'
+    faces: 'tdk.faces.v1',
+    tuition: 'tdk.tuition.v1'
   };
 
   var SAMPLE_STUDENTS = [
@@ -1131,6 +1261,11 @@
   var GK_STATUS = { none: '미대상', target: '대상', docs: '서류준비', applied: '접수완료', passed: '합격' };
   var GK_STATUS_ORDER = ['none', 'target', 'docs', 'applied', 'passed'];
 
+  var TUITION_STATUS = { unpaid: '미납', paid: '완납', exempt: '면제·휴원' };
+  var TUITION_STATUS_ORDER = ['unpaid', 'paid', 'exempt'];
+  var TUITION_METHODS = ['카드', '현금', '입금'];
+  var TUITION_METHOD_ICON = { '카드': '💳', '현금': '💵', '입금': '🏦' };
+
   function defaultBelts(th) {
     var t = Math.max(1, parseInt(th, 10) || 20);
     return BELT_ORDER.map(function (name) {
@@ -1150,7 +1285,8 @@
     gukPlace: '',
     visibility: { beltSystem: true, promotion: true, gukgiwon: false },
     face: { threshold: 0.48, cooldown: 20, auto: true },
-    sms: { webhookUrl: '', method: 'query', autoSend: true, testPhone: '' }
+    sms: { webhookUrl: '', method: 'query', autoSend: true, testPhone: '' },
+    tuition: { defaultFee: 150000, dueDay: 5, bankAccount: '' }
   };
 
   var app = {
@@ -1170,7 +1306,9 @@
     promoSelected: {},
     promoFilter: 'all',
     adminTab: 'overview',
-    monthly: null
+    monthly: null,
+    tuition: {},
+    tuitionUI: null
   };
 
   /* =========================================================
@@ -1291,7 +1429,11 @@
         poomDan: String(s.poomDan || '없음').trim(),
         targetPoomDan: String(s.targetPoomDan || '없음').trim(),
         gukStatus: GK_STATUS[s.gukStatus] ? s.gukStatus : 'none',
-        gukExamDate: String(s.gukExamDate || '').trim()
+        gukExamDate: String(s.gukExamDate || '').trim(),
+        monthlyFee: (function () {
+          var v = parseInt(s.monthlyFee, 10);
+          return (isNaN(v) || v < 0) ? null : v;
+        })()
       };
     }).filter(function (s) { return s.name; });
 
@@ -1338,7 +1480,16 @@
     app.settings.face.cooldown = (isNaN(fcd) || fcd < 5 || fcd > 300) ? DEFAULT_SETTINGS.face.cooldown : fcd;
     app.settings.face.auto = app.settings.face.auto !== false;
 
+    // 원비 설정 (기본 월 원비 · 납부 기한 · 입금 계좌)
+    app.settings.tuition = Object.assign({}, DEFAULT_SETTINGS.tuition, (settings && settings.tuition) || {});
+    var tfee = parseInt(app.settings.tuition.defaultFee, 10);
+    app.settings.tuition.defaultFee = (isNaN(tfee) || tfee < 0) ? DEFAULT_SETTINGS.tuition.defaultFee : tfee;
+    var tday = parseInt(app.settings.tuition.dueDay, 10);
+    app.settings.tuition.dueDay = (isNaN(tday) || tday < 1 || tday > 31) ? DEFAULT_SETTINGS.tuition.dueDay : tday;
+    app.settings.tuition.bankAccount = String(app.settings.tuition.bankAccount || '').trim().slice(0, 80);
+
     app.faces = loadFaces();
+    app.tuition = loadTuition();
 
     var records = readJSON(LS.records, {});
     app.records = (records && typeof records === 'object') ? records : {};
@@ -1346,6 +1497,7 @@
     loadAttendance();
     migrateAttendance();
     app.monthly = { month: monthKey(new Date()), className: 'all', q: '' };
+    app.tuitionUI = null;
 
     var logs = readJSON(LS.logs, []);
     app.logs = Array.isArray(logs) ? logs : [];
@@ -1367,6 +1519,7 @@
   function saveLogs() { writeJSON(LS.logs, app.logs.slice(0, 200)); }
   function saveAttendance() { writeJSON(LS.attendance, app.attendance); }
   function saveFaces() { writeJSON(LS.faces, app.faces); }
+  function saveTuition() { writeJSON(LS.tuition, app.tuition); }
 
   /* =========================================================
      3-A. 얼굴 특징값 저장소 (온디바이스 전용)
@@ -1928,6 +2081,8 @@
   function logVisible(l) {
     if (l.kind === 'promotion' || l.kind === 'exam') { return visPublic('promotion'); }
     if (l.kind === 'guk_notice' || l.kind === 'guk_pass') { return visPublic('gukgiwon'); }
+    // 원비 안내에는 금액이 들어가므로 학부모 대기 화면(키오스크)에는 띄우지 않고 관리자 로그에만 남깁니다.
+    if (l.kind === 'tuition') { return false; }
     return true;
   }
   function logStatusChip(l) {
@@ -2870,6 +3025,7 @@
     renderPromotion();
     renderGukgiwon();
     renderMonthly();
+    renderTuition();
     renderAdminLog();
   }
 
@@ -2884,6 +3040,7 @@
     tbody.innerHTML = app.logs.slice(0, 30).map(function (l) {
       var label = l.kind === 'promotion' ? '승급' : l.kind === 'exam' ? '심사'
         : l.kind === 'guk_notice' ? '국기원' : l.kind === 'guk_pass' ? '합격'
+        : l.kind === 'tuition' ? '원비'
         : (l.kind === 'test' || l.status === 'test') ? '테스트' : '출석';
       var text = l.text.length > 40 ? l.text.slice(0, 40) + '…' : l.text;
       return '<tr>' +
@@ -3079,6 +3236,7 @@
     el('f-class').value = '';
     el('f-count').value = '0';
     el('f-grade').value = '';
+    el('f-fee').value = '';
     renderBeltOptions('');
     renderPoomOptions('없음');
     el('btn-cancel-edit').style.display = 'none';
@@ -3095,6 +3253,7 @@
     el('f-class').value = s.className;
     el('f-count').value = String(Number(s.attendCount) || 0);
     el('f-grade').value = s.grade || '';
+    el('f-fee').value = (s.monthlyFee == null ? '' : String(s.monthlyFee));
     renderBeltOptions(s.belt);
     renderPoomOptions(s.poomDan);
     el('btn-cancel-edit').style.display = 'inline-block';
@@ -3111,6 +3270,15 @@
     var attendCount = Math.max(0, parseInt(el('f-count').value, 10) || 0);
     var grade = el('f-grade').value.trim();
     var poomDan = el('f-poomdan').value || '없음';
+    var feeRaw = String(el('f-fee').value == null ? '' : el('f-fee').value).trim();
+    var monthlyFee = null;
+    if (feeRaw !== '') {
+      var feeVal = parseInt(feeRaw.replace(/[,\s]/g, ''), 10);
+      if (isNaN(feeVal) || feeVal < 0) {
+        toast('월 원비는 0원 이상 숫자로 입력해 주세요.'); el('f-fee').focus(); return;
+      }
+      monthlyFee = feeVal;
+    }
     if (!name) { toast('관원 이름을 입력해 주세요.'); el('f-name').focus(); return; }
     if (phone && digitsOnly(phone).length < 4) { toast('보호자 연락처를 다시 확인해 주세요.'); return; }
 
@@ -3119,13 +3287,14 @@
       if (s) {
         s.name = name; s.phone = phone; s.className = className; s.belt = belt;
         s.attendCount = attendCount; s.grade = grade; s.poomDan = poomDan;
+        s.monthlyFee = monthlyFee;
       }
       toast(name + ' 관원 정보를 수정했어요.');
     } else {
       app.students.push({
         id: uid('stu'), name: name, phone: phone, className: className, belt: belt,
         attendCount: attendCount, grade: grade, poomDan: poomDan,
-        targetPoomDan: '없음', gukStatus: 'none', gukExamDate: ''
+        targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '', monthlyFee: monthlyFee
       });
       toast(name + ' 관원을 추가했어요.');
     }
@@ -3780,7 +3949,7 @@
   }
 
   function setAdminTab(tab) {
-    var tabs = ['overview', 'promotion', 'gukgiwon', 'monthly'];
+    var tabs = ['overview', 'promotion', 'gukgiwon', 'monthly', 'tuition'];
     if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
     app.adminTab = tab;
     tabs.forEach(function (t) {
@@ -3790,12 +3959,15 @@
     el('view-admin').classList.toggle('promo-mode', tab === 'promotion');
     el('view-admin').classList.toggle('guk-mode', tab === 'gukgiwon');
     el('view-admin').classList.toggle('monthly-mode', tab === 'monthly');
+    el('view-admin').classList.toggle('tuition-mode', tab === 'tuition');
     el('admin-promotion').style.display = tab === 'promotion' ? 'block' : 'none';
     el('admin-gukgiwon').style.display = tab === 'gukgiwon' ? 'block' : 'none';
     el('admin-monthly').style.display = tab === 'monthly' ? 'block' : 'none';
+    el('admin-tuition').style.display = tab === 'tuition' ? 'block' : 'none';
     if (tab === 'promotion') { renderPromotion(); }
     if (tab === 'gukgiwon') { renderGukgiwon(); }
     if (tab === 'monthly') { renderMonthly(); }
+    if (tab === 'tuition') { renderTuition(true); }
   }
 
   /* =========================================================
@@ -4084,6 +4256,511 @@
   }
 
   /* =========================================================
+     11-F. 원비 관리 (월별 원비 · 납부 이력)
+     저장 구조
+       tdk.tuition.v1 = { 'YYYY-MM': { studentId: { status, amount, paidDate, method, memo } } }
+       status: 'unpaid' | 'paid' | 'exempt' · method: '카드' | '현금' | '입금'
+       student.monthlyFee(선택) → 없으면 settings.tuition.defaultFee
+     ========================================================= */
+  function tuitionConf() {
+    return (app.settings && app.settings.tuition) || DEFAULT_SETTINGS.tuition;
+  }
+  function tuitionDefaultFee() {
+    var v = parseInt(tuitionConf().defaultFee, 10);
+    return (isNaN(v) || v < 0) ? DEFAULT_SETTINGS.tuition.defaultFee : v;
+  }
+  function tuitionDueDay() {
+    var d = parseInt(tuitionConf().dueDay, 10);
+    return (isNaN(d) || d < 1 || d > 31) ? DEFAULT_SETTINGS.tuition.dueDay : d;
+  }
+  function tuitionBankAccount() {
+    return String(tuitionConf().bankAccount || '').trim();
+  }
+  function studentFee(s) {
+    var v = (s && typeof s.monthlyFee === 'number') ? s.monthlyFee : null;
+    return (v === null || isNaN(v) || v < 0) ? tuitionDefaultFee() : v;
+  }
+  function fmtWon(n) {
+    var v = Math.round(Number(n) || 0);
+    var s = String(Math.abs(v));
+    var out = '';
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 === 0) { out += ','; }
+      out += s.charAt(i);
+    }
+    return (v < 0 ? '-' : '') + out;
+  }
+  function tuitionMonthLabel(mk) {
+    return String(mk).slice(0, 4) + '년 ' + pad2(parseInt(String(mk).slice(5, 7), 10)) + '월';
+  }
+  function dateKo(dateKey) {
+    if (!isDateKey(dateKey)) { return ''; }
+    return parseInt(dateKey.slice(5, 7), 10) + '월 ' + parseInt(dateKey.slice(8, 10), 10) + '일';
+  }
+
+  function sanitizeTuitionRecord(r) {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) { return null; }
+    var out = { status: TUITION_STATUS[r.status] ? r.status : 'unpaid' };
+    var amt = parseInt(r.amount, 10);
+    if (!isNaN(amt) && amt >= 0) { out.amount = amt; }
+    if (TUITION_METHODS.indexOf(String(r.method || '')) !== -1) { out.method = String(r.method); }
+    if (out.status === 'paid' && isDateKey(r.paidDate)) { out.paidDate = String(r.paidDate); }
+    var memo = String(r.memo == null ? '' : r.memo).trim().slice(0, 40);
+    if (memo) { out.memo = memo; }
+    return out;
+  }
+  function loadTuition() {
+    var raw = readJSON(LS.tuition, {});
+    var out = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { return out; }
+    Object.keys(raw).forEach(function (mk) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mk)) { return; }
+      var month = raw[mk];
+      if (!month || typeof month !== 'object' || Array.isArray(month)) { return; }
+      var clean = {};
+      Object.keys(month).forEach(function (sid) {
+        var rec = sanitizeTuitionRecord(month[sid]);
+        if (rec) { clean[sid] = rec; }
+      });
+      if (Object.keys(clean).length) { out[mk] = clean; }
+    });
+    return out;
+  }
+
+  function ensureTuition() {
+    if (!app.tuitionUI) {
+      app.tuitionUI = { month: monthKey(new Date()), className: 'all', status: 'all', method: 'all', q: '', selected: {} };
+    }
+    return app.tuitionUI;
+  }
+  function tuitionOf(mk, sid) {
+    var m = app.tuition && app.tuition[mk];
+    return (m && m[sid]) || null;
+  }
+  function tuitionStatusOf(mk, sid) {
+    var r = tuitionOf(mk, sid);
+    return (r && TUITION_STATUS[r.status]) ? r.status : 'unpaid';
+  }
+  function tuitionAmountOf(mk, sid) {
+    var r = tuitionOf(mk, sid);
+    if (r && typeof r.amount === 'number' && !isNaN(r.amount) && r.amount >= 0) { return r.amount; }
+    var s = byId(sid);
+    return s ? studentFee(s) : tuitionDefaultFee();
+  }
+  function setTuition(mk, sid, patch) {
+    if (!mk || !sid) { return null; }
+    if (!app.tuition[mk]) { app.tuition[mk] = {}; }
+    var cur = app.tuition[mk][sid] || { status: 'unpaid' };
+    if (!TUITION_STATUS[cur.status]) { cur.status = 'unpaid'; }
+    Object.keys(patch || {}).forEach(function (k) {
+      if (patch[k] === undefined || patch[k] === null || patch[k] === '') { delete cur[k]; }
+      else { cur[k] = patch[k]; }
+    });
+    if (cur.status === 'paid' && !isDateKey(cur.paidDate)) { cur.paidDate = todayKey(); }
+    if (cur.status !== 'paid') { delete cur.paidDate; delete cur.method; }
+    app.tuition[mk][sid] = cur;
+    saveTuition();
+    return cur;
+  }
+
+  function tuitionSort(a, b) {
+    var ca = String(a.className || ''), cb = String(b.className || '');
+    if (ca !== cb) { return ca.localeCompare(cb, 'ko'); }
+    return a.name.localeCompare(b.name, 'ko');
+  }
+  function tuitionScopeRows() {
+    var u = ensureTuition();
+    return app.students.filter(function (s) {
+      if (u.className !== 'all' && String(s.className || '').trim() !== u.className) { return false; }
+      return matchSearch(s, u.q);
+    }).sort(tuitionSort);
+  }
+  function tuitionTableRows() {
+    var u = ensureTuition();
+    return tuitionScopeRows().filter(function (s) {
+      if (u.status !== 'all' && tuitionStatusOf(u.month, s.id) !== u.status) { return false; }
+      if (u.method !== 'all') {
+        var r = tuitionOf(u.month, s.id);
+        if (!r || r.status !== 'paid' || r.method !== u.method) { return false; }
+      }
+      return true;
+    });
+  }
+  function tuitionSummary(rows) {
+    var u = ensureTuition(), mk = u.month;
+    var out = {
+      expected: 0, paid: 0, paidCount: 0, unpaid: 0, unpaidCount: 0,
+      exempt: 0, exemptCount: 0, rate: 0, noMethod: 0, noMethodCount: 0,
+      byMethod: { '카드': 0, '현금': 0, '입금': 0 },
+      byMethodCount: { '카드': 0, '현금': 0, '입금': 0 }
+    };
+    (rows || []).forEach(function (s) {
+      var st = tuitionStatusOf(mk, s.id);
+      var amt = tuitionAmountOf(mk, s.id);
+      if (st === 'exempt') { out.exemptCount++; return; }
+      out.expected += amt;
+      if (st === 'paid') {
+        out.paid += amt; out.paidCount++;
+        var r = tuitionOf(mk, s.id);
+        var m = (r && r.method) ? r.method : '';
+        if (m && out.byMethod[m] !== undefined) { out.byMethod[m] += amt; out.byMethodCount[m]++; }
+        else { out.noMethod += amt; out.noMethodCount++; }
+      } else {
+        out.unpaid += amt; out.unpaidCount++;
+      }
+    });
+    out.rate = out.expected ? Math.round(out.paid / out.expected * 100) : 0;
+    return out;
+  }
+
+  function tuitionSelectedIds() {
+    var u = ensureTuition(), sel = u.selected || {};
+    return Object.keys(sel).filter(function (id) { return sel[id] && byId(id); });
+  }
+  function renderTuitionBulk() {
+    var ids = tuitionSelectedIds();
+    var c = el('tu-bulk-count');
+    if (c) { c.textContent = ids.length ? ids.length + '명 선택' : '선택 없음'; }
+    ['btn-tu-bulk-paid', 'btn-tu-bulk-sms', 'btn-tu-bulk-clear'].forEach(function (id) {
+      var b = el(id);
+      if (b) { b.disabled = !ids.length; }
+    });
+  }
+
+  function renderTuition(force) {
+    var tbody = el('tu-table');
+    if (!tbody) { return; }
+    var u = ensureTuition();
+    var mk = u.month;
+    var act = document.activeElement;
+    if (!force && act && act.getAttribute) {
+      var f = ['data-tfee', 'data-tdate', 'data-tmemo', 'data-tstatus', 'data-tcheck'];
+      for (var i = 0; i < f.length; i++) {
+        if (act.getAttribute(f[i])) { return; }
+      }
+    }
+    Object.keys(u.selected || {}).forEach(function (id) { if (!byId(id)) { delete u.selected[id]; } });
+
+    if (el('tu-label')) { el('tu-label').textContent = tuitionMonthLabel(mk); }
+
+    var sel = el('tu-class');
+    var classes = monthClasses();
+    if (sel) {
+      var want = '<option value="all">전체 반</option>' + classes.map(function (c) {
+        return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
+      }).join('');
+      if (sel.getAttribute('data-opts') !== want) {
+        sel.innerHTML = want;
+        sel.setAttribute('data-opts', want);
+      }
+      if (u.className !== 'all' && classes.indexOf(u.className) === -1) { u.className = 'all'; }
+      sel.value = u.className || 'all';
+    }
+    var search = el('tu-search');
+    if (search && document.activeElement !== search) { search.value = u.q || ''; }
+
+    var chips = el('tu-status-filters') ? el('tu-status-filters').children : [];
+    for (var ci = 0; ci < chips.length; ci++) {
+      chips[ci].classList.toggle('active', chips[ci].getAttribute('data-tfilter') === u.status);
+    }
+    var mchips = [['all', 'tu-m-all'], ['카드', 'tu-m-card'], ['현금', 'tu-m-cash'], ['입금', 'tu-m-bank']];
+    mchips.forEach(function (p) {
+      var b = el(p[1]);
+      if (b) { b.classList.toggle('active', u.method === p[0]); }
+    });
+
+    var scope = tuitionScopeRows();
+    var sum = tuitionSummary(scope);
+    if (el('tu-expected')) { el('tu-expected').innerHTML = fmtWon(sum.expected) + '<small>원</small>'; }
+    if (el('tu-expected-n')) { el('tu-expected-n').textContent = (scope.length - sum.exemptCount) + '명 기준'; }
+    if (el('tu-paid')) { el('tu-paid').innerHTML = fmtWon(sum.paid) + '<small>원</small>'; }
+    if (el('tu-paid-n')) { el('tu-paid-n').textContent = sum.paidCount + '명'; }
+    if (el('tu-unpaid')) { el('tu-unpaid').innerHTML = fmtWon(sum.unpaid) + '<small>원</small>'; }
+    if (el('tu-unpaid-n')) { el('tu-unpaid-n').textContent = sum.unpaidCount + '명'; }
+    if (el('tu-rate')) { el('tu-rate').innerHTML = sum.rate + '<small>%</small>'; }
+    if (el('tu-rate-n')) { el('tu-rate-n').textContent = '면제·휴원 ' + sum.exemptCount + '명'; }
+    if (el('tu-m-all-v')) { el('tu-m-all-v').textContent = fmtWon(sum.paid) + '원'; }
+    if (el('tu-m-card-v')) { el('tu-m-card-v').textContent = fmtWon(sum.byMethod['카드']) + '원'; }
+    if (el('tu-m-cash-v')) { el('tu-m-cash-v').textContent = fmtWon(sum.byMethod['현금']) + '원'; }
+    if (el('tu-m-bank-v')) { el('tu-m-bank-v').textContent = fmtWon(sum.byMethod['입금']) + '원'; }
+    if (el('tu-missing')) {
+      el('tu-missing').textContent = sum.noMethodCount
+        ? '수단 미기록 ' + sum.noMethodCount + '명 · ' + fmtWon(sum.noMethod) + '원'
+        : '';
+    }
+    if (el('tu-note')) {
+      var filtered = (u.status !== 'all' || u.method !== 'all');
+      el('tu-note').textContent = tuitionMonthLabel(mk) + ' · 납부 기한 매월 ' + tuitionDueDay() + '일 · ' +
+        (u.className === 'all' ? '전체 반' : u.className) + ' ' + scope.length + '명' +
+        (filtered ? ' · 표는 필터 적용' : '');
+    }
+
+    var rows = tuitionTableRows();
+    var selMap = u.selected || {};
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="8">' +
+        (app.students.length ? '조건에 맞는 관원이 없어요. 반·상태 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다') +
+        '</td></tr>';
+    } else {
+      tbody.innerHTML = rows.map(function (s) {
+        var st = tuitionStatusOf(mk, s.id);
+        var amt = tuitionAmountOf(mk, s.id);
+        var rec = tuitionOf(mk, s.id) || {};
+        var grade = studentGrade(s);
+        var methods = TUITION_METHODS.map(function (m) {
+          var on = (st === 'paid' && rec.method === m);
+          return '<button type="button" class="tu-mbtn' + (on ? ' on' : '') + '" data-tmethod="' + esc(m) + '" data-sid="' + esc(s.id) + '"' +
+            ' aria-pressed="' + (on ? 'true' : 'false') + '" title="' + esc(m + ' 수납으로 완납 처리') + '">' +
+            TUITION_METHOD_ICON[m] + ' ' + esc(m) + '</button>';
+        }).join('');
+        return '<tr class="tur ' + st + (selMap[s.id] ? ' sel' : '') + '">' +
+          '<td><input type="checkbox" class="ck" data-tcheck="' + esc(s.id) + '"' + (selMap[s.id] ? ' checked' : '') +
+          ' aria-label="' + esc(s.name + ' 선택') + '"></td>' +
+          '<td class="nm"><div class="nm-line">' + esc(s.name) +
+          '<span class="belt-badge tub-belt"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span></div>' +
+          '<div class="sub">' + esc(s.className || '반 미지정') + (grade ? ' · ' + esc(grade) : '') + '</div></td>' +
+          '<td><input class="input mini tu-fee" type="number" min="0" step="1000" inputmode="numeric" value="' + amt + '"' +
+          ' data-tfee="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 월 원비') + '"></td>' +
+          '<td><select class="input mini tu-status" data-tstatus="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 납부 상태') + '">' +
+          '<option value="unpaid"' + (st === 'unpaid' ? ' selected' : '') + '>미납</option>' +
+          '<option value="paid"' + (st === 'paid' ? ' selected' : '') + '>완납</option>' +
+          '<option value="exempt"' + (st === 'exempt' ? ' selected' : '') + '>면제·휴원</option></select></td>' +
+          '<td><input class="input mini tu-date" type="date" value="' + esc(rec.paidDate || '') + '"' +
+          ' data-tdate="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 납부일') + '"></td>' +
+          '<td><div class="tu-mgroup">' + methods + '</div></td>' +
+          '<td><input class="input mini tu-memo" type="text" maxlength="40" value="' + esc(rec.memo || '') + '"' +
+          ' placeholder="메모" data-tmemo="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 메모') + '"></td>' +
+          '<td class="tu-act"><button type="button" class="btn btn-sm ' + (st === 'paid' ? 'btn-ghost' : 'btn-primary') + '"' +
+          ' data-tpaid="' + esc(s.id) + '" title="미납↔완납 전환">' + (st === 'paid' ? '↩ 미납' : '✅ 완납') + '</button>' +
+          '<button type="button" class="btn btn-sm btn-mint" data-tsms="' + esc(s.id) + '" title="보호자께 원비 문자">💬 문자</button></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    var all = el('tu-check-all');
+    if (all) { all.checked = rows.length > 0 && rows.every(function (s) { return !!selMap[s.id]; }); }
+    renderTuitionBulk();
+  }
+
+  function toggleTuitionPaid(sid) {
+    var u = ensureTuition(), mk = u.month, s = byId(sid);
+    if (!s) { return; }
+    if (tuitionStatusOf(mk, sid) === 'paid') {
+      setTuition(mk, sid, { status: 'unpaid', paidDate: undefined, method: undefined });
+      renderTuition(true);
+      toast(s.name + ' · ' + tuitionMonthLabel(mk) + ' 원비를 미납으로 되돌렸어요');
+    } else {
+      setTuition(mk, sid, { status: 'paid', paidDate: todayKey() });
+      renderTuition(true);
+      toast(s.name + ' · ' + tuitionMonthLabel(mk) + ' 원비 완납 (납부일 ' + dateKo(todayKey()) + ')');
+    }
+  }
+  function setTuitionStatus(sid, status) {
+    var u = ensureTuition(), mk = u.month, s = byId(sid);
+    if (!s || !TUITION_STATUS[status]) { return; }
+    var cur = tuitionOf(mk, sid) || {};
+    if (status === 'paid') {
+      setTuition(mk, sid, { status: 'paid', paidDate: cur.paidDate || todayKey(), method: cur.method });
+    } else if (status === 'exempt') {
+      setTuition(mk, sid, { status: 'exempt', paidDate: undefined, method: undefined });
+    } else {
+      setTuition(mk, sid, { status: 'unpaid', paidDate: undefined, method: undefined });
+    }
+    renderTuition(true);
+    toast(s.name + ' · ' + TUITION_STATUS[status] + '으로 바꿨어요');
+  }
+  function setTuitionMethod(sid, method) {
+    var u = ensureTuition(), mk = u.month, s = byId(sid);
+    if (!s || TUITION_METHODS.indexOf(method) === -1) { return; }
+    var cur = tuitionOf(mk, sid) || {};
+    if (cur.status === 'paid' && cur.method === method) {
+      toast(s.name + ' 관원은 이미 ' + method + ' 수납으로 기록되어 있어요.');
+      return;
+    }
+    setTuition(mk, sid, { status: 'paid', method: method, paidDate: cur.paidDate || todayKey() });
+    renderTuition(true);
+    toast(s.name + ' · ' + tuitionMonthLabel(mk) + ' 원비 ' + method + ' 수납 완료로 처리했어요');
+  }
+
+  function tuitionNoticeMessage(s, mk) {
+    var bank = tuitionBankAccount();
+    return '[' + app.settings.dojoName + '] ' + s.name + ' 관원 ' + tuitionMonthLabel(mk) + ' 원비 납부 안내입니다.\n' +
+      '· 원비: ' + fmtWon(tuitionAmountOf(mk, s.id)) + '원\n' +
+      '· 납부 기한: ' + tuitionMonthLabel(mk) + ' ' + tuitionDueDay() + '일까지\n' +
+      (bank ? '· 입금 계좌: ' + bank + '\n' : '') +
+      '이미 납부하셨다면 이 문자는 넘겨 주세요.';
+  }
+  function tuitionThanksMessage(s, mk) {
+    var rec = tuitionOf(mk, s.id) || {};
+    var lines = [
+      '[' + app.settings.dojoName + '] ' + s.name + ' 관원 ' + tuitionMonthLabel(mk) + ' 원비 수납이 확인되었습니다. 감사합니다.',
+      '· 원비: ' + fmtWon(tuitionAmountOf(mk, s.id)) + '원'
+    ];
+    if (rec.method) { lines.push('· 결제 수단: ' + rec.method); }
+    if (rec.paidDate) { lines.push('· 납부일: ' + dateKo(rec.paidDate)); }
+    return lines.join('\n');
+  }
+  /* 'sent' | 'skipped' */
+  function sendTuitionSms(sid, silent) {
+    var u = ensureTuition(), mk = u.month, s = byId(sid);
+    if (!s) { return 'skipped'; }
+    var st = tuitionStatusOf(mk, sid);
+    if (st === 'exempt') {
+      if (!silent) { toast(s.name + ' 관원은 면제·휴원이라 원비 안내를 보내지 않았어요.'); }
+      return 'skipped';
+    }
+    if (!String(s.phone || '').trim()) {
+      if (!silent) { toast(s.name + ' 관원은 보호자 연락처가 없어 문자를 보낼 수 없어요.'); }
+      return 'skipped';
+    }
+    var paid = (st === 'paid');
+    addLog(s, 'in', fmtTime(), { kind: 'tuition', text: paid ? tuitionThanksMessage(s, mk) : tuitionNoticeMessage(s, mk) });
+    if (!silent) {
+      toast(s.name + ' 관원 학부모님께 ' + (paid ? '수납 감사' : '원비 납부 안내') + ' 문자를 보냈어요' + smsToastTail());
+    }
+    return 'sent';
+  }
+
+  function tuitionSelectUnpaid() {
+    var u = ensureTuition();
+    var rows = tuitionScopeRows();
+    var sel = {}, n = 0;
+    rows.forEach(function (s) {
+      if (tuitionStatusOf(u.month, s.id) === 'unpaid') { sel[s.id] = true; n++; }
+    });
+    u.selected = sel;
+    renderTuition(true);
+    toast(n ? n + '명의 미납자를 선택했어요' : '선택할 미납자가 없어요');
+  }
+  function tuitionBulkPaid() {
+    var ids = tuitionSelectedIds();
+    if (!ids.length) { return; }
+    var u = ensureTuition(), mk = u.month;
+    var list = ids.map(byId).filter(function (s) { return s && tuitionStatusOf(mk, s.id) !== 'exempt'; });
+    if (!list.length) { toast('선택한 인원이 모두 면제·휴원이에요.'); return; }
+    var total = 0;
+    list.forEach(function (s) { total += tuitionAmountOf(mk, s.id); });
+    openModal({
+      title: '선택한 ' + list.length + '명을 일괄 완납 처리할까요?',
+      sub: tuitionMonthLabel(mk) + ' · 합계 ' + fmtWon(total) + '원 · 납부일은 오늘(' + fmtDateKorean(new Date()) + ')로 기록됩니다.',
+      body: '<div class="help" style="margin-top:0">결제 수단은 표에서 관원별로 따로 고를 수 있어요. 면제·휴원 관원은 건너뜁니다.</div>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: list.length + '명 완납', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      list.forEach(function (s) {
+        var cur = tuitionOf(mk, s.id) || {};
+        setTuition(mk, s.id, { status: 'paid', paidDate: todayKey(), method: cur.method });
+      });
+      u.selected = {};
+      renderTuition(true);
+      toast(list.length + '명을 완납 처리했어요 · 합계 ' + fmtWon(total) + '원');
+    });
+  }
+  function tuitionBulkSms() {
+    var ids = tuitionSelectedIds();
+    if (!ids.length) { return; }
+    var u = ensureTuition(), mk = u.month;
+    var list = ids.map(byId).filter(Boolean);
+    var payable = list.filter(function (s) { return tuitionStatusOf(mk, s.id) !== 'exempt' && String(s.phone || '').trim(); });
+    if (!payable.length) { toast('문자를 보낼 수 있는 관원이 없어요(면제·휴원이거나 연락처 없음).'); return; }
+    openModal({
+      title: '선택한 ' + payable.length + '명에게 원비 안내 문자를 보낼까요?',
+      sub: tuitionMonthLabel(mk) + ' · 미납자는 납부 안내, 완납자는 수납 감사 문자를 받습니다.',
+      body: '<div class="help" style="margin-top:0">도장폰 무료문자 설정(웹훅)을 그대로 쓰고, 여러 명에게는 0.7초 간격으로 차례로 나갑니다.' +
+        (list.length - payable.length ? '<br>면제·휴원 또는 연락처가 없는 ' + (list.length - payable.length) + '명은 제외됩니다.' : '') +
+        '</div>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: payable.length + '명 보내기', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      var sent = 0;
+      payable.forEach(function (s) { if (sendTuitionSms(s.id, true) === 'sent') { sent++; } });
+      u.selected = {};
+      renderTuition(true);
+      toast(sent + '명에게 원비 안내 문자' + smsToastTail());
+    });
+  }
+
+  function tuitionCSVText(mk, rows) {
+    var sum = tuitionSummary(rows);
+    var pad = function (arr) {
+      var out = arr.slice();
+      while (out.length < 8) { out.push(''); }
+      return out;
+    };
+    var lines = [];
+    lines.push(pad(['원비 정산 요약 · ' + tuitionMonthLabel(mk)]));
+    lines.push(pad(['구분', '카드', '현금', '입금', '합계']));
+    lines.push(pad(['수납 금액(원)', sum.byMethod['카드'], sum.byMethod['현금'], sum.byMethod['입금'], sum.paid]));
+    lines.push(pad(['수납 인원(명)', sum.byMethodCount['카드'], sum.byMethodCount['현금'], sum.byMethodCount['입금'], sum.paidCount]));
+    lines.push(pad(['예상 총 원비(원)', '', '', '', sum.expected]));
+    lines.push(pad(['미납 금액(원)', '', '', '', sum.unpaid]));
+    lines.push(pad(['면제·휴원(명)', '', '', '', sum.exemptCount]));
+    lines.push(pad(['수납률', sum.rate + '%']));
+    lines.push(pad(['수단 미기록(원)', '', '', '', sum.noMethod]));
+    lines.push(pad([]));
+    lines.push(pad(['관원', '반', '띠', '월 원비(원)', '납부 상태', '납부일', '결제 수단', '메모']));
+    (rows || []).forEach(function (s) {
+      var st = tuitionStatusOf(mk, s.id);
+      var rec = tuitionOf(mk, s.id) || {};
+      lines.push(pad([
+        s.name, s.className || '', s.belt || '', tuitionAmountOf(mk, s.id),
+        TUITION_STATUS[st],
+        (st === 'paid' ? (rec.paidDate || '') : ''),
+        (st === 'paid' ? (rec.method || '') : ''),
+        rec.memo || ''
+      ]));
+    });
+    return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
+  }
+  function downloadTuitionCSV() {
+    var u = ensureTuition();
+    var rows = tuitionScopeRows();
+    if (!rows.length) {
+      toast('이 달에 내려받을 관원이 없어요. 반 필터나 검색을 확인해 주세요.');
+      return;
+    }
+    var csv = tuitionCSVText(u.month, rows);
+    if (downloadFile('원비내역_' + u.month + '.csv', csv, 'text/csv;charset=utf-8')) {
+      toast(rows.length + '명 · ' + tuitionMonthLabel(u.month) + ' 원비 내역을 내려받았어요');
+    }
+  }
+
+  function fillTuitionSettings() {
+    if (el('tu-default-fee')) { el('tu-default-fee').value = String(tuitionDefaultFee()); }
+    if (el('tu-due-day')) { el('tu-due-day').value = String(tuitionDueDay()); }
+    if (el('tu-bank-account')) { el('tu-bank-account').value = tuitionBankAccount(); }
+  }
+  function saveTuitionSettings() {
+    var fee = parseInt(String(el('tu-default-fee').value).replace(/[,\s]/g, ''), 10);
+    var day = parseInt(String(el('tu-due-day').value).replace(/[,\s]/g, ''), 10);
+    if (isNaN(fee) || fee < 0) { toast('기본 월 원비를 0원 이상 숫자로 입력해 주세요.'); return; }
+    if (isNaN(day) || day < 1 || day > 31) { toast('납부 기한은 1~31일 사이로 정해 주세요.'); return; }
+    app.settings.tuition = {
+      defaultFee: fee,
+      dueDay: day,
+      bankAccount: String(el('tu-bank-account').value || '').trim().slice(0, 80)
+    };
+    saveSettings();
+    renderTuition(true);
+    toast('원비 설정을 저장했어요 · 기본 ' + fmtWon(fee) + '원 · 매월 ' + day + '일까지');
+  }
+  function toggleTuitionSettings(force) {
+    var p = el('tu-settings');
+    if (!p) { return; }
+    var open = (force === undefined) ? (p.style.display === 'none') : !!force;
+    p.style.display = open ? 'block' : 'none';
+    if (open) { fillTuitionSettings(); }
+    var b = el('btn-tu-settings');
+    if (b) { b.textContent = open ? '⚙️ 원비 설정 닫기' : '⚙️ 원비 설정'; }
+  }
+
+  /* =========================================================
      12. 파일 가져오기 (SheetJS + CSV 폴백)
      ========================================================= */
   var HEADER_KEYS = {
@@ -4298,13 +4975,14 @@
   function buildBackup() {
     return {
       app: 'mta-taekwondo-attendance',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       dojoName: app.settings.dojoName,
       students: app.students,
       faces: app.faces,
       records: app.records,
       attendance: app.attendance,
+      tuition: app.tuition,
       logs: app.logs,
       settings: app.settings
     };
@@ -4348,7 +5026,7 @@
       return { ok: false, reason: '얼굴 데이터 형식이 올바르지 않아요.' };
     }
     var bad = '';
-    ['records', 'attendance', 'settings'].forEach(function (k) {
+    ['records', 'attendance', 'settings', 'tuition'].forEach(function (k) {
       if (data[k] != null && (typeof data[k] !== 'object' || Array.isArray(data[k]))) { bad = k; }
     });
     if (bad) { return { ok: false, reason: bad + ' 데이터 형식이 올바르지 않아요.' }; }
@@ -4370,6 +5048,7 @@
     writeJSON(LS.faces, faces);
     if (data.records) { writeJSON(LS.records, data.records); }
     if (data.attendance) { writeJSON(LS.attendance, data.attendance); }
+    writeJSON(LS.tuition, (data.tuition && typeof data.tuition === 'object' && !Array.isArray(data.tuition)) ? data.tuition : {});
     if (data.logs) { writeJSON(LS.logs, data.logs); }
     if (data.settings) { writeJSON(LS.settings, data.settings); }
 
@@ -4389,6 +5068,8 @@
     renderPromotion();
     renderGukgiwon();
     renderMonthly();
+    renderTuition(true);
+    fillTuitionSettings();
     renderPin();
     refreshAiHint();
     toast('백업을 복원했어요 · 관원 ' + app.students.length + '명 · 얼굴 ' + faceCount() + '명');
@@ -4409,11 +5090,12 @@
       if (!check.ok) { toast(check.reason); return; }
       var faces = (data.faces && typeof data.faces === 'object') ? Object.keys(data.faces).length : 0;
       var days = (data.attendance && typeof data.attendance === 'object') ? Object.keys(data.attendance).length : 0;
+      var tMonths = (data.tuition && typeof data.tuition === 'object') ? Object.keys(data.tuition).length : 0;
       openModal({
         title: '백업 파일로 복원할까요?',
         sub: '지금 이 브라우저의 데이터가 백업 파일 내용으로 바뀝니다.',
         body: '<div class="help" style="margin-top:0">' +
-          '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 띠 체계·문자 설정 포함<br>' +
+          '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 띠 체계·문자·원비 설정 포함<br>' +
           (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
           '</div>',
         actions: [
@@ -4787,6 +5469,137 @@
       if (md && ms) { toggleMonthCell(ms, md); }
     });
 
+    // 관리자: 원비 관리
+    el('atab-tuition').addEventListener('click', function () { setAdminTab('tuition'); });
+    el('tu-prev').addEventListener('click', function () {
+      var u = ensureTuition();
+      u.month = shiftMonth(u.month, -1);
+      u.selected = {};
+      renderTuition(true);
+    });
+    el('tu-next').addEventListener('click', function () {
+      var u = ensureTuition();
+      u.month = shiftMonth(u.month, 1);
+      u.selected = {};
+      renderTuition(true);
+    });
+    el('tu-this').addEventListener('click', function () {
+      var u = ensureTuition();
+      u.month = monthKey(new Date());
+      u.selected = {};
+      renderTuition(true);
+      toast('이번 달로 돌아왔어요');
+    });
+    el('tu-class').addEventListener('change', function () {
+      ensureTuition().className = el('tu-class').value || 'all';
+      renderTuition(true);
+    });
+    el('tu-search').addEventListener('input', function () {
+      ensureTuition().q = el('tu-search').value || '';
+      renderTuition();
+    });
+    el('tu-status-filters').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-tfilter]');
+      if (!b) { return; }
+      var v = b.getAttribute('data-tfilter');
+      ensureTuition().status = TUITION_STATUS[v] ? v : 'all';
+      renderTuition(true);
+    });
+    el('tu-methods').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-mfilter]');
+      if (!b) { return; }
+      var u = ensureTuition();
+      var v = b.getAttribute('data-mfilter');
+      if (v === 'all') { u.method = 'all'; }
+      else if (TUITION_METHODS.indexOf(v) !== -1) { u.method = (u.method === v) ? 'all' : v; }
+      renderTuition(true);
+    });
+    el('btn-tu-settings').addEventListener('click', function () { toggleTuitionSettings(); });
+    el('btn-tu-save-settings').addEventListener('click', saveTuitionSettings);
+    el('btn-tu-csv').addEventListener('click', downloadTuitionCSV);
+    el('btn-tu-select-unpaid').addEventListener('click', tuitionSelectUnpaid);
+    el('btn-tu-bulk-paid').addEventListener('click', tuitionBulkPaid);
+    el('btn-tu-bulk-sms').addEventListener('click', tuitionBulkSms);
+    el('btn-tu-bulk-clear').addEventListener('click', function () {
+      ensureTuition().selected = {};
+      renderTuition(true);
+    });
+    el('tu-check-all').addEventListener('change', function (e) {
+      var u = ensureTuition();
+      var on = !!e.target.checked;
+      tuitionTableRows().forEach(function (s) {
+        if (on) { u.selected[s.id] = true; } else { delete u.selected[s.id]; }
+      });
+      renderTuition(true);
+    });
+    el('tu-table').addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) { return; }
+      var mb = t.closest('[data-tmethod]');
+      if (mb) { setTuitionMethod(mb.getAttribute('data-sid'), mb.getAttribute('data-tmethod')); return; }
+      var pb = t.closest('[data-tpaid]');
+      if (pb) { toggleTuitionPaid(pb.getAttribute('data-tpaid')); return; }
+      var sb = t.closest('[data-tsms]');
+      if (sb) { sendTuitionSms(sb.getAttribute('data-tsms')); return; }
+    });
+    el('tu-table').addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) { return; }
+      var u = ensureTuition(), mk = u.month;
+      var ck = t.closest('[data-tcheck]');
+      if (ck) {
+        var cid = ck.getAttribute('data-tcheck');
+        if (t.checked) { u.selected[cid] = true; } else { delete u.selected[cid]; }
+        renderTuitionBulk();
+        return;
+      }
+      var st = t.closest('[data-tstatus]');
+      if (st) { setTuitionStatus(st.getAttribute('data-tstatus'), st.value); return; }
+      var dt = t.closest('[data-tdate]');
+      if (dt) {
+        var dsid = dt.getAttribute('data-tdate'), dv = String(dt.value || '').trim();
+        var s1 = byId(dsid);
+        if (!dv) {
+          var curd = tuitionOf(mk, dsid);
+          if (curd && curd.status === 'paid') {
+            renderTuition(true);
+            toast('완납 관원은 납부일이 필요해요. 미납으로 돌리려면 ✅ 완납 버튼을 눌러 주세요.');
+            return;
+          }
+          setTuition(mk, dsid, { paidDate: undefined });
+          renderTuition(true);
+          toast((s1 ? s1.name : '') + ' 납부일을 비웠어요');
+          return;
+        }
+        if (!isDateKey(dv)) { toast('납부일을 날짜로 골라 주세요.'); renderTuition(true); return; }
+        setTuition(mk, dsid, { paidDate: dv, status: 'paid' });
+        renderTuition(true);
+        toast((s1 ? s1.name : '') + ' · 납부일 ' + dateKo(dv) + ' · 완납으로 기록했어요');
+        return;
+      }
+      var fe = t.closest('[data-tfee]');
+      if (fe) {
+        var fsid = fe.getAttribute('data-tfee'), fs = byId(fsid);
+        var raw = String(fe.value == null ? '' : fe.value).replace(/[,\s]/g, '');
+        if (raw === '') {
+          setTuition(mk, fsid, { amount: undefined });
+          renderTuition(true);
+          toast((fs ? fs.name : '') + ' · 기본 원비(' + fmtWon(fs ? studentFee(fs) : tuitionDefaultFee()) + '원)로 되돌렸어요');
+          return;
+        }
+        var fv = parseInt(raw, 10);
+        if (isNaN(fv) || fv < 0) { toast('월 원비는 0원 이상 숫자로 입력해 주세요.'); renderTuition(true); return; }
+        setTuition(mk, fsid, { amount: fv });
+        renderTuition(true);
+        toast((fs ? fs.name : '') + ' · ' + tuitionMonthLabel(mk) + ' 원비 ' + fmtWon(fv) + '원으로 저장했어요');
+        return;
+      }
+      var me = t.closest('[data-tmemo]');
+      if (me) {
+        setTuition(mk, me.getAttribute('data-tmemo'), { memo: String(me.value || '').trim().slice(0, 40) });
+      }
+    });
+
     // 관리자: 도장폰 무료문자 연동
     el('btn-save-sms').addEventListener('click', function () {
       var conf = readSmsForm();
@@ -4919,6 +5732,9 @@
     setAdminTab('overview');
     renderPromotion();
     renderGukgiwon();
+    renderMonthly();
+    renderTuition(true);
+    fillTuitionSettings();
     renderKioskInfo();
     renderVisibility();
     renderAdminLog();
@@ -4973,6 +5789,42 @@
       buildBackup: buildBackup,
       validateBackup: validateBackup,
       applyBackup: applyBackup
+    },
+    tuition: {
+      status: TUITION_STATUS,
+      methods: TUITION_METHODS,
+      conf: tuitionConf,
+      defaultFee: tuitionDefaultFee,
+      dueDay: tuitionDueDay,
+      bankAccount: tuitionBankAccount,
+      feeOf: studentFee,
+      of: tuitionOf,
+      statusOf: tuitionStatusOf,
+      amountOf: tuitionAmountOf,
+      set: setTuition,
+      setStatus: setTuitionStatus,
+      setMethod: setTuitionMethod,
+      togglePaid: toggleTuitionPaid,
+      sendSms: sendTuitionSms,
+      selectUnpaid: tuitionSelectUnpaid,
+      bulkPaid: tuitionBulkPaid,
+      bulkSms: tuitionBulkSms,
+      summary: tuitionSummary,
+      scopeRows: tuitionScopeRows,
+      tableRows: tuitionTableRows,
+      csvText: tuitionCSVText,
+      download: downloadTuitionCSV,
+      render: renderTuition,
+      ui: ensureTuition,
+      notice: tuitionNoticeMessage,
+      thanks: tuitionThanksMessage,
+      saveSettings: saveTuitionSettings,
+      fillSettings: fillTuitionSettings,
+      toggleSettings: toggleTuitionSettings,
+      fmtWon: fmtWon,
+      monthLabel: tuitionMonthLabel,
+      monthKey: monthKey,
+      shiftMonth: shiftMonth
     }
   };
 
