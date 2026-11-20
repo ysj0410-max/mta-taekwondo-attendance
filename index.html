@@ -1,0 +1,4009 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1b3e">
+<title>경희대MTA태권도 · AI 출석 알림</title>
+<script>
+  window.__xlsxLoadFailed = false;
+  window.addEventListener('error', function (e) {
+    if (e && e.target && e.target.tagName === 'SCRIPT') { window.__xlsxLoadFailed = true; }
+  }, true);
+</script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --navy:#0d1b3e; --navy-2:#16294f; --navy-3:#22386a;
+    --red:#e23b3b; --red-2:#c22f2f;
+    --mint:#12b886; --mint-2:#0ca678;
+    --sms:#2f6fd0; --sms-2:#245cae; --sms-ink:#123a6b; --sms-bg:#eaf2ff;
+    --ink:#111827; --muted:#6b7280; --line:#e5e8ef; --bg:#f2f4f9; --white:#fff;
+    --radius:18px;
+    --shadow:0 10px 30px rgba(13,27,62,.09), 0 2px 6px rgba(13,27,62,.04);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","맑은 고딕",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+  button{font-family:inherit}
+  input,select{font-family:inherit}
+  .app{height:100vh; height:100dvh; display:flex; flex-direction:column}
+
+  /* ---------- 상단 바 ---------- */
+  .topbar{
+    flex:0 0 auto; display:flex; align-items:center; gap:14px; padding:0 18px; height:74px;
+    background:linear-gradient(115deg,#0a1630 0%,#16294f 55%,#1e3768 100%);
+    color:#fff; box-shadow:0 6px 22px rgba(8,17,38,.28); position:relative; z-index:30;
+  }
+  .brand{display:flex; align-items:center; gap:11px; min-width:0}
+  .brand-mark{
+    width:44px; height:44px; border-radius:13px; flex:0 0 auto;
+    background:linear-gradient(150deg,#ffffff,#dbe3f4); display:grid; place-items:center; font-size:22px;
+    box-shadow:inset 0 -2px 0 rgba(13,27,62,.10), 0 4px 10px rgba(0,0,0,.18);
+  }
+  .brand-txt{min-width:0}
+  .dojo-name{
+    display:block; width:208px; max-width:34vw; background:transparent; border:1px solid transparent;
+    color:#fff; font-size:19px; font-weight:800; letter-spacing:-.5px; padding:3px 7px; border-radius:9px;
+  }
+  .dojo-name:hover{border-color:rgba(255,255,255,.20)}
+  .dojo-name:focus{outline:none; border-color:rgba(255,255,255,.55); background:rgba(255,255,255,.09)}
+  .brand-sub{font-size:11px; font-weight:600; color:rgba(255,255,255,.55); letter-spacing:.3px; padding-left:8px; white-space:nowrap}
+  .today-pill{
+    display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:#cfe0ff;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); padding:7px 11px; border-radius:10px; white-space:nowrap;
+  }
+  .today-pill b{color:#fff; font-variant-numeric:tabular-nums}
+  .mode-toggle{display:flex; gap:4px; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.14); padding:4px; border-radius:13px}
+  .mode-btn{
+    border:0; background:transparent; color:rgba(255,255,255,.72); font-weight:800; font-size:14px;
+    padding:8px 17px; border-radius:10px; cursor:pointer; transition:background .15s,color .15s; letter-spacing:-.2px;
+  }
+  .mode-btn.active{background:#fff; color:var(--navy)}
+  .mode-btn.active[data-mode="out"]{background:var(--red); color:#fff; box-shadow:0 4px 12px rgba(226,59,59,.35)}
+  .clock{margin-left:auto; text-align:right; line-height:1.12; padding-right:2px}
+  .clock-time{font-size:25px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:.6px}
+  .clock-time .sep{opacity:.55; font-weight:600}
+  .clock-date{font-size:11px; font-weight:600; color:rgba(255,255,255,.6)}
+  .icon-btn{
+    width:40px; height:40px; flex:0 0 auto; border-radius:12px; cursor:pointer; font-size:17px;
+    border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.07); color:#fff;
+    display:grid; place-items:center; transition:background .15s;
+  }
+  .icon-btn:hover{background:rgba(255,255,255,.16)}
+  .icon-btn.muted{color:#ffb4b4; border-color:rgba(255,180,180,.35)}
+  .tabs{display:flex; gap:3px; background:rgba(0,0,0,.22); padding:4px; border-radius:13px}
+  .tab-btn{
+    border:0; background:transparent; color:rgba(255,255,255,.65); font-weight:800; font-size:13.5px;
+    padding:8px 14px; border-radius:9px; cursor:pointer; white-space:nowrap;
+  }
+  .tab-btn.active{background:#fff; color:var(--navy)}
+
+  main{flex:1; min-height:0; position:relative}
+  .view{display:none; height:100%; min-height:0}
+  .view.active{display:flex}
+
+  /* ---------- 출석(키오스크) 화면 ---------- */
+  #view-attendance{display:none; padding:16px; gap:16px; min-height:0}
+  #view-attendance.active{display:grid; grid-template-columns:minmax(0,1.32fr) minmax(320px,.86fr); grid-template-rows:minmax(0,1fr) auto; height:100%}
+  .card{background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); display:flex; flex-direction:column; min-height:0; overflow:hidden}
+  .card-head{display:flex; align-items:center; gap:9px; padding:13px 16px 11px; border-bottom:1px solid #eef1f6; flex:0 0 auto}
+  .card-title{font-size:14px; font-weight:800; letter-spacing:-.3px; display:flex; align-items:center; gap:7px}
+  .card-title .dot{width:7px; height:7px; border-radius:50%; background:var(--red)}
+  .spacer{flex:1}
+  .tiny-note{font-size:11px; color:var(--muted); font-weight:600}
+
+  .cam-card{min-width:0}
+  .stage{
+    position:relative; flex:1; min-height:0; margin:13px; border-radius:15px; overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 50% 0%, #2b4373 0%, #16274a 48%, #0a1428 100%);
+    box-shadow:inset 0 0 60px rgba(0,0,0,.45);
+  }
+  .stage::after{
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 44px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 44px);
+    opacity:.7;
+  }
+  #camera-video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:none; z-index:1}
+  body.cam-live #camera-video{display:block}
+  body.cam-live .stage-ph{opacity:0; visibility:hidden}
+  .stage-ph{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; text-align:center; padding:24px; transition:opacity .25s; z-index:2;
+  }
+  .stage-ph .ph-icon{
+    width:76px; height:76px; border-radius:24px; display:grid; place-items:center; font-size:34px;
+    background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.14); margin-bottom:4px;
+  }
+  .stage-ph p{margin:0; color:rgba(255,255,255,.68); font-size:13.5px; line-height:1.65; font-weight:600; max-width:320px}
+  .stage-ph b{color:#fff}
+  .stage-ph .ph-sub{font-size:11.5px; color:rgba(255,255,255,.40); font-weight:600}
+  .stage-hud{
+    position:absolute; left:12px; bottom:12px; z-index:4; display:flex; align-items:center; gap:7px;
+    background:rgba(6,14,30,.62); border:1px solid rgba(255,255,255,.13); backdrop-filter:blur(6px);
+    padding:6px 11px; border-radius:999px; font-size:11.5px; font-weight:700; color:#dfe8fb;
+  }
+  .hud-dot{width:7px; height:7px; border-radius:50%; background:#f6c343; box-shadow:0 0 8px #f6c343}
+  body.cam-live .hud-dot{background:#37d67a; box-shadow:0 0 8px #37d67a}
+  .stage-tip{
+    position:absolute; right:12px; top:12px; z-index:4; font-size:11px; font-weight:700; color:#cfe0ff;
+    background:rgba(6,14,30,.55); border:1px solid rgba(255,255,255,.13); padding:6px 10px; border-radius:999px;
+  }
+  .scanline{
+    position:absolute; left:0; right:0; height:3px; top:0; z-index:5; opacity:0;
+    background:linear-gradient(90deg,transparent,#8ef5d5,transparent); box-shadow:0 0 16px #8ef5d5;
+  }
+  .stage.scanning .scanline{opacity:1; animation:scan 1.15s linear infinite}
+  @keyframes scan{0%{top:5%}100%{top:93%}}
+  .bbox{
+    position:absolute; z-index:4; width:44%; height:56%; left:28%; top:20%;
+    border:2px solid #3ce0a8; border-radius:14px; opacity:0; transform:scale(.93);
+    box-shadow:0 0 0 1px rgba(60,224,168,.35), 0 0 26px rgba(60,224,168,.38);
+    transition:opacity .16s ease, transform .16s ease, left .35s, top .35s;
+  }
+  .bbox.show{opacity:1; transform:scale(1)}
+  .bbox .corner{position:absolute; width:20px; height:20px; border:3px solid #3ce0a8; border-radius:3px}
+  .bbox .c1{left:-2px; top:-2px; border-right:0; border-bottom:0}
+  .bbox .c2{right:-2px; top:-2px; border-left:0; border-bottom:0}
+  .bbox .c3{left:-2px; bottom:-2px; border-right:0; border-top:0}
+  .bbox .c4{right:-2px; bottom:-2px; border-left:0; border-top:0}
+  .bbox-label{
+    position:absolute; top:-31px; left:-2px; background:#3ce0a8; color:#04251a;
+    font-size:12px; font-weight:800; padding:4px 9px; border-radius:8px; white-space:nowrap;
+    box-shadow:0 4px 14px rgba(0,0,0,.3);
+  }
+  .cam-bar{flex:0 0 auto; display:flex; align-items:center; gap:9px; padding:0 14px 13px}
+  .cam-status{font-size:11.5px; color:var(--muted); font-weight:600; line-height:1.45}
+  .cam-status b{color:var(--navy)}
+
+  .btn{
+    border:1px solid var(--line); background:#fff; color:var(--navy); font-weight:800; font-size:12.5px;
+    padding:9px 13px; border-radius:11px; cursor:pointer; white-space:nowrap; transition:background .13s,transform .06s;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn:hover{background:#f4f7fe}
+  .btn-primary{background:var(--navy); border-color:var(--navy); color:#fff}
+  .btn-primary:hover{background:var(--navy-3)}
+  .btn-red{background:var(--red); border-color:var(--red); color:#fff}
+  .btn-mint{background:var(--mint); border-color:var(--mint); color:#fff}
+  .btn-mint:hover{background:var(--mint-2)}
+  .btn-ghost{background:#f7f9fd}
+  .btn-danger{background:#fff; border-color:#f3c9c9; color:#c0392b}
+  .btn-danger:hover{background:#fff5f5}
+  .btn-sm{padding:6px 10px; font-size:11.5px; border-radius:9px}
+
+  /* 오른쪽: 터치 백업 + 문자 로그 */
+  .side{display:flex; flex-direction:column; gap:14px; min-height:0}
+  .touch-card{flex:0 0 auto}
+  .touch-tabs{display:flex; gap:5px; padding:10px 14px 0}
+  .touch-tab{
+    flex:1; border:1px solid var(--line); background:#f7f9fd; color:var(--muted); font-weight:800; font-size:12.5px;
+    padding:9px 6px; border-radius:10px; cursor:pointer;
+  }
+  .touch-tab.active{background:#fff; color:var(--navy); border-color:#c9d4ea; box-shadow:0 2px 8px rgba(13,27,62,.07)}
+  .touch-body{padding:12px 14px 14px}
+  .pin-slots{display:flex; gap:9px; justify-content:center; margin:2px 0 12px}
+  .pin-slot{
+    width:52px; height:58px; border-radius:13px; border:1.5px solid #dbe2f0; background:#f8fafd;
+    display:grid; place-items:center; font-size:24px; font-weight:800; color:var(--navy); font-variant-numeric:tabular-nums;
+    transition:border-color .12s, background .12s;
+  }
+  .pin-slot.filled{border-color:var(--navy); background:#fff; box-shadow:0 3px 10px rgba(13,27,62,.08)}
+  .keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
+  .key{
+    height:52px; border-radius:13px; border:1px solid #e2e7f1; background:#fff; color:var(--navy);
+    font-size:21px; font-weight:800; cursor:pointer; box-shadow:0 2px 0 #e8ecf5;
+    transition:transform .05s, background .12s;
+  }
+  .key:active{transform:translateY(2px); box-shadow:none; background:#eef3fb}
+  .key.fn{font-size:14px; color:var(--muted); background:#f7f9fd}
+  .key.fn.del{color:#c0392b; font-size:16px}
+  .pin-hint{font-size:11.5px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.5; font-weight:600}
+  .cand-list{margin-top:10px; display:flex; flex-direction:column; gap:6px}
+  .cand{
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left; cursor:pointer;
+    border:1px solid #e5eaf4; background:#fbfcff; border-radius:11px; padding:9px 11px; font-size:13px; font-weight:700; color:var(--ink);
+  }
+  .cand:hover{background:#f1f5ff}
+
+  .search-input{
+    width:100%; height:46px; border:1.5px solid #dbe2f0; border-radius:12px; padding:0 13px; font-size:14px; font-weight:600;
+    color:var(--ink); background:#f8fafd; outline:none;
+  }
+  .search-input:focus{border-color:var(--navy); background:#fff}
+  .stu-list{margin-top:10px; max-height:calc(100% - 56px); overflow:auto; display:flex; flex-direction:column; gap:6px; padding-bottom:2px}
+  .stu-row{
+    display:flex; align-items:center; gap:9px; width:100%; text-align:left; cursor:pointer; background:#fff;
+    border:1px solid #e8ecf4; border-radius:12px; padding:9px 11px; transition:background .12s,border-color .12s;
+  }
+  .stu-row:hover{background:#f6f9ff; border-color:#cfdbf2}
+  .stu-belt{width:9px; height:34px; border-radius:5px; flex:0 0 auto}
+  .stu-main{min-width:0; flex:1}
+  .stu-name{font-size:14px; font-weight:800; letter-spacing:-.2px; color:var(--ink)}
+  .stu-name .badge{font-size:10px; font-weight:800; padding:2px 6px; border-radius:6px; margin-left:5px; vertical-align:1px}
+  .badge.in{background:#e6f7f0; color:#0b7a55}
+  .badge.out{background:#eaf0fb; color:#274b8f}
+  .stu-sub{font-size:11px; color:var(--muted); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .stu-go{font-size:11px; font-weight:800; color:#fff; background:var(--navy); padding:6px 9px; border-radius:9px; flex:0 0 auto}
+
+  .log-card{flex:1; min-height:0}
+  .log-count{
+    font-size:10.5px; font-weight:800; color:#0b7a55; background:#e6f7f0; padding:2px 7px; border-radius:999px;
+  }
+  .log-scroll{flex:1; min-height:0; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:10px; background:#f7f8fb}
+  .sms-msg{
+    background:#fff; border-radius:14px; border:1px solid #e3e9f5; overflow:hidden;
+    box-shadow:0 2px 8px rgba(20,40,90,.06); animation:pop .22s ease-out;
+  }
+  @keyframes pop{from{transform:translateY(6px); opacity:0}to{transform:none; opacity:1}}
+  .sms-head{display:flex; align-items:center; gap:7px; padding:8px 10px 7px; background:var(--sms-bg); border-bottom:1px solid #dbe7fb}
+  .sms-tag{font-size:9.5px; font-weight:800; color:#1d4f91; background:#fff; padding:2px 6px; border-radius:5px; box-shadow:inset 0 0 0 1px #cfe0fa}
+  .sms-sender{font-size:11.5px; font-weight:800; color:var(--sms-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .sms-time{margin-left:auto; font-size:10px; font-weight:700; color:#4a6fa5; white-space:nowrap}
+  .sms-bubble{padding:10px 12px 8px; font-size:12.5px; line-height:1.55; color:#222; word-break:keep-all; white-space:pre-line}
+  .sms-meta{padding:0 10px 9px; font-size:10px; color:#98a2b3; font-weight:600; display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+  .sms-chip{font-size:9.5px; font-weight:800; padding:2px 7px; border-radius:999px; background:#f0f3f9; color:#6b7280; white-space:nowrap}
+  .sms-chip.ok{background:#e6f7f0; color:#0b7a55}
+  .sms-chip.wait{background:#fff4e6; color:#a35b00}
+  .sms-chip.off{background:#fdecec; color:#c0392b}
+  .sms-link{
+    font-size:10px; font-weight:800; color:#fff; background:var(--sms); text-decoration:none;
+    padding:3px 9px; border-radius:999px; white-space:nowrap; display:inline-block;
+  }
+  .sms-link:hover{background:var(--sms-2)}
+  .sms-test-result:empty{display:none}
+  .sms-test-result{margin-top:10px; font-size:11.5px; font-weight:700; border-radius:11px; padding:9px 12px; line-height:1.6; word-break:break-all}
+  .sms-test-result.ok{background:#e9f9f1; color:#0b7a55; border:1px solid #bfe9d4}
+  .sms-test-result.err{background:#fdecec; color:#c0392b; border:1px solid #f6c9c9}
+  .sms-test-result.wait{background:#fff7e8; color:#8a5300; border:1px solid #f4e0b6}
+  .log-empty{padding:26px 18px; text-align:center; color:#9aa4b5; font-size:12px; font-weight:600; line-height:1.7}
+  .log-private{font-size:10.5px; font-weight:700; color:#8a6d3b; background:#fff8e6; border:1px solid #f4e3b8; border-radius:10px; padding:7px 10px; line-height:1.5}
+  .log-empty span{display:block; font-size:26px; margin-bottom:6px}
+
+  /* ---------- 관리자 ---------- */
+  #view-admin{overflow-y:auto; padding:18px 18px 40px; display:none}
+  #view-admin.active{display:block}
+  .admin-wrap{max-width:1380px; margin:0 auto}
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:13px; margin-bottom:15px}
+  .stat{background:#fff; border:1px solid var(--line); border-radius:15px; padding:14px 16px; box-shadow:var(--shadow)}
+  .stat-label{font-size:11.5px; font-weight:800; color:var(--muted); display:flex; align-items:center; gap:6px}
+  .stat-val{font-size:30px; font-weight:900; letter-spacing:-1px; margin-top:3px; font-variant-numeric:tabular-nums}
+  .stat-val small{font-size:13px; font-weight:800; color:var(--muted); margin-left:3px}
+  .stat.in .stat-val{color:var(--mint-2)}
+  .stat.out .stat-val{color:#274b8f}
+  .stat.absent .stat-val{color:var(--red)}
+  .admin-grid{display:grid; grid-template-columns:1.12fr .88fr; gap:15px; align-items:start}
+  .admin-col{display:flex; flex-direction:column; gap:15px; min-width:0}
+  .panel{background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden}
+  .panel-head{display:flex; align-items:center; gap:9px; padding:14px 16px; border-bottom:1px solid #eef1f6}
+  .panel-head h3{margin:0; font-size:14px; font-weight:800; letter-spacing:-.3px}
+  .panel-body{padding:14px 16px 16px}
+  .tablewrap{overflow:auto}
+  table.tb{width:100%; border-collapse:collapse; font-size:12.5px}
+  table.tb th{
+    text-align:left; padding:9px 10px; font-size:11px; font-weight:800; color:var(--muted);
+    background:#f8fafd; border-bottom:1px solid #eef1f6; white-space:nowrap;
+  }
+  table.tb td{padding:10px; border-bottom:1px solid #f1f4f9; font-weight:600; vertical-align:middle}
+  table.tb tr:last-child td{border-bottom:0}
+  .nm{font-weight:800; color:var(--ink)}
+  .sub{font-size:10.5px; color:var(--muted); font-weight:600}
+  .cell-time{font-variant-numeric:tabular-nums; font-weight:800}
+  .chip{display:inline-block; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; background:#f0f3f9; color:var(--muted)}
+  .chip.ok{background:#e6f7f0; color:#0b7a55}
+  .chip.wait{background:#fff4e6; color:#a35b00}
+  .chip.off{background:#fdecec; color:#c0392b}
+  .empty-row td{text-align:center; color:#9aa4b5; padding:22px; font-weight:600}
+
+  .field{margin-bottom:11px}
+  .field label{display:block; font-size:11.5px; font-weight:800; color:#475467; margin-bottom:5px}
+  .input, select.input{
+    width:100%; height:42px; border:1.5px solid #dde3ee; border-radius:11px; padding:0 12px; font-size:13px; font-weight:600;
+    background:#fbfcfe; color:var(--ink); outline:none; transition:border-color .12s, background .12s;
+  }
+  .input:focus{border-color:var(--navy); background:#fff}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .row3{display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:10px}
+  .form-actions{display:flex; gap:8px; align-items:center; margin-top:4px}
+  .help{
+    font-size:11.5px; line-height:1.7; color:#667085; background:#f7f9fd; border:1px solid #e9eef7;
+    border-radius:11px; padding:11px 13px; margin:12px 0 0;
+  }
+  .help b{color:var(--navy)}
+  .drop{
+    border:2px dashed #c9d6ee; border-radius:14px; padding:22px 16px; text-align:center; cursor:pointer;
+    background:#fbfcff; transition:border-color .15s, background .15s;
+  }
+  .drop:hover,.drop.hover{border-color:var(--navy); background:#f3f7ff}
+  .drop .ic{font-size:26px; display:block; margin-bottom:7px}
+  .drop b{font-size:13px; color:var(--navy); display:block; margin-bottom:4px}
+  .drop span{font-size:11.5px; color:var(--muted); font-weight:600; line-height:1.6}
+  .file-name{font-size:11.5px; color:#0b7a55; font-weight:700; margin-top:9px; word-break:break-all}
+
+  /* ---------- 배너 / 토스트 / 모달 ---------- */
+  #banner{position:fixed; inset:0; z-index:80; display:none; align-items:center; justify-content:center; pointer-events:none}
+  #banner.show{display:flex}
+  .banner-card{
+    pointer-events:auto; width:min(560px,84vw); border-radius:26px; padding:30px 34px 26px; text-align:center;
+    background:linear-gradient(150deg,#ffffff,#f2f7ff 60%,#e9f9f2); color:var(--ink);
+    box-shadow:0 30px 80px rgba(8,20,45,.35), 0 0 0 1px rgba(255,255,255,.6) inset;
+    animation:bannerIn .32s cubic-bezier(.2,.9,.3,1.2);
+  }
+  @keyframes bannerIn{from{transform:scale(.88) translateY(12px); opacity:0}to{transform:none; opacity:1}}
+  .banner-badge{
+    width:74px; height:74px; margin:0 auto 12px; border-radius:50%; display:grid; place-items:center; font-size:36px; color:#fff;
+    background:linear-gradient(140deg,#2ad39a,#0ca678); box-shadow:0 12px 28px rgba(12,166,120,.38);
+  }
+  .banner-kicker{font-size:12px; font-weight:800; letter-spacing:.6px; color:var(--mint-2); margin-bottom:5px}
+  .banner-name{font-size:31px; font-weight:900; letter-spacing:-1px; margin:0}
+  .banner-name small{font-size:16px; font-weight:800; color:var(--muted); margin-left:4px}
+  .banner-time{font-size:13.5px; font-weight:700; color:var(--muted); margin-top:5px; font-variant-numeric:tabular-nums}
+  .banner-sms{
+    margin-top:16px; display:flex; gap:10px; align-items:center; text-align:left;
+    background:var(--sms-bg); border:1px solid #d3e2fa; border-radius:14px; padding:11px 13px;
+  }
+  .banner-sms .kk{font-size:18px}
+  .banner-sms .kt{font-size:12px; font-weight:700; color:var(--sms-ink); line-height:1.5; word-break:keep-all}
+  .banner-tip{font-size:10.5px; color:#98a2b3; margin-top:9px; font-weight:600}
+  #toast{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(14px); z-index:120;
+    background:#111827; color:#fff; font-size:12.5px; font-weight:700; padding:11px 17px; border-radius:999px;
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; max-width:80vw; text-align:center;
+    box-shadow:0 12px 30px rgba(0,0,0,.3);
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  #modal-root{position:fixed; inset:0; z-index:100; display:none}
+  #modal-root.open{display:block}
+  .modal-backdrop{position:absolute; inset:0; background:rgba(9,17,35,.55); backdrop-filter:blur(2px)}
+  .modal{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(520px,90vw);
+    background:#fff; border-radius:20px; padding:22px 22px 18px; box-shadow:0 30px 70px rgba(0,0,0,.35);
+    animation:bannerIn .2s ease-out;
+  }
+  .modal h3{margin:0 0 6px; font-size:16.5px; letter-spacing:-.4px}
+  .modal-sub{font-size:12px; color:var(--muted); font-weight:600; margin-bottom:14px; line-height:1.6}
+  .modal-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:16px}
+  .pick-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; max-height:46vh; overflow:auto; padding:2px}
+  .pick{
+    display:flex; flex-direction:column; align-items:flex-start; gap:2px; background:#fbfcff; border:1px solid #e5eaf4;
+    border-radius:12px; padding:10px; cursor:pointer; text-align:left;
+  }
+  .pick:hover{background:#eff5ff; border-color:#c6d5ef}
+  .pick b{font-size:13px}
+  .pick span{font-size:10.5px; color:var(--muted); font-weight:600}
+
+  /* 승급심사 */
+  .admin-tabs{display:flex; gap:5px; margin-bottom:14px; background:#e8edf7; padding:5px; border-radius:14px; width:fit-content}
+  .admin-tab{border:0; background:transparent; color:#5b6b85; font-weight:800; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer}
+  .admin-tab.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.10)}
+  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov{display:none}
+  .belt-badge{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:800; background:#f6f8fc; border:1px solid #e6ebf4; padding:4px 9px 4px 6px; border-radius:999px; white-space:nowrap}
+  .belt-badge i{width:12px; height:12px; border-radius:3px; display:inline-block; box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
+  .bar{width:104px; height:7px; background:#edf0f7; border-radius:6px; overflow:hidden; margin-bottom:4px}
+  .bar > i{display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,#31c48d,#0ca678)}
+  .bar.full > i{background:linear-gradient(90deg,#f6a623,#f0803c)}
+  .promo-filters{display:flex; gap:6px; margin-bottom:11px; flex-wrap:wrap}
+  .pchip{border:1px solid #e3e8f2; background:#f8fafd; color:#5b6b85; font-weight:800; font-size:11.5px; padding:7px 12px; border-radius:999px; cursor:pointer}
+  .pchip.active{background:var(--navy); border-color:var(--navy); color:#fff}
+  .belt-head, .belt-row{display:grid; grid-template-columns:20px 34px minmax(56px,1fr) 54px 62px 26px 26px 26px; gap:5px; align-items:center}
+  .belt-head{font-size:9.5px; font-weight:800; color:var(--muted); padding:0 1px 7px; text-align:center}
+  .belt-head span:nth-child(3){text-align:left}
+  .belt-row{padding:5px 0; border-top:1px solid #f1f4f9}
+  .belt-order{font-size:12px; font-weight:800; color:#98a2b3; text-align:center}
+  .belt-color{width:32px; height:34px; padding:2px; border:1px solid #dde3ee; border-radius:9px; background:#fff; cursor:pointer}
+  .belt-row .input{height:34px; font-size:12px; padding:0 6px}
+  .belt-th{display:flex; align-items:center; gap:3px}
+  .belt-th .input{width:44px; text-align:center; padding:0 2px}
+  .belt-th span{font-size:10px; color:var(--muted); font-weight:700}
+  .belt-row .btn{padding:3px 0; font-size:10px; min-width:24px; text-align:center; border-radius:7px}
+  .belt-empty{padding:14px; text-align:center; color:#9aa4b5; font-size:11.5px; font-weight:600}
+
+  /* 키오스크 공개 정보 바 */
+  .kiosk-info{grid-column:1 / -1; display:flex; gap:12px; align-items:stretch; min-height:0}
+  .kiosk-info.hidden{display:none}
+  .ki{background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:9px 13px; display:flex; align-items:center; gap:10px; min-width:0; flex:1; overflow:hidden}
+  .ki-label{font-size:10.5px; font-weight:800; color:var(--muted); white-space:nowrap; letter-spacing:-.2px}
+  .ki-body{display:flex; gap:6px; align-items:center; min-width:0; overflow-x:auto}
+  .ki-chip{font-size:11px; font-weight:800; padding:4px 8px; border-radius:999px; background:#f4f7fd; color:#3b4a63; white-space:nowrap; display:inline-flex; align-items:center; gap:5px}
+  .ki-chip i{width:9px; height:9px; border-radius:3px; display:inline-block; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+  .ki-num{font-size:16px; font-weight:900; color:var(--navy); font-variant-numeric:tabular-nums}
+
+  /* 공개/비공개 토글 */
+  .vis-row{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #f1f4f9}
+  .vis-row:last-child{border-bottom:0; padding-bottom:0}
+  .vis-txt{flex:1; min-width:0}
+  .vis-txt b{display:block; font-size:12.5px; letter-spacing:-.2px}
+  .vis-txt span{display:block; font-size:11px; color:var(--muted); font-weight:600; margin-top:2px; line-height:1.4}
+  .switch{width:50px; height:29px; border-radius:999px; border:1px solid #dfe4ee; background:#e9edf5; position:relative; cursor:pointer; flex:0 0 auto; padding:0; transition:background .16s,border-color .16s}
+  .switch span{position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:50%; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.22); transition:left .16s}
+  .switch.on{background:var(--mint); border-color:var(--mint)}
+  .switch.on span{left:24px}
+  .vis-state{font-size:10.5px; font-weight:800; width:38px; text-align:right; flex:0 0 auto; color:#98a2b3}
+  .vis-state.on{color:var(--mint-2)}
+
+  /* 표 안 작은 컨트롤 */
+  .input.mini{height:30px; font-size:11.5px; padding:0 6px; border-radius:9px; background:#fff}
+  .ck{width:17px; height:17px; accent-color:#16294f; cursor:pointer; vertical-align:middle}
+  .grade-chip{font-size:10px; font-weight:800; color:#475467; background:#eef2f9; padding:2px 6px; border-radius:6px; margin-left:4px}
+  .bulk-bar{display:flex; align-items:center; gap:8px; background:#eef4ff; border:1px solid #d3e0f7; border-radius:12px; padding:8px 11px; margin:0 0 10px; flex-wrap:wrap}
+  .bulk-bar b{font-size:12px; color:var(--navy)}
+
+  /* ---------- 월간 출석부 ---------- */
+  .mon-bar{display:flex; align-items:center; gap:9px; margin-bottom:13px; flex-wrap:wrap}
+  .mon-nav{display:flex; align-items:center; gap:6px}
+  .mon-label{font-size:17px; font-weight:900; letter-spacing:-.5px; min-width:118px; text-align:center; font-variant-numeric:tabular-nums; color:var(--navy)}
+  .mon-select{width:auto; min-width:172px; height:38px; padding:0 10px}
+  .mon-search{width:206px; height:38px}
+  .mon-stats{margin-bottom:13px}
+  .mon-stats .stat-val{font-size:27px}
+  .mon-stats .mon-top-name{font-size:19px; letter-spacing:-.6px; line-height:1.5; padding-top:2px}
+  .mon-stats .mon-top-name small{font-size:11.5px}
+  .mon-tablewrap{max-height:min(60vh,620px); overflow:auto}
+  table.mtb{width:auto; min-width:100%; border-collapse:separate; border-spacing:0; font-size:12px}
+  table.mtb th, table.mtb td{padding:0; text-align:center; border-bottom:1px solid #f1f4f9}
+  table.mtb thead th{position:sticky; top:0; z-index:3; background:#f8fafd; border-bottom:1px solid #e6ebf4}
+  table.mtb .c-name{position:sticky; left:0; z-index:4; background:#fff; text-align:left; width:160px; min-width:160px; max-width:160px; padding:7px 10px; border-right:1px solid #eef1f6}
+  table.mtb .c-name .nm{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  table.mtb .c-name .sub{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  table.mtb thead .c-name{z-index:8; background:#f8fafd; padding:9px 10px; font-size:11px; color:var(--muted)}
+  table.mtb .c-sum{position:sticky; right:0; z-index:4; background:#fff; width:58px; min-width:58px; border-left:1px solid #eef1f6; font-weight:900; font-variant-numeric:tabular-nums; color:var(--navy)}
+  table.mtb thead .c-sum{z-index:8; background:#f8fafd; padding:9px 6px; font-size:11px; color:var(--muted)}
+  table.mtb tbody tr:hover .c-name, table.mtb tbody tr:hover .c-sum{background:#f6faff}
+  .mtb-day{width:30px; min-width:30px; padding:5px 0 4px; font-size:11.5px; font-weight:800; color:#475467; font-variant-numeric:tabular-nums}
+  .mtb-day .dw{display:block; font-size:9.5px; font-weight:800; color:#b0b8c6; margin-top:1px}
+  .mtb-day.sun .dw{color:#e23b3b}
+  .mtb-day.sat .dw{color:#2f6fd0}
+  .mtb-day.today{background:#e8f0ff; color:var(--navy); box-shadow:inset 0 -2px 0 var(--navy)}
+  .mtb-cell{height:36px; border-left:1px solid #f7f9fc; cursor:pointer}
+  .mtb-cell.sun{background:#fdf8f8}
+  .mtb-cell.sat{background:#f7faff}
+  .mtb-cell.today{background:#fff9ec}
+  .mtb-cell:hover{background:#eef6ff; box-shadow:inset 0 0 0 1px #c9dcff}
+  .mtb-cell .mk{display:inline-block; font-size:15px; line-height:1; color:var(--mint); text-shadow:0 1px 2px rgba(18,184,134,.25)}
+  .mtb-cell.manual .mk{color:#f0a020; text-shadow:0 1px 2px rgba(240,160,32,.25)}
+  .mtb-cell.future, .mtb-cell.future:hover{cursor:default; background:#fbfcfe; box-shadow:none}
+  .mtb-cell .mk-empty{display:inline-block; color:#e7ebf3; font-size:15px; line-height:1}
+  .mtb-cell.future .mk-empty{color:#eef1f6}
+  .mtb-sum small{font-size:10px; font-weight:800; color:var(--muted); margin-left:1px}
+  .mtb-belt{font-size:10px; padding:2px 7px 2px 4px; margin-left:4px; vertical-align:1px}
+  .mtb-belt i{width:9px; height:9px}
+  .mon-legend{display:flex; align-items:center; gap:10px; font-size:10.5px; font-weight:700; color:var(--muted); flex-wrap:wrap}
+  .mon-legend .lg-dot{width:9px; height:9px; border-radius:50%; background:var(--mint); display:inline-block; margin-right:4px}
+  .mon-legend .lg-dot.m{background:#f0a020}
+
+  /* 스크롤바 */
+  ::-webkit-scrollbar{width:8px; height:8px}
+  ::-webkit-scrollbar-thumb{background:#cfd8e6; border-radius:8px}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  @media (max-width:1180px){
+    .brand-sub{display:none}
+    .today-pill{display:none}
+    .clock-time{font-size:22px}
+    .mode-btn{padding:8px 13px; font-size:13px}
+  }
+  @media (max-width:1100px){
+    .admin-grid{grid-template-columns:1fr}
+  }
+    @media (max-width:960px){
+    #view-attendance.active{grid-template-columns:1fr; grid-template-rows:1.15fr auto auto; overflow-y:auto}
+    .side{min-height:auto}
+    .log-card{min-height:230px}
+    .admin-grid{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ================= 상단 바 ================= -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">🥋</div>
+      <div class="brand-txt">
+        <input id="dojo-name" class="dojo-name" value="경희대MTA태권도" aria-label="도장 이름" spellcheck="false">
+        <div class="brand-sub">AI 얼굴인식 출석 · 무료문자 알림</div>
+      </div>
+    </div>
+
+    <div class="today-pill">오늘 <b id="pill-in">0</b> 등원 · <b id="pill-out">0</b> 하원</div>
+
+    <div class="mode-toggle" role="group" aria-label="등원/하원 모드">
+      <button class="mode-btn active" data-mode="in" id="mode-in">등원</button>
+      <button class="mode-btn" data-mode="out" id="mode-out">하원</button>
+    </div>
+
+    <div class="clock">
+      <div class="clock-time"><span id="clock-hm">00:00</span><span class="sep">:</span><span id="clock-s">00</span></div>
+      <div class="clock-date" id="clock-date">-</div>
+    </div>
+
+    <button class="icon-btn" id="mute-btn" title="효과음 켜기/끄기" aria-label="효과음 켜기/끄기">🔊</button>
+
+    <div class="tabs" role="tablist">
+      <button class="tab-btn active" data-view="attendance" id="tab-att">출석 화면</button>
+      <button class="tab-btn" data-view="admin" id="tab-admin">관리자</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ================= 출석 화면 ================= -->
+    <section class="view active" id="view-attendance">
+
+      <div class="card cam-card">
+        <div class="card-head">
+          <div class="card-title"><span class="dot"></span>AI 얼굴인식 출석</div>
+          <div class="spacer"></div>
+          <span class="tiny-note" id="cam-head-note">시뮬레이션 모드</span>
+        </div>
+
+        <div class="stage" id="camera-stage">
+          <video id="camera-video" autoplay muted playsinline></video>
+          <div class="stage-ph" id="stage-ph">
+            <div class="ph-icon">📷</div>
+            <p>카메라를 연결하거나 <b>관원 선택 인식</b>으로<br>AI 얼굴인식을 체험해 보세요</p>
+            <div class="ph-sub">웹캠이 없어도 시뮬레이션으로 그대로 테스트할 수 있어요</div>
+          </div>
+          <div class="scanline"></div>
+          <div class="bbox" id="bbox">
+            <span class="corner c1"></span><span class="corner c2"></span>
+            <span class="corner c3"></span><span class="corner c4"></span>
+            <span class="bbox-label"><b id="bbox-name">관원</b> · 일치율 <b id="bbox-match">0%</b></span>
+          </div>
+          <div class="stage-tip" id="stage-tip">AI ENGINE · READY</div>
+          <div class="stage-hud"><span class="hud-dot"></span><span id="cam-status">웹캠 대기</span></div>
+        </div>
+
+        <div class="cam-bar">
+          <div class="cam-status" id="cam-help">관원을 선택하면 인식 → 자동 출석까지 재생됩니다.</div>
+          <div class="spacer"></div>
+          <button class="btn btn-mint" id="btn-pick-sim">🎯 관원 선택 인식</button>
+          <button class="btn btn-ghost" id="btn-random-sim">🎲 랜덤 데모</button>
+          <button class="btn" id="btn-camera">📷 카메라 연결</button>
+        </div>
+      </div>
+
+      <div class="side">
+        <div class="card touch-card">
+          <div class="card-head">
+            <div class="card-title"><span class="dot" style="background:var(--navy)"></span>터치 출석 (백업)</div>
+            <div class="spacer"></div>
+            <span class="tiny-note">인식 실패 시 1초</span>
+          </div>
+
+          <div class="touch-tabs">
+            <button class="touch-tab active" data-touch="pin" id="tt-pin">🔢 뒷번호 4자리</button>
+            <button class="touch-tab" data-touch="name" id="tt-name">🔍 이름·초성 검색</button>
+          </div>
+
+          <div class="touch-body">
+            <div id="touch-pin">
+              <div class="pin-slots" id="pin-slots">
+                <div class="pin-slot">·</div><div class="pin-slot">·</div><div class="pin-slot">·</div><div class="pin-slot">·</div>
+              </div>
+              <div class="keypad" id="keypad">
+                <button class="key" data-key="1">1</button>
+                <button class="key" data-key="2">2</button>
+                <button class="key" data-key="3">3</button>
+                <button class="key" data-key="4">4</button>
+                <button class="key" data-key="5">5</button>
+                <button class="key" data-key="6">6</button>
+                <button class="key" data-key="7">7</button>
+                <button class="key" data-key="8">8</button>
+                <button class="key" data-key="9">9</button>
+                <button class="key fn" data-key="clear">전체지움</button>
+                <button class="key" data-key="0">0</button>
+                <button class="key fn del" data-key="del">← 지움</button>
+              </div>
+              <div class="pin-hint">보호자 휴대폰 번호 <b>뒷 4자리</b>를 누르면 바로 출석돼요</div>
+              <div class="cand-list" id="cand-list"></div>
+            </div>
+
+            <div id="touch-name" style="display:none">
+              <input class="search-input" id="name-search" placeholder="이름 또는 초성으로 검색 (예: ㄱㅁㅈ)" autocomplete="off">
+              <div class="stu-list" id="stu-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card log-card">
+          <div class="card-head">
+            <div class="card-title"><span class="dot" style="background:var(--sms)"></span>문자 발송 로그</div>
+            <div class="spacer"></div>
+            <span class="log-count" id="log-count">0건</span>
+          </div>
+          <div class="log-scroll" id="log-scroll"></div>
+        </div>
+      </div>
+
+      <div class="kiosk-info" id="kiosk-info"></div>
+    </section>
+
+    <!-- ================= 관리자 ================= -->
+    <section class="view" id="view-admin">
+      <div class="admin-wrap">
+        <div class="admin-tabs" role="tablist">
+          <button class="admin-tab active" id="atab-overview" data-atab="overview">📋 출석 · 명단</button>
+          <button class="admin-tab" id="atab-promotion" data-atab="promotion">🎖️ 승급심사 관리</button>
+          <button class="admin-tab" id="atab-gukgiwon" data-atab="gukgiwon">🏅 국기원 심사</button>
+          <button class="admin-tab" id="atab-monthly" data-atab="monthly">📅 월간 출석부</button>
+        </div>
+
+        <div class="stats ov">
+          <div class="stat in"><div class="stat-label">✅ 오늘 등원</div><div class="stat-val" id="st-in">0<small>명</small></div></div>
+          <div class="stat out"><div class="stat-label">🏠 오늘 하원</div><div class="stat-val" id="st-out">0<small>명</small></div></div>
+          <div class="stat absent"><div class="stat-label">⏳ 미등원</div><div class="stat-val" id="st-absent">0<small>명</small></div></div>
+          <div class="stat"><div class="stat-label">👥 전체 관원</div><div class="stat-val" id="st-total">0<small>명</small></div></div>
+        </div>
+
+        <div class="admin-grid ov">
+          <div class="admin-col">
+            <div class="panel">
+              <div class="panel-head">
+                <h3>📋 오늘 출석 현황</h3><div class="spacer"></div>
+                <span class="tiny-note" id="admin-today">-</span>
+                <button class="btn btn-sm btn-danger" id="btn-reset-today">오늘 기록 초기화</button>
+              </div>
+              <div class="tablewrap">
+                <table class="tb">
+                  <thead><tr><th>관원</th><th>반 / 시간</th><th>등원</th><th>하원</th><th>문자</th></tr></thead>
+                  <tbody id="att-table"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h3>👥 관원 명단 관리</h3><div class="spacer"></div><span class="tiny-note" id="stu-count">0명</span></div>
+              <div class="panel-body">
+                <input type="hidden" id="edit-id" value="">
+                <div class="row2">
+                  <div class="field"><label>이름</label><input class="input" id="f-name" placeholder="예: 김민준"></div>
+                  <div class="field"><label>보호자 연락처</label><input class="input" id="f-phone" placeholder="010-1234-5678" inputmode="tel"></div>
+                </div>
+                <div class="row3">
+                  <div class="field"><label>반 / 시간</label><input class="input" id="f-class" placeholder="예: 초등 1부 (월수금 5:00)"></div>
+                  <div class="field"><label>띠</label>
+                    <select class="input" id="f-belt">
+                      <option>흰띠</option><option>노란띠</option><option>주황띠</option><option>초록띠</option>
+                      <option>파란띠</option><option>보라띠</option><option>갈색띠</option><option>빨간띠</option>
+                      <option>품띠</option><option>검정띠</option>
+                    </select>
+                  </div>
+                  <div class="field"><label>누적 출석(회)</label><input class="input" id="f-count" type="number" min="0" step="1" value="0" inputmode="numeric"></div>
+                </div>
+                <div class="row2">
+                  <div class="field"><label>급수 (비우면 띠 기준 자동)</label><input class="input" id="f-grade" list="grade-list" placeholder="예: 7급, 품, 단"></div>
+                  <div class="field"><label>현재 품·단</label><select class="input" id="f-poomdan"></select></div>
+                </div>
+                <datalist id="grade-list"></datalist>
+                <div class="form-actions">
+                  <button class="btn btn-primary" id="btn-save-student">관원 저장</button>
+                  <button class="btn btn-ghost" id="btn-cancel-edit" style="display:none">취소</button>
+                  <div class="spacer"></div>
+                  <button class="btn btn-sm btn-danger" id="btn-sample">샘플 6명으로 복원</button>
+                </div>
+                <div class="tablewrap" style="margin-top:13px; max-height:330px; overflow:auto">
+                  <table class="tb">
+                    <thead><tr><th>이름</th><th>반 / 시간</th><th>띠</th><th>보호자</th><th style="width:96px"></th></tr></thead>
+                    <tbody id="stu-table"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h3>💬 문자 발송 로그 (전체)</h3><div class="spacer"></div><span class="tiny-note" id="admin-log-count">0건</span></div>
+              <div class="tablewrap" style="max-height:300px; overflow:auto">
+                <table class="tb">
+                  <thead><tr><th style="width:62px">시간</th><th>관원</th><th style="width:56px">구분</th><th>문구</th><th style="width:104px">발송 상태</th><th style="width:64px"></th></tr></thead>
+                  <tbody id="admin-log-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="admin-col">
+            <div class="panel">
+              <div class="panel-head"><h3>📥 엑셀 / CSV 명단 업로드</h3></div>
+              <div class="panel-body">
+                <div class="drop" id="drop-zone">
+                  <span class="ic">📄</span>
+                  <b>파일을 끌어다 놓거나 눌러서 선택</b>
+                  <span>.xlsx · .xls · .csv 지원<br>관원관리 프로그램에서 내려받은 파일 그대로 OK</span>
+                </div>
+                <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.txt" style="display:none">
+                <div class="file-name" id="file-name"></div>
+                <div class="form-actions" style="margin-top:10px">
+                  <button class="btn btn-sm" id="btn-sample-csv">⬇ 샘플 CSV 다운로드</button>
+                  <div class="spacer"></div>
+                  <span class="tiny-note" id="xlsx-state">엑셀 엔진 확인 중…</span>
+                </div>
+                <div class="help">
+                  <b>컬럼은 자동으로 찾아요.</b> 이름(성명·관원명), 반/시간(클래스·부), 띠(급·벨트), 보호자 연락처(학부모·전화), 누적 출석(출석일수·출석횟수) 열을 파일 안에서 알아서 인식합니다.
+                  첫 줄이 제목이어도 위쪽 몇 줄을 훑어 머리글을 찾습니다.
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h3>📱 안드로이드 도장폰 무료문자 자동 발송</h3><div class="spacer"></div><span class="tiny-note">MacroDroid 웹훅</span><span class="chip" id="sms-state">미연동 · 시뮬레이션</span></div>
+              <div class="panel-body">
+                <div class="field"><label>MacroDroid 웹훅 URL</label>
+                  <input class="input" id="s-webhook" placeholder="https://trigger.macrodroid.com/…/sms" autocomplete="off" spellcheck="false"></div>
+                <div class="row2">
+                  <div class="field"><label>전송 방식</label>
+                    <select class="input" id="s-method">
+                      <option value="query">쿼리 파라미터 (MacroDroid 권장)</option>
+                      <option value="json">JSON POST (커스텀 게이트웨이)</option>
+                    </select>
+                  </div>
+                  <div class="field"><label>자동 발송</label>
+                    <select class="input" id="s-autosend">
+                      <option value="on">켜짐 — 출석·심사 때 바로 요청</option>
+                      <option value="off">꺼짐 — 기록만 하고 직접 보내기</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field"><label>테스트 받을 번호</label>
+                  <input class="input" id="s-test-phone" placeholder="010-1234-5678 (본인 번호)" inputmode="tel"></div>
+                <div class="form-actions">
+                  <button class="btn btn-primary" id="btn-save-sms">설정 저장</button>
+                  <button class="btn btn-mint" id="btn-test-sms">📨 테스트 문자 보내기</button>
+                </div>
+                <div class="sms-test-result" id="sms-test-result"></div>
+                <div class="help">
+                  도장폰에 <b>MacroDroid</b>를 설치하고 <b>웹훅 트리거 → 문자 보내기</b> 매크로를 만들어 두면, 출석·승급·심사 안내가 <b>도장폰 요금제에 포함된 무료문자</b>로 자동으로 나갑니다. 사람이 문자 앱을 열 필요가 없어요.
+                  설치 순서는 <b>android_sms_setup_guide.md</b>에 5분 분량으로 정리했고, 통신사 하루 발송 한도·요금 주의사항도 그 문서에 있습니다.
+                  웹훅을 비우면 예전처럼 <b>로그에만 쌓고</b>, 로그 옆 <b>📲 문자앱으로</b> 버튼으로 직접 보낼 수 있어요.
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h3>🔒 공개 설정</h3><div class="spacer"></div><span class="tiny-note">키오스크 · 문자</span></div>
+              <div class="panel-body">
+                <div class="vis-row">
+                  <div class="vis-txt"><b>급수 · 띠 체계</b><span>띠 순서와 급수를 키오스크 하단에 보여줍니다</span></div>
+                  <div class="vis-state on" id="vis-state-beltSystem">공개</div>
+                  <button class="switch on" data-vis="beltSystem" id="vis-beltSystem" aria-pressed="true" aria-label="급수 체계 공개"><span></span></button>
+                </div>
+                <div class="vis-row">
+                  <div class="vis-txt"><b>승급심사 진행률</b><span>심사 대상 인원·누적 출석 진행률과 심사 안내를 보여줍니다</span></div>
+                  <div class="vis-state on" id="vis-state-promotion">공개</div>
+                  <button class="switch on" data-vis="promotion" id="vis-promotion" aria-pressed="true" aria-label="승급심사 공개"><span></span></button>
+                </div>
+                <div class="vis-row">
+                  <div class="vis-txt"><b>국기원 심사 현황</b><span>응시 대상·일정과 국기원 안내 문자를 보여줍니다</span></div>
+                  <div class="vis-state" id="vis-state-gukgiwon">비공개</div>
+                  <button class="switch" data-vis="gukgiwon" id="vis-gukgiwon" aria-pressed="false" aria-label="국기원 심사 공개"><span></span></button>
+                </div>
+                <div class="help">
+                  <b>비공개</b>로 두면 키오스크 화면과 학부모 문자 로그에서 가려지고, 관장님(관리자) 화면에만 보입니다. 바꾸면 바로 적용돼요.
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h3>ℹ️ 이 프로토타입에 대해</h3></div>
+              <div class="panel-body">
+                <div class="help" style="margin-top:0">
+                  명단·출석 기록·설정은 모두 <b>이 브라우저(localStorage)</b>에 저장됩니다. 무료문자 자동발송을 켜면 <b>문자 발송에 필요한 이름·번호·문구만</b> 입력한 웹훅 주소(도장폰 MacroDroid)로 전송되고, 그 밖의 데이터는 어디로도 가지 않아요.
+                  태블릿에서 실제로 쓰려면 이 파일을 태블릿에 저장해 열거나, 웹에 올려 홈 화면에 추가하면 됩니다.
+                  실제 운영 시에는 여러 기기 기록 동기화·개인정보 보관을 위해 서버와 DB가 필요합니다.
+                </div>
+                <div class="form-actions" style="margin-top:10px">
+                  <button class="btn btn-sm" id="btn-export-json">⬇ 오늘 출석 기록 내려받기 (JSON)</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="admin-promotion" style="display:none">
+          <div class="stats">
+            <div class="stat"><div class="stat-label">🎖️ 심사 대상</div><div class="stat-val" id="ps-target">0<small>명</small></div></div>
+            <div class="stat"><div class="stat-label">📈 새 띠 기본 기준</div><div class="stat-val" id="ps-threshold">20<small>회</small></div></div>
+            <div class="stat in"><div class="stat-label">🏅 이번 달 승급</div><div class="stat-val" id="ps-promoted">0<small>명</small></div></div>
+            <div class="stat"><div class="stat-label">👥 전체 관원</div><div class="stat-val" id="ps-total">0<small>명</small></div></div>
+          </div>
+
+          <div class="admin-grid">
+            <div class="admin-col">
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>🎖️ 승급심사 대상자</h3><div class="spacer"></div>
+                  <span class="tiny-note" id="promo-note">-</span>
+                </div>
+                <div class="panel-body" style="padding-bottom:4px">
+                  <div class="promo-filters" id="promo-filters">
+                    <button class="pchip active" data-pfilter="all">전체</button>
+                    <button class="pchip" data-pfilter="target">심사 대상</button>
+                    <button class="pchip" data-pfilter="waiting">아직 여유</button>
+                  </div>
+                  <div class="bulk-bar" id="promo-bulk" style="display:none">
+                    <b id="promo-bulk-count">0명 선택</b>
+                    <button class="btn btn-sm" id="btn-bulk-exam">선택 인원 심사 안내</button>
+                    <button class="btn btn-sm btn-primary" id="btn-bulk-promote">선택 인원 일괄 승급</button>
+                    <div class="spacer"></div>
+                    <button class="btn btn-sm btn-ghost" id="btn-bulk-clear">선택 해제</button>
+                  </div>
+                </div>
+                <div class="tablewrap">
+                  <table class="tb">
+                    <thead><tr><th style="width:28px"><input type="checkbox" class="ck" id="promo-check-all" aria-label="전체 선택"></th><th>관원</th><th>현재 띠 · 급수</th><th>누적 출석</th><th>다음 띠</th><th>상태</th><th style="width:142px"></th></tr></thead>
+                    <tbody id="promo-table"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="admin-col">
+              <div class="panel">
+                <div class="panel-head"><h3>🎗️ 우리 도장 띠 체계 설정</h3><div class="spacer"></div><span class="tiny-note">위가 첫 번째 띠</span></div>
+                <div class="panel-body" style="padding-bottom:10px">
+                  <div class="belt-head"><span>#</span><span>색</span><span>띠 이름</span><span>급수</span><span>기준</span><span></span><span></span><span></span></div>
+                  <div id="belt-rows"></div>
+                  <div class="form-actions" style="margin-top:10px; flex-wrap:wrap">
+                    <button class="btn btn-sm" id="btn-belt-add">＋ 띠 추기</button>
+                    <span class="tiny-note" style="margin-left:2px">새 띠 기준</span>
+                    <input class="input" id="p-threshold" type="number" min="1" step="1" value="20" inputmode="numeric" style="width:64px;height:30px;padding:0 6px;text-align:center">
+                    <button class="btn btn-primary btn-sm" id="btn-belt-save">띠 체계 저장</button>
+                    <div class="spacer"></div>
+                    <button class="btn btn-sm btn-danger" id="btn-belt-reset">기본값</button>
+                  </div>
+                  <div class="help">
+                    위에서 아래로 갈수록 높은 띠예요. <b>승급 기준</b>은 그 띠를 차고 승급심사까지 채워야 하는 <b>등원 일수</b>입니다.
+                    이름·색상·기준을 바꾸거나 띠를 추가·삭제하고 ▲▼로 순서를 바꾼 뒤 <b>띠 체계 저장</b>을 눌러 주세요. 저장하면 심사 대상 판정과 승급 처리도 이 순서를 그대로 따릅니다.
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head"><h3>💬 심사 안내 문자</h3></div>
+                <div class="panel-body">
+                  <div class="row2">
+                    <div class="field"><label>심사 날짜</label><input class="input" id="p-exam-date" type="date"></div>
+                    <div class="field"><label>심사 시간</label><input class="input" id="p-exam-time" type="time" value="10:00"></div>
+                  </div>
+                  <div class="field"><label>장소</label><input class="input" id="p-exam-place" placeholder="예: 경희대MTA태권도 도장" value="경희대MTA태권도 도장"></div>
+                  <div class="form-actions">
+                    <button class="btn btn-mint" id="btn-exam-all">📨 심사 대상 전체 안내</button>
+                    <button class="btn btn-ghost" id="btn-exam-preview">미리보기</button>
+                  </div>
+                  <div class="help">
+                    심사 대상자 학부모님께 보낼 안내 문구입니다. 실제 발송 전에 <b>미리보기</b>로 문구를 확인하고, 한 명에게만 먼저 보내 볼 수 있어요.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="admin-gukgiwon" style="display:none">
+          <div class="stats">
+            <div class="stat"><div class="stat-label">🎯 응시 대상</div><div class="stat-val" id="gk-target">0<small>명</small></div></div>
+            <div class="stat"><div class="stat-label">📄 서류·접수</div><div class="stat-val" id="gk-docs">0<small>명</small></div></div>
+            <div class="stat in"><div class="stat-label">🏅 이번 달 합격</div><div class="stat-val" id="gk-passed">0<small>명</small></div></div>
+            <div class="stat"><div class="stat-label">🥋 품·단 보유</div><div class="stat-val" id="gk-holders">0<small>명</small></div></div>
+          </div>
+
+          <div class="admin-grid">
+            <div class="admin-col">
+              <div class="panel">
+                <div class="panel-head"><h3>🏅 국기원 승품·승단 심사</h3><div class="spacer"></div><span class="tiny-note" id="gk-note">-</span></div>
+                <div class="tablewrap">
+                  <table class="tb">
+                    <thead><tr><th>관원</th><th>현재 품·단</th><th>목표</th><th>응시 상태</th><th>심사일</th><th style="width:132px"></th></tr></thead>
+                    <tbody id="gk-table"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="admin-col">
+              <div class="panel">
+                <div class="panel-head"><h3>📅 국기원 심사 일정</h3></div>
+                <div class="panel-body">
+                  <div class="row2">
+                    <div class="field"><label>심사 날짜</label><input class="input" id="gk-date" type="date"></div>
+                    <div class="field"><label>시간</label><input class="input" id="gk-time" type="time" value="10:00"></div>
+                  </div>
+                  <div class="field"><label>장소</label><input class="input" id="gk-place" placeholder="예: 경희대MTA태권도 도장"></div>
+                  <div class="form-actions">
+                    <button class="btn" id="btn-gk-apply">응시자 전체에 일정 적용</button>
+                    <button class="btn btn-mint" id="btn-gk-all">📨 응시자 전체 안내</button>
+                  </div>
+                  <div class="help">
+                    <b>대상 · 서류준비 · 접수완료</b> 관원에게 안내가 나갑니다. <b>합격</b> 처리하면 현재 품·단이 목표로 바뀌고 학부모님께 축하 문자를 보냅니다.
+                    품·단과 응시 상태는 표에서 바로 바꿀 수 있습니다.
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head"><h3>ℹ️ 국기원 심사 안내</h3></div>
+                <div class="panel-body">
+                  <div class="help" style="margin-top:0">
+                    국기원 승품·승단은 도장 자체 승급과 별개로, 국기원 접수·응시 후 합격증이 나옵니다.
+                    이 화면은 응시생과 서류를 도장에서 관리하기 위한 기록장이고, 실제 발송은 도장폰 무료문자 연동을 켜면 자동으로 나갑니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="admin-monthly" style="display:none">
+          <div class="mon-bar">
+            <div class="mon-nav">
+              <button class="btn" id="mon-prev" title="이전 달" aria-label="이전 달">◀</button>
+              <div class="mon-label" id="mon-label">-</div>
+              <button class="btn" id="mon-next" title="다음 달" aria-label="다음 달">▶</button>
+              <button class="btn btn-ghost btn-sm" id="mon-this" style="margin-left:4px">이번 달</button>
+            </div>
+            <div class="spacer"></div>
+            <select class="input mon-select" id="mon-class" aria-label="반 필터"><option value="all">전체 반</option></select>
+            <input class="input mon-search" id="mon-search" placeholder="🔍 이름·초성 검색" autocomplete="off" aria-label="관원 이름 검색">
+            <button class="btn btn-primary" id="btn-mon-csv">📥 월간 출석부 CSV 다운로드</button>
+          </div>
+
+          <div class="stats mon-stats">
+            <div class="stat"><div class="stat-label">📊 총 출석</div><div class="stat-val" id="mon-total">0<small>일</small></div></div>
+            <div class="stat in"><div class="stat-label">🙋 참여 관원</div><div class="stat-val" id="mon-people">0<small>명</small></div></div>
+            <div class="stat"><div class="stat-label">📈 평균 출석</div><div class="stat-val" id="mon-avg">0<small>일</small></div></div>
+            <div class="stat out"><div class="stat-label">🏅 최다 출석</div><div class="stat-val mon-top-name" id="mon-top">-</div></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>📅 월간 출석부</h3><div class="spacer"></div>
+              <div class="mon-legend">
+                <span><i class="lg-dot"></i>출석</span>
+                <span><i class="lg-dot m"></i>수동 보정</span>
+              </div>
+              <span class="tiny-note" id="mon-note">-</span>
+            </div>
+            <div class="tablewrap mon-tablewrap">
+              <table class="tb mtb">
+                <thead><tr id="mon-thead"></tr></thead>
+                <tbody id="mon-tbody"></tbody>
+              </table>
+            </div>
+            <div class="panel-body" style="border-top:1px solid #eef1f6">
+              <div class="help" style="margin-top:0">
+                칸을 누르면 그 날 출석을 <b>켜고 끌 수 있어요</b>. 키오스크에서 못 찍은 날은 한 번 누르면 <b>주황색 ●</b>로 표시되고, 다시 누르면 지워집니다.
+                등·하원 시각이 있는 기록을 지울 때는 확인을 한 번 묻습니다.<br>
+                보정은 <b>이 출석부에만</b> 적용되고, 관원의 <b>누적 출석(회)</b>과 승급 진행률은 바뀌지 않아요. 승급 진행률까지 맞추려면 「👥 관원 명단 관리」의 <b>누적 출석(회)</b> 칸을 직접 고쳐 주세요.<br>
+                <b>평균 출석</b>은 그 달에 한 번이라도 출석한 관원을 기준으로 하고, <b>CSV</b>는 화면에 보이는 목록(반 필터·검색 결과) 그대로 내려받습니다.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="banner" role="status" aria-live="polite"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="modal-root"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     1. 저장소 / 기본 데이터
+     ========================================================= */
+  var LS = {
+    students: 'tdk.students.v1',
+    settings: 'tdk.settings.v1',
+    records: 'tdk.records.v1',
+    logs: 'tdk.logs.v1',
+    muted: 'tdk.muted.v1',
+    attendance: 'tdk.attendance.v1'
+  };
+
+  var SAMPLE_STUDENTS = [
+    { id: 's1', name: '김민준', className: '초등 1부 (월수금 5:00)', belt: '파란띠', phone: '010-2345-6789', attendCount: 22, poomDan: '없음', targetPoomDan: '1품', gukStatus: 'target' },
+    { id: 's2', name: '이서연', className: '유치부 (화목 4:00)', belt: '노란띠', phone: '010-3456-7890', attendCount: 8, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
+    { id: 's3', name: '박지호', className: '초등 2부 (월수금 6:00)', belt: '빨간띠', phone: '010-4567-8901', attendCount: 17, poomDan: '1품', targetPoomDan: '2품', gukStatus: 'docs' },
+    { id: 's4', name: '최수아', className: '초등 1부 (월수금 5:00)', belt: '초록띠', phone: '010-5678-9012', attendCount: 20, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' },
+    { id: 's5', name: '정도윤', className: '중등부 (화목 7:00)', belt: '검정띠', phone: '010-6789-0123', attendCount: 26, poomDan: '2단', targetPoomDan: '3단', gukStatus: 'applied' },
+    { id: 's6', name: '한유진', className: '유치부 (화목 4:00)', belt: '흰띠', phone: '010-7890-1234', attendCount: 4, poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none' }
+  ];
+
+  var BELT_ORDER = ['흰띠', '노란띠', '주황띠', '초록띠', '파란띠', '보라띠', '갈색띠', '빨간띠', '품띠', '검정띠'];
+
+  var BELT_COLORS = {
+    '흰띠': '#e8e8e8', '노란띠': '#f7d344', '주황띠': '#f59f3c', '초록띠': '#3fb56a',
+    '파란띠': '#3a7bd5', '보라띠': '#8a5cd6', '갈색띠': '#8b5a2b', '빨간띠': '#e23b3b',
+    '품띠': '#c9a227', '검정띠': '#1f2430'
+  };
+
+  var BELT_GRADES = {
+    '흰띠': '무급', '노란띠': '10급', '주황띠': '9급', '초록띠': '8급', '파란띠': '7급',
+    '보라띠': '6급', '갈색띠': '5급', '빨간띠': '4급', '품띠': '품', '검정띠': '단'
+  };
+
+  var GRADE_SUGGEST = ['무급', '10급', '9급', '8급', '7급', '6급', '5급', '4급', '3급', '2급', '1급', '품', '단'];
+  var POOM_DAN = ['없음', '1품', '2품', '3품', '4품', '1단', '2단', '3단', '4단', '5단', '6단', '7단', '8단', '9단'];
+  var GK_STATUS = { none: '미대상', target: '대상', docs: '서류준비', applied: '접수완료', passed: '합격' };
+  var GK_STATUS_ORDER = ['none', 'target', 'docs', 'applied', 'passed'];
+
+  function defaultBelts(th) {
+    var t = Math.max(1, parseInt(th, 10) || 20);
+    return BELT_ORDER.map(function (name) {
+      return { name: name, color: BELT_COLORS[name] || '#9aa4b5', grade: BELT_GRADES[name] || '', threshold: t };
+    });
+  }
+
+  var DEFAULT_SETTINGS = {
+    dojoName: '경희대MTA태권도',
+    mode: 'in',
+    promotionThreshold: 20,
+    examDate: '',
+    examTime: '10:00',
+    examPlace: '경희대MTA태권도 도장',
+    gukDate: '',
+    gukTime: '10:00',
+    gukPlace: '',
+    visibility: { beltSystem: true, promotion: true, gukgiwon: false },
+    sms: { webhookUrl: '', method: 'query', autoSend: true, testPhone: '' }
+  };
+
+  var app = {
+    students: [],
+    settings: null,
+    records: {},
+    attendance: {},
+    logs: [],
+    muted: false,
+    touchTab: 'pin',
+    editingId: '',
+    pin: '',
+    busy: false,
+    cameraStream: null,
+    beltDraft: null,
+    promoSelected: {},
+    promoFilter: 'all',
+    adminTab: 'overview',
+    monthly: null
+  };
+
+  /* =========================================================
+     2. 유틸
+     ========================================================= */
+  function el(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function uid(prefix) {
+    return (prefix || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function todayKey(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function fmtTime(d) {
+    d = d || new Date();
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+  function fmtKoreanTime(d) {
+    d = d || new Date();
+    var h = d.getHours();
+    var ampm = h < 12 ? '오전' : '오후';
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return ampm + ' ' + h12 + ':' + pad2(d.getMinutes());
+  }
+  function fmtDateKorean(d) {
+    d = d || new Date();
+    var days = ['일', '월', '화', '수', '목', '금', '토'];
+    return d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일 (' + days[d.getDay()] + ')';
+  }
+  function maskPhone(phone) {
+    var digits = String(phone || '').replace(/\D/g, '');
+    if (digits.length < 7) { return phone || '-'; }
+    return digits.slice(0, 3) + '-****-' + digits.slice(-4);
+  }
+  function digitsOnly(s) { return String(s == null ? '' : s).replace(/\D/g, ''); }
+  function normalizePhone(v) {
+    var d = digitsOnly(v);
+    if (d.length === 11) { return d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7); }
+    if (d.length === 10) {
+      if (d.slice(0, 2) === '02') { return d.slice(0, 2) + '-' + d.slice(2, 6) + '-' + d.slice(6); }
+      return d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6);
+    }
+    return String(v == null ? '' : v).trim();
+  }
+
+  var CHOSUNG = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+  var CHOSUNG_SET = CHOSUNG.join('');
+  function toChosung(str) {
+    var out = '';
+    for (var i = 0; i < str.length; i++) {
+      var code = str.charCodeAt(i);
+      if (code >= 0xac00 && code <= 0xd7a3) {
+        out += CHOSUNG[Math.floor((code - 0xac00) / 588)];
+      } else {
+        out += str.charAt(i);
+      }
+    }
+    return out;
+  }
+  function isChosungQuery(q) {
+    if (!q) { return false; }
+    for (var i = 0; i < q.length; i++) {
+      if (CHOSUNG_SET.indexOf(q.charAt(i)) === -1 && q.charAt(i) !== ' ') { return false; }
+    }
+    return true;
+  }
+  function matchSearch(student, rawQuery) {
+    var q = String(rawQuery || '').replace(/\s+/g, '');
+    if (!q) { return true; }
+    var name = student.name.replace(/\s+/g, '');
+    if (name.indexOf(q) !== -1) { return true; }
+    if (isChosungQuery(q)) {
+      if (toChosung(name).indexOf(q) !== -1) { return true; }
+    }
+    if ((student.className || '').replace(/\s+/g, '').indexOf(q) !== -1) { return true; }
+    return false;
+  }
+
+  /* =========================================================
+     3. 저장 / 불러오기
+     ========================================================= */
+  function readJSON(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      if (!raw) { return fallback; }
+      var parsed = JSON.parse(raw);
+      return parsed == null ? fallback : parsed;
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function writeJSON(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); }
+    catch (e) { toast('저장 공간이 부족합니다. 브라우저 저장 공간을 확인해 주세요.'); }
+  }
+  function loadState() {
+    var students = readJSON(LS.students, null);
+    if (!Array.isArray(students) || students.length === 0) {
+      students = SAMPLE_STUDENTS.map(function (s) { return Object.assign({}, s); });
+      writeJSON(LS.students, students);
+    }
+    app.students = students.map(function (s, i) {
+      return {
+        id: s.id || ('s' + (i + 1) + '_' + Math.random().toString(36).slice(2, 6)),
+        name: String(s.name || '').trim(),
+        className: String(s.className || '').trim(),
+        belt: String(s.belt || '').trim() || '흰띠',
+        phone: String(s.phone || '').trim(),
+        attendCount: Math.max(0, parseInt(s.attendCount, 10) || 0),
+        grade: String(s.grade || '').trim(),
+        poomDan: String(s.poomDan || '없음').trim(),
+        targetPoomDan: String(s.targetPoomDan || '없음').trim(),
+        gukStatus: GK_STATUS[s.gukStatus] ? s.gukStatus : 'none',
+        gukExamDate: String(s.gukExamDate || '').trim()
+      };
+    }).filter(function (s) { return s.name; });
+
+    var settings = readJSON(LS.settings, null);
+    app.settings = Object.assign({}, DEFAULT_SETTINGS, settings || {});
+    app.settings.sms = Object.assign({}, DEFAULT_SETTINGS.sms, (settings && settings.sms) || {});
+    app.settings.sms.method = app.settings.sms.method === 'json' ? 'json' : 'query';
+    if (!settings || !settings.dojoName || settings.dojoName === '우리 태권도장') {
+      app.settings.dojoName = DEFAULT_SETTINGS.dojoName;
+    }
+    var th = parseInt(app.settings.promotionThreshold, 10);
+    app.settings.promotionThreshold = (isNaN(th) || th < 1) ? 20 : th;
+    if (!app.settings.examTime) { app.settings.examTime = '10:00'; }
+    if (!app.settings.examPlace) { app.settings.examPlace = DEFAULT_SETTINGS.examPlace; }
+    if (app.settings.mode !== 'out') { app.settings.mode = 'in'; }
+
+    // 띠 체계(순서·이름·색상·급수·기준) 복원
+    var rawBelts = (settings && Array.isArray(settings.belts)) ? settings.belts : null;
+    if (rawBelts && rawBelts.length) {
+      app.settings.belts = rawBelts.map(function (b, i) {
+        var c = String((b && b.color) || '');
+        return {
+          name: String((b && b.name) || ('띠' + (i + 1))).trim(),
+          color: /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#9aa4b5',
+          grade: String((b && b.grade) || '').trim(),
+          threshold: Math.max(1, parseInt(b && b.threshold, 10) || app.settings.promotionThreshold)
+        };
+      }).filter(function (b) { return b.name; });
+    }
+    if (!rawBelts || !app.settings.belts || !app.settings.belts.length) {
+      app.settings.belts = defaultBelts(app.settings.promotionThreshold);
+    }
+    app.settings.visibility = Object.assign(
+      { beltSystem: true, promotion: true, gukgiwon: false },
+      (settings && settings.visibility) || {}
+    );
+    if (!app.settings.gukTime) { app.settings.gukTime = '10:00'; }
+
+    var records = readJSON(LS.records, {});
+    app.records = (records && typeof records === 'object') ? records : {};
+
+    loadAttendance();
+    migrateAttendance();
+    app.monthly = { month: monthKey(new Date()), className: 'all', q: '' };
+
+    var logs = readJSON(LS.logs, []);
+    app.logs = Array.isArray(logs) ? logs : [];
+    // 이전 버전에서 쓴 상태값 정리 + 앱을 닫아 버린 발송 대기 건을 "확인 필요"로
+    app.logs.forEach(function (l) {
+      if (!l) { return; }
+      if (l.status === 'preview') { l.status = 'sim'; }
+      if (l.status === 'queued') {
+        l.status = 'unverified';
+        l.statusNote = '앱을 닫아 결과를 확인하지 못했습니다 · 문자함을 확인하세요';
+      }
+    });
+
+    app.muted = readJSON(LS.muted, false) === true;
+  }
+  function saveStudents() { writeJSON(LS.students, app.students); }
+  function saveSettings() { writeJSON(LS.settings, app.settings); }
+  function saveRecords() { writeJSON(LS.records, app.records); }
+  function saveLogs() { writeJSON(LS.logs, app.logs.slice(0, 200)); }
+  function saveAttendance() { writeJSON(LS.attendance, app.attendance); }
+
+  /* =========================================================
+     3-B. 날짜별 출석 이력 (월간 출석부 저장소)
+     구조: { 'YYYY-MM-DD': { studentId: { inTime, outTime, manual, src, updatedAt } } }
+     ========================================================= */
+  function isDateKey(s) {
+    var str = String(s || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) { return false; }
+    var p = str.split('-');
+    var y = Number(p[0]), m = Number(p[1]), d = Number(p[2]);
+    var dt = new Date(y, m - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+  }
+  function loadAttendance() {
+    var raw = readJSON(LS.attendance, {});
+    var out = {};
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      Object.keys(raw).forEach(function (d) {
+        if (!isDateKey(d)) { return; }
+        var day = raw[d];
+        if (!day || typeof day !== 'object' || Array.isArray(day)) { return; }
+        var clean = {};
+        Object.keys(day).forEach(function (sid) {
+          var e = day[sid];
+          if (!e || typeof e !== 'object') { return; }
+          var rec = {
+            inTime: String(e.inTime || '').trim().slice(0, 5),
+            outTime: String(e.outTime || '').trim().slice(0, 5)
+          };
+          if (e.manual) { rec.manual = true; }
+          if (e.src) { rec.src = String(e.src); }
+          if (e.updatedAt) { rec.updatedAt = String(e.updatedAt); }
+          if (rec.inTime || rec.outTime || rec.manual) { clean[sid] = rec; }
+        });
+        if (Object.keys(clean).length) { out[d] = clean; }
+      });
+    }
+    app.attendance = out;
+  }
+  function attendanceEntry(sid, dateKey) {
+    var day = app.attendance[dateKey];
+    return (day && day[sid]) || null;
+  }
+  function isPresentOn(sid, dateKey) {
+    var e = attendanceEntry(sid, dateKey);
+    return !!(e && (e.inTime || e.outTime || e.manual));
+  }
+  function setAttendance(sid, dateKey, patch) {
+    if (!isDateKey(dateKey) || !sid) { return null; }
+    patch = patch || {};
+    var day = app.attendance[dateKey] || (app.attendance[dateKey] = {});
+    var cur = day[sid] || { inTime: '', outTime: '' };
+    if (patch.inTime !== undefined) { cur.inTime = String(patch.inTime || '').slice(0, 5); }
+    if (patch.outTime !== undefined) { cur.outTime = String(patch.outTime || '').slice(0, 5); }
+    if (patch.manual !== undefined) { cur.manual = !!patch.manual; }
+    if (patch.src) { cur.src = String(patch.src); }
+    cur.updatedAt = new Date().toISOString();
+    day[sid] = cur;
+    return cur;
+  }
+  function clearAttendance(sid, dateKey) {
+    var day = app.attendance[dateKey];
+    if (!day || !day[sid]) { return; }
+    delete day[sid];
+    if (!Object.keys(day).length) { delete app.attendance[dateKey]; }
+  }
+  /* 예전 버전은 tdk.records.v1 에 날짜별 {in,out} 만 저장했습니다.
+     양쪽을 합쳐서 오늘 출석 기록이 그대로 월간 이력으로 이어지게 합니다. (삭제는 하지 않음) */
+  function migrateAttendance() {
+    var changed = false;
+    Object.keys(app.records).forEach(function (d) {
+      if (!isDateKey(d)) { return; }
+      var day = app.records[d];
+      if (!day || typeof day !== 'object' || Array.isArray(day)) { return; }
+      Object.keys(day).forEach(function (sid) {
+        var r = day[sid] || {};
+        if (!r.in && !r.out && !r.manual) { return; }
+        var e = attendanceEntry(sid, d);
+        if (!e) {
+          setAttendance(sid, d, { inTime: r.in || '', outTime: r.out || '', manual: !!r.manual, src: 'legacy' });
+          changed = true;
+          return;
+        }
+        if (!e.inTime && r.in) { e.inTime = String(r.in).slice(0, 5); changed = true; }
+        if (!e.outTime && r.out) { e.outTime = String(r.out).slice(0, 5); changed = true; }
+      });
+    });
+    // 반대 방향: 이력에만 있던 기록도 '오늘 출석' 기록과 맞춰 둡니다.
+    Object.keys(app.attendance).forEach(function (d) {
+      var day = app.attendance[d];
+      if (!day) { return; }
+      Object.keys(day).forEach(function (sid) {
+        var e = day[sid];
+        if (!e || (!e.inTime && !e.outTime && !e.manual)) { return; }
+        var rec = app.records[d] || (app.records[d] = {});
+        var r = rec[sid] || (rec[sid] = { in: null, out: null });
+        if (!r.in && e.inTime) { r.in = e.inTime; changed = true; }
+        if (!r.out && e.outTime) { r.out = e.outTime; changed = true; }
+        if (e.manual && !r.in && !r.out && !r.manual) { r.manual = true; changed = true; }
+      });
+    });
+    if (changed) { saveAttendance(); saveRecords(); }
+  }
+  function recInText(r) {
+    if (!r) { return ''; }
+    if (r.in) { return r.in; }
+    return r.manual ? '수동' : '';
+  }
+  function recOutText(r) { return (r && r.out) ? r.out : ''; }
+
+  function todayRecords() {
+    var key = todayKey();
+    if (!app.records[key] || typeof app.records[key] !== 'object') { app.records[key] = {}; }
+    return app.records[key];
+  }
+  function recordOf(studentId) {
+    var day = todayRecords();
+    if (!day[studentId]) { day[studentId] = { in: null, out: null }; }
+    return day[studentId];
+  }
+  function counts() {
+    var day = todayRecords();
+    var c = { total: app.students.length, in: 0, out: 0, absent: 0 };
+    app.students.forEach(function (s) {
+      var r = day[s.id] || {};
+      if (recInText(r)) { c.in++; }
+      if (recOutText(r)) { c.out++; }
+      if (!recInText(r)) { c.absent++; }
+    });
+    return c;
+  }
+
+  /* =========================================================
+     4. 사운드
+     ========================================================= */
+  var audioCtx = null;
+  function ensureAudio() {
+    if (app.muted) { return null; }
+    if (!audioCtx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { return null; }
+      try { audioCtx = new AC(); } catch (e) { return null; }
+    }
+    if (audioCtx.state === 'suspended') { audioCtx.resume().catch(function () {}); }
+    return audioCtx;
+  }
+  function tone(ctx, freq, startAt, dur, gainVal, type) {
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, startAt);
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(gainVal || 0.08, startAt + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(startAt); osc.stop(startAt + dur + 0.02);
+  }
+  function playSuccess() {
+    var ctx = ensureAudio(); if (!ctx) { return; }
+    var t = ctx.currentTime + 0.01;
+    tone(ctx, 880, t, 0.14, 0.09);
+    tone(ctx, 1174.7, t + 0.12, 0.16, 0.08);
+    tone(ctx, 1568, t + 0.26, 0.26, 0.07);
+  }
+  function playKey() {
+    var ctx = ensureAudio(); if (!ctx) { return; }
+    tone(ctx, 660, ctx.currentTime + 0.005, 0.06, 0.045, 'triangle');
+  }
+  function playError() {
+    var ctx = ensureAudio(); if (!ctx) { return; }
+    var t = ctx.currentTime + 0.01;
+    tone(ctx, 300, t, 0.12, 0.07, 'square');
+    tone(ctx, 220, t + 0.13, 0.18, 0.06, 'square');
+  }
+
+  /* =========================================================
+     5. UI 헬퍼 (토스트 / 모달 / 배너)
+     ========================================================= */
+  var toastTimer = null;
+  function toast(msg) {
+    var t = el('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2400);
+  }
+
+  function openModal(opts) {
+    return new Promise(function (resolve) {
+      var root = el('modal-root');
+      var actions = opts.actions || [];
+      root.innerHTML =
+        '<div class="modal-backdrop"></div>' +
+        '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h3>' + esc(opts.title || '') + '</h3>' +
+        (opts.sub ? '<div class="modal-sub">' + esc(opts.sub) + '</div>' : '') +
+        '<div class="modal-body">' + (opts.body || '') + '</div>' +
+        '<div class="modal-actions">' +
+        actions.map(function (a, i) {
+          return '<button class="btn ' + (a.kind || '') + '" data-idx="' + i + '">' + esc(a.label) + '</button>';
+        }).join('') +
+        '</div></div>';
+      root.classList.add('open');
+
+      function close(value) {
+        root.classList.remove('open');
+        root.innerHTML = '';
+        root.onclick = null;
+        resolve(value);
+      }
+      root.onclick = function (e) {
+        var btn = e.target.closest('[data-idx]');
+        if (btn) {
+          var a = actions[Number(btn.getAttribute('data-idx'))];
+          close(a ? a.value : null);
+          return;
+        }
+        var pick = e.target.closest('[data-pick]');
+        if (pick) { close(pick.getAttribute('data-pick')); return; }
+        if (e.target.classList.contains('modal-backdrop')) { close(null); }
+      };
+    });
+  }
+
+  var bannerTimer = null;
+  function smsBannerText(entry) {
+    var phone = entry ? esc(maskPhone(entry.phone)) : '';
+    var st = entry ? entry.status : 'sim';
+    if (st === 'queued') {
+      return '학부모님께 무료문자를 보내는 중…<br><b>' + phone + '</b> · ' + esc(app.settings.dojoName);
+    }
+    if (st === 'sent') {
+      return '학부모님께 무료문자를 보냈어요<br><b>' + phone + '</b> · ' + esc(app.settings.dojoName);
+    }
+    if (st === 'unverified') {
+      return '무료문자 발송을 요청했어요 · 확인 필요<br><b>' + phone + '</b> · 로그에서 상태 보기';
+    }
+    if (st === 'error') {
+      return '문자 발송에 실패했어요<br>로그의 <b>문자앱으로</b> 버튼으로 보낼 수 있어요';
+    }
+    if (st === 'off') {
+      return '자동발송이 꺼져 있어요<br><b>' + phone + '</b> · 로그에서 직접 보내기';
+    }
+    return '무료문자 시뮬레이션 (도장폰 미연동)<br><b>' + phone + '</b> · 로그에서 직접 보내기';
+  }
+  function refreshBanner() {
+    var box = el('banner-sms-text');
+    if (!box || !el('banner').classList.contains('show')) { return; }
+    var entry = app.logs.filter(function (l) { return l.id === app.bannerLogId; })[0];
+    if (entry) { box.innerHTML = smsBannerText(entry); }
+  }
+
+  function showBanner(student, mode, timeStr, entry) {
+    var banner = el('banner');
+    var isIn = mode === 'in';
+    app.bannerLogId = entry ? entry.id : '';
+    banner.innerHTML =
+      '<div class="banner-card">' +
+      '<div class="banner-badge">' + (isIn ? '👊' : '🏠') + '</div>' +
+      '<div class="banner-kicker">' + (isIn ? '등원 완료' : '하원 완료') + '</div>' +
+      '<h2 class="banner-name">' + esc(student.name) + '<small>관원</small></h2>' +
+      '<div class="banner-time">' + timeStr + ' · ' + esc(student.className || '반 미지정') + '</div>' +
+      '<div class="banner-sms"><span class="kk">📱</span>' +
+      '<div class="kt" id="banner-sms-text">' + smsBannerText(entry) + '</div></div>' +
+      '<div class="banner-tip">화면을 누르면 바로 닫힙니다</div>' +
+      '</div>';
+    banner.classList.add('show');
+    banner.onclick = hideBanner;
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(hideBanner, 3800);
+  }
+  function hideBanner() {
+    el('banner').classList.remove('show');
+    clearTimeout(bannerTimer);
+  }
+
+  /* =========================================================
+     6. 상단 / 공통 렌더
+     ========================================================= */
+  var clockTimer = null;
+  function tickClock() {
+    var now = new Date();
+    el('clock-hm').textContent = pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+    el('clock-s').textContent = pad2(now.getSeconds());
+    el('clock-date').textContent = fmtDateKorean(now) + ' · ' + (app.settings.mode === 'in' ? '등원 모드' : '하원 모드');
+    if (todayKey() !== app._renderedDay) {
+      app._renderedDay = todayKey();
+      renderAll();
+    }
+  }
+
+  function setMode(mode) {
+    app.settings.mode = mode === 'out' ? 'out' : 'in';
+    saveSettings();
+    el('mode-in').classList.toggle('active', app.settings.mode === 'in');
+    el('mode-out').classList.toggle('active', app.settings.mode === 'out');
+    el('cam-help').innerHTML = app.settings.mode === 'in'
+      ? '관원을 선택하면 인식 → 자동 <b>등원</b> 처리까지 재생됩니다.'
+      : '관원을 선택하면 인식 → 자동 <b>하원</b> 처리까지 재생됩니다.';
+    tickClock();
+    renderStudentsList();
+    toast(app.settings.mode === 'in' ? '등원 모드로 전환했어요' : '하원 모드로 전환했어요');
+  }
+
+  function setView(view) {
+    el('view-attendance').classList.toggle('active', view === 'attendance');
+    el('view-admin').classList.toggle('active', view === 'admin');
+    el('tab-att').classList.toggle('active', view === 'attendance');
+    el('tab-admin').classList.toggle('active', view === 'admin');
+    if (view === 'admin') { renderAdmin(); }
+  }
+
+  function updateMuteBtn() {
+    var b = el('mute-btn');
+    b.textContent = app.muted ? '🔇' : '🔊';
+    b.title = app.muted ? '효과음 켜기' : '효과음 끄기';
+    b.classList.toggle('muted', app.muted);
+  }
+
+  /* =========================================================
+     7. 문자 발송 로그 + 무료문자(SMS) 자동 발송
+     ========================================================= */
+  function buildMessage(student, mode, timeStr) {
+    var label = mode === 'in' ? '등원' : '하원';
+    return '[' + app.settings.dojoName + '] ' + student.name + ' 관원이 ' + timeStr + ' ' + label + '하였습니다.';
+  }
+
+  var SMS_STATUS = {
+    queued: { label: '발송 대기', cls: 'wait' },
+    sent: { label: '자동발송 요청됨', cls: 'ok' },
+    unverified: { label: '요청됨 · 확인 필요', cls: 'wait' },
+    sim: { label: '시뮬레이션', cls: '' },
+    off: { label: '자동발송 꺼짐', cls: '' },
+    error: { label: '전송오류', cls: 'off' },
+    test: { label: '테스트', cls: 'ok' }
+  };
+  function smsStatusOf(entry) {
+    return SMS_STATUS[entry && entry.status] || SMS_STATUS.sim;
+  }
+
+  function smsConf() { return (app.settings && app.settings.sms) || DEFAULT_SETTINGS.sms; }
+  function smsConfigured() {
+    return /^https?:\/\/.+/i.test(String(smsConf().webhookUrl || '').trim());
+  }
+  function smsAutoOn() { return smsConfigured() && smsConf().autoSend !== false; }
+
+  /* 토스트·모달에 붙는 상태 문구 */
+  function smsToastTail() {
+    if (!smsConfigured()) { return '를 발송 로그에 기록했어요 (도장폰 미연동 · 시뮬레이션)'; }
+    if (!smsAutoOn()) { return '를 발송 로그에 기록했어요 (자동발송 꺼짐)'; }
+    return '를 도장폰 무료문자로 발송 요청했어요';
+  }
+  function smsModalNote() {
+    if (!smsConfigured()) { return '지금은 도장폰 미연동이라 로그에만 기록되고, 발송 로그의 [문자앱으로] 버튼으로 직접 보낼 수 있어요.'; }
+    if (!smsAutoOn()) { return '자동발송이 꺼져 있어 로그에만 기록됩니다.'; }
+    return '도장폰 무료문자로 한 명씩 차례로 발송합니다.';
+  }
+
+  /* 원클릭 백업 — 폰/태블릿 기본 문자 앱에 같은 문구를 미리 채워 엽니다 */
+  function smsHref(phone, text) {
+    return 'sms:' + digitsOnly(phone) + '?body=' + encodeURIComponent(String(text || ''));
+  }
+
+  /* MacroDroid 웹훅: ?phone=...&message=...&name=...&kind=...&at=... */
+  function smsWebhookUrl(phone, text, meta) {
+    var base = String(smsConf().webhookUrl || '').trim();
+    if (!base) { return ''; }
+    var sep = base.indexOf('?') === -1 ? '?' : '&';
+    var pairs = [
+      ['phone', digitsOnly(phone)],
+      ['message', String(text || '')],
+      ['name', (meta && meta.name) || ''],
+      ['kind', (meta && meta.kind) || 'attendance'],
+      ['at', (meta && meta.time) || fmtTime()]
+    ];
+    return base + sep + pairs.map(function (p) {
+      return encodeURIComponent(p[0]) + '=' + encodeURIComponent(p[1]);
+    }).join('&');
+  }
+  function smsJsonBody(phone, text, meta) {
+    return JSON.stringify({
+      phone: digitsOnly(phone),
+      message: String(text || ''),
+      name: (meta && meta.name) || '',
+      kind: (meta && meta.kind) || 'attendance',
+      at: (meta && meta.time) || fmtTime(),
+      dojo: app.settings.dojoName
+    });
+  }
+
+  function errText(err) {
+    if (!err) { return '알 수 없는 오류'; }
+    if (err.name === 'AbortError') { return '시간 초과'; }
+    var m = String(err.message || err.name || err);
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) {
+      return 'URL과 인터넷 연결을 확인하세요 (주소 오류 또는 CORS 차단)';
+    }
+    return m;
+  }
+
+  function fetchTimeout(url, init, ms) {
+    if (typeof fetch !== 'function') { return Promise.reject(new Error('이 브라우저는 자동 발송(fetch)을 지원하지 않습니다')); }
+    var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    if (ctrl) { init.signal = ctrl.signal; }
+    var timer = setTimeout(function () { if (ctrl) { ctrl.abort(); } }, ms || 9000);
+    return fetch(url, init).then(function (res) {
+      clearTimeout(timer);
+      return res;
+    }, function (err) {
+      clearTimeout(timer);
+      throw err;
+    });
+  }
+
+  /* 실제 웹훅 호출 → { state, note, url } */
+  function smsSend(phone, text, meta) {
+    if (!smsConfigured()) {
+      return Promise.resolve({ state: 'sim', note: '웹훅 URL이 없어 시뮬레이션으로만 기록했습니다.', url: '' });
+    }
+    var s = smsConf();
+    if (s.method === 'json') {
+      var jurl = String(s.webhookUrl).trim();
+      return fetchTimeout(jurl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: smsJsonBody(phone, text, meta),
+        mode: 'cors',
+        cache: 'no-store'
+      }).then(function (res) {
+        if (res && res.ok === false) {
+          return { state: 'error', note: '게이트웨이가 HTTP ' + res.status + ' 로 거절했습니다.', url: jurl };
+        }
+        return { state: 'sent', note: '게이트웨이가 접수했습니다' + (res && res.status ? ' (HTTP ' + res.status + ')' : '') + '.', url: jurl };
+      }, function (err) {
+        return { state: 'error', note: '전송오류: ' + errText(err), url: jurl };
+      });
+    }
+    var qurl = smsWebhookUrl(phone, text, meta);
+    // MacroDroid 응답은 브라우저가 읽을 수 없어(CORS) 한 번만 보냅니다. 중복 문자를 막기 위해 재시도하지 않습니다.
+    return fetchTimeout(qurl, { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true }, 9000)
+      .then(function () {
+        return {
+          state: 'sent',
+          note: '도장폰 웹훅으로 요청을 보냈습니다. (브라우저는 응답을 읽지 못하므로 문자함에서 확인)',
+          url: qurl
+        };
+      }, function (err) {
+        if (err && err.name === 'AbortError') {
+          return { state: 'unverified', note: '요청은 보냈지만 시간 안에 응답이 없었습니다. 도장폰 문자함을 확인하세요.', url: qurl };
+        }
+        return { state: 'error', note: '전송오류: ' + errText(err), url: qurl };
+      });
+  }
+
+  /* 여러 명에게 보낼 때 도장폰이 몰리지 않도록 한 건씩 순서대로 보냅니다 */
+  var smsQueue = [];
+  var smsBusy = false;
+  function finishSmsEntry(entry) {
+    saveLogs();
+    renderLog();
+    renderAdminLog();
+    if (entry && typeof entry.onStatus === 'function') { entry.onStatus(entry); }
+  }
+  function enqueueSms(entry) {
+    if (!entry || entry.status === 'test') { return; }
+    if (!smsConfigured()) {
+      entry.status = 'sim';
+      entry.statusNote = '웹훅 미설정 · 로그만 기록';
+      finishSmsEntry(entry);
+      return;
+    }
+    if (!smsAutoOn()) {
+      entry.status = 'off';
+      entry.statusNote = '자동발송 꺼짐 · 문자앱 버튼으로 직접 발송';
+      finishSmsEntry(entry);
+      return;
+    }
+    entry.status = 'queued';
+    entry.statusNote = '발송 대기';
+    smsQueue.push(entry);
+    pumpSms();
+  }
+  function pumpSms() {
+    if (smsBusy || !smsQueue.length) { return; }
+    smsBusy = true;
+    var entry = smsQueue.shift();
+    smsSend(entry.phone, entry.text, entry).then(function (r) {
+      entry.status = r.state;
+      entry.statusNote = r.note;
+      entry.sentAt = new Date().toISOString();
+      entry.webhookUrl = r.url || '';
+      if (r.state === 'error') { entry.error = r.note; }
+    }, function (err) {
+      entry.status = 'error';
+      entry.statusNote = '전송오류: ' + errText(err);
+    }).then(function () {
+      smsBusy = false;
+      finishSmsEntry(entry);
+      setTimeout(pumpSms, 700);
+    });
+  }
+
+  function addLog(student, mode, timeStr, opts) {
+    opts = opts || {};
+    var now = new Date();
+    var entry = {
+      id: uid('log'),
+      at: now.toISOString(),
+      date: todayKey(now),
+      studentId: student.id,
+      name: student.name,
+      phone: student.phone || '',
+      mode: mode,
+      time: timeStr,
+      dojo: app.settings.dojoName,
+      text: opts.text || buildMessage(student, mode, timeStr),
+      kind: opts.kind || 'attendance',
+      status: opts.test ? 'test' : 'queued',
+      statusNote: opts.test ? '테스트 발송' : ''
+    };
+    if (typeof opts.onStatus === 'function') { entry.onStatus = opts.onStatus; }
+    app.logs.unshift(entry);
+    app.logs = app.logs.slice(0, 200);
+    saveLogs();
+    renderLog();
+    renderAdminLog();
+    enqueueSms(entry);
+    return entry;
+  }
+
+  function logVisible(l) {
+    if (l.kind === 'promotion' || l.kind === 'exam') { return visPublic('promotion'); }
+    if (l.kind === 'guk_notice' || l.kind === 'guk_pass') { return visPublic('gukgiwon'); }
+    return true;
+  }
+  function logStatusChip(l) {
+    var st = smsStatusOf(l);
+    return '<span class="sms-chip ' + st.cls + '"' +
+      (l.statusNote ? ' title="' + esc(l.statusNote) + '"' : '') + '>' + st.label + '</span>';
+  }
+  function smsLinkHtml(l, compact) {
+    var label = compact ? '📲 문자' : '📲 문자앱으로';
+    return '<a class="sms-link" href="' + esc(smsHref(l.phone, l.text)) + '" title="기본 문자 앱으로 이 문구를 보냅니다">' + label + '</a>';
+  }
+
+  function renderLog() {
+    var wrap = el('log-scroll');
+    var visible = app.logs.filter(logVisible);
+    var todayAll = app.logs.filter(function (l) { return l.date === todayKey(); }).length;
+    var todayVisible = visible.filter(function (l) { return l.date === todayKey(); });
+    var hidden = todayAll - todayVisible.length;
+    var note = hidden > 0
+      ? '<div class="log-private">🔒 비공개 항목 ' + hidden + '건은 관장님(관리자) 화면에만 보입니다</div>'
+      : '';
+    el('log-count').textContent = todayVisible.length + '건';
+    if (!visible.length) {
+      wrap.innerHTML = note + (hidden > 0
+        ? '<div class="log-empty"><span>🔒</span>오늘 알림은 모두 비공개로 설정되어<br>관장님 화면에만 보입니다.</div>'
+        : '<div class="log-empty"><span>📱</span>아직 보낸 문자가 없어요.<br>관원이 출석하면 학부모님께 갈<br>무료문자가 여기에 차례로 쌓입니다.</div>');
+      return;
+    }
+    wrap.innerHTML = note + visible.slice(0, 40).map(function (l) {
+      var d = new Date(l.at);
+      var when = l.date === todayKey() ? fmtKoreanTime(d) : (l.date.slice(5).replace('-', '/') + ' ' + fmtKoreanTime(d));
+      var tag = (l.kind === 'test' || l.status === 'test') ? '테스트'
+        : l.kind === 'promotion' ? '승급 축하'
+        : l.kind === 'exam' ? '심사 안내'
+        : l.kind === 'guk_notice' ? '국기원 안내'
+        : l.kind === 'guk_pass' ? '국기원 합격'
+        : '출석 안내';
+      return '<div class="sms-msg">' +
+        '<div class="sms-head">' +
+        '<span class="sms-tag">' + tag + '</span>' +
+        '<span class="sms-sender">' + esc(l.dojo || app.settings.dojoName) + '</span>' +
+        '<span class="sms-time">' + esc(when) + '</span>' +
+        '</div>' +
+        '<div class="sms-bubble">' + esc(l.text) + '</div>' +
+        '<div class="sms-meta">' +
+        '<span>→ ' + esc(maskPhone(l.phone)) + '</span>' +
+        logStatusChip(l) +
+        '<span class="spacer"></span>' +
+        smsLinkHtml(l) +
+        '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* =========================================================
+     8. 키오스크: 관원 목록 / 검색 / 키패드
+     ========================================================= */
+  function statusBadge(student) {
+    var r = todayRecords()[student.id] || {};
+    var html = '';
+    if (recInText(r)) { html += '<span class="badge in">등원 ' + esc(recInText(r)) + '</span>'; }
+    if (recOutText(r)) { html += '<span class="badge out">하원 ' + esc(recOutText(r)) + '</span>'; }
+    return html;
+  }
+
+  function renderStudentsList() {
+    var q = el('name-search') ? el('name-search').value : '';
+    var list = app.students.filter(function (s) { return matchSearch(s, q); });
+    var wrap = el('stu-list');
+    if (!list.length) {
+      wrap.innerHTML = '<div class="log-empty" style="padding:18px 10px"><span>🔍</span>검색 결과가 없어요.</div>';
+      return;
+    }
+    wrap.innerHTML = list.map(function (s) {
+      return '<button class="stu-row" data-student="' + esc(s.id) + '">' +
+        '<span class="stu-belt" style="background:' + beltColor(s.belt) + '"></span>' +
+        '<span class="stu-main">' +
+        '<span class="stu-name">' + esc(s.name) + statusBadge(s) + '</span>' +
+        '<span class="stu-sub">' + esc(s.className || '반 미지정') + (s.belt ? ' · ' + esc(s.belt) : '') + '</span>' +
+        '</span>' +
+        '<span class="stu-go">출석</span>' +
+        '</button>';
+    }).join('');
+  }
+
+  function renderPin() {
+    var slots = el('pin-slots').children;
+    for (var i = 0; i < slots.length; i++) {
+      var ch = app.pin.charAt(i);
+      slots[i].textContent = ch ? ch : '·';
+      slots[i].classList.toggle('filled', !!ch);
+    }
+  }
+
+  function pinPress(key) {
+    if (key === 'del') {
+      app.pin = app.pin.slice(0, -1);
+      renderPin(); el('cand-list').innerHTML = '';
+      playKey();
+      return;
+    }
+    if (key === 'clear') {
+      app.pin = '';
+      renderPin(); el('cand-list').innerHTML = '';
+      playKey();
+      return;
+    }
+    if (!/^[0-9]$/.test(key)) { return; }
+    if (app.pin.length >= 4) { return; }
+    app.pin += key;
+    renderPin();
+    playKey();
+    if (app.pin.length === 4) {
+      setTimeout(submitPin, 140);
+    }
+  }
+
+  function submitPin() {
+    var pin = app.pin;
+    if (pin.length !== 4) { return; }
+    var matches = app.students.filter(function (s) {
+      return digitsOnly(s.phone).slice(-4) === pin;
+    });
+    var listEl = el('cand-list');
+
+    if (matches.length === 1) {
+      listEl.innerHTML = '';
+      checkIn(matches[0], 'touch');
+      app.pin = '';
+      renderPin();
+      return;
+    }
+    if (matches.length > 1) {
+      listEl.innerHTML = '<div class="tiny-note" style="margin:4px 0 2px">같은 번호가 ' + matches.length + '명이에요. 관원을 선택하세요.</div>' +
+        matches.map(function (s) {
+          return '<button class="cand" data-student="' + esc(s.id) + '">🥋 ' + esc(s.name) +
+            ' <span class="sub">' + esc(s.className || '') + '</span></button>';
+        }).join('');
+      playKey();
+      return;
+    }
+    playError();
+    toast('등록된 뒷 4자리가 아니에요. 이름 검색을 이용해 주세요.');
+    listEl.innerHTML = '<div class="tiny-note" style="color:#c0392b;text-align:center;margin-top:6px">일치하는 번호가 없습니다</div>';
+    app.pin = '';
+    renderPin();
+  }
+
+  /* =========================================================
+     9. 출석 처리
+     ========================================================= */
+  function checkIn(student, source) {
+    if (!student) { return; }
+    var mode = app.settings.mode;
+    var rec = recordOf(student.id);
+    var now = new Date();
+    var timeStr = fmtTime(now);
+
+    if (mode === 'in') {
+      if (rec.in) {
+        playError();
+        toast(student.name + ' 관원은 이미 등원했어요 (' + rec.in + ')');
+        flushToday();
+        return;
+      }
+      rec.in = timeStr;
+      var beforeCount = Number(student.attendCount) || 0;
+      student.attendCount = beforeCount + 1;
+      saveStudents();
+    } else {
+      if (rec.out) {
+        playError();
+        toast(student.name + ' 관원은 이미 하원했어요 (' + rec.out + ')');
+        flushToday();
+        return;
+      }
+      if (!rec.in) {
+        toast(student.name + ' 관원은 오늘 등원 기록이 없어요. 하원으로 기록합니다.');
+      }
+      rec.out = timeStr;
+    }
+
+    saveRecords();
+    // 같은 기록을 날짜별 월간 이력에도 남깁니다 (키오스크 → 월간 출석부 자동 반영)
+    setAttendance(student.id, todayKey(now), {
+      inTime: rec.in || '',
+      outTime: rec.out || '',
+      src: source === 'ai' ? 'ai' : 'touch'
+    });
+    saveAttendance();
+    var logEntry = addLog(student, mode, timeStr, { onStatus: refreshBanner });
+    playSuccess();
+    showBanner(student, mode, timeStr, logEntry);
+    renderAll();
+    if (mode === 'in') {
+      var st = promoState(student);
+      if (st.target && Number(student.attendCount) === st.threshold) {
+        setTimeout(function () {
+          toast('🎖️ ' + student.name + ' 관원이 심사 대상이 되었어요 (' + st.count + '/' + st.threshold + '회)');
+        }, 700);
+      }
+    }
+  }
+
+  function flushToday() { saveRecords(); renderAll(); }
+
+  /* =========================================================
+     10. 카메라 / AI 시뮬레이션
+     ========================================================= */
+  function setCamStatus(text) {
+    el('cam-status').textContent = text;
+  }
+
+  function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast('이 브라우저에서는 카메라를 열 수 없어요. 시뮬레이션으로 체험해 주세요.');
+      return;
+    }
+    setCamStatus('카메라 연결 중…');
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    }).then(function (stream) {
+      app.cameraStream = stream;
+      var video = el('camera-video');
+      video.srcObject = stream;
+      var p = video.play();
+      if (p && p.catch) { p.catch(function () {}); }
+      document.body.classList.add('cam-live');
+      setCamStatus('웹캠 LIVE · 얼굴을 비춰 주세요');
+      el('cam-head-note').textContent = '웹캠 연결됨';
+      el('btn-camera').textContent = '📷 카메라 끄기';
+      el('stage-tip').textContent = 'AI ENGINE · LIVE';
+      toast('카메라가 연결됐어요. 관원을 비추고 [관원 선택 인식]으로 테스트해 보세요.');
+    }).catch(function (err) {
+      document.body.classList.remove('cam-live');
+      setCamStatus('웹캠 사용 불가 · 시뮬레이션 모드');
+      el('cam-head-note').textContent = '시뮬레이션 모드';
+      el('btn-camera').textContent = '📷 카메라 연결';
+      var reason = (err && err.name) ? err.name : 'error';
+      toast('카메라를 열 수 없어요 (' + reason + '). 시뮬레이션 모드로 체험할 수 있습니다.');
+    });
+  }
+
+  function stopCamera() {
+    if (app.cameraStream) {
+      app.cameraStream.getTracks().forEach(function (t) { t.stop(); });
+      app.cameraStream = null;
+    }
+    var video = el('camera-video');
+    video.srcObject = null;
+    document.body.classList.remove('cam-live');
+    setCamStatus('웹캠 대기');
+    el('cam-head-note').textContent = '시뮬레이션 모드';
+    el('btn-camera').textContent = '📷 카메라 연결';
+    el('stage-tip').textContent = 'AI ENGINE · READY';
+  }
+
+  function toggleCamera() {
+    if (app.cameraStream) { stopCamera(); }
+    else { startCamera(); }
+  }
+
+  async function runRecognition(student) {
+    if (!student) { return; }
+    if (app.busy) { return; }
+    app.busy = true;
+    hideBanner();
+
+    var stage = el('camera-stage');
+    var bbox = el('bbox');
+    var matchEl = el('bbox-match');
+    var nameEl = el('bbox-name');
+
+    nameEl.textContent = student.name + ' 관원';
+    matchEl.textContent = '0%';
+
+    // 인식 박스 위치를 살짝씩 다르게
+    var left = 22 + Math.round(Math.random() * 18);
+    var top = 14 + Math.round(Math.random() * 14);
+    var w = 40 + Math.round(Math.random() * 10);
+    var h = 50 + Math.round(Math.random() * 10);
+    bbox.style.left = left + '%';
+    bbox.style.top = top + '%';
+    bbox.style.width = w + '%';
+    bbox.style.height = h + '%';
+
+    bbox.classList.add('show');
+    stage.classList.add('scanning');
+    el('stage-tip').textContent = 'SCANNING…';
+
+    var target = 94.6 + Math.random() * 4.6;
+    var steps = 22;
+    for (var i = 1; i <= steps; i++) {
+      matchEl.textContent = (target * i / steps).toFixed(1) + '%';
+      await sleep(38);
+    }
+    matchEl.textContent = target.toFixed(1) + '%';
+    await sleep(240);
+
+    stage.classList.remove('scanning');
+    bbox.classList.remove('show');
+    el('stage-tip').textContent = document.body.classList.contains('cam-live') ? 'AI ENGINE · LIVE' : 'AI ENGINE · READY';
+
+    app.busy = false;
+    checkIn(student, 'ai');
+  }
+
+  function openSimPicker() {
+    if (!app.students.length) { toast('명단이 비어 있어요. 관리자 탭에서 관원을 추가해 주세요.'); return; }
+    var body = '<div class="pick-grid">' + app.students.map(function (s) {
+      return '<button class="pick" data-pick="' + esc(s.id) + '">' +
+        '<b>' + esc(s.name) + '</b><span>' + esc(s.belt || '') + '</span>' +
+        '<span>' + esc(s.className || '반 미지정') + '</span></button>';
+    }).join('') + '</div>';
+    openModal({
+      title: '카메라 앞에 설 관원을 선택하세요',
+      sub: '선택하면 AI가 얼굴을 인식하는 장면이 재생되고, 자동으로 ' +
+        (app.settings.mode === 'in' ? '등원' : '하원') + ' 처리됩니다.',
+      body: body,
+      actions: [{ label: '닫기', value: null, kind: 'btn-ghost' }]
+    }).then(function (studentId) {
+      if (!studentId) { return; }
+      var s = app.students.filter(function (x) { return x.id === studentId; })[0];
+      if (s) { runRecognition(s); }
+    });
+  }
+
+  /* =========================================================
+     11. 관리자 렌더
+     ========================================================= */
+  function renderAdmin() {
+    var c = counts();
+    el('st-in').innerHTML = c.in + '<small>명</small>';
+    el('st-out').innerHTML = c.out + '<small>명</small>';
+    el('st-absent').innerHTML = c.absent + '<small>명</small>';
+    el('st-total').innerHTML = c.total + '<small>명</small>';
+    el('admin-today').textContent = fmtDateKorean(new Date());
+    el('pill-in').textContent = c.in;
+    el('pill-out').textContent = c.out;
+    renderAttendanceTable();
+    renderStudentsTable();
+    renderSmsState();
+    renderPromotion();
+    renderGukgiwon();
+    renderMonthly();
+    renderAdminLog();
+  }
+
+  function renderAdminLog() {
+    var tbody = el('admin-log-table');
+    if (!tbody) { return; }
+    el('admin-log-count').textContent = app.logs.length + '건';
+    if (!app.logs.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">아직 발송한 문자가 없어요</td></tr>';
+      return;
+    }
+    tbody.innerHTML = app.logs.slice(0, 30).map(function (l) {
+      var label = l.kind === 'promotion' ? '승급' : l.kind === 'exam' ? '심사'
+        : l.kind === 'guk_notice' ? '국기원' : l.kind === 'guk_pass' ? '합격'
+        : (l.kind === 'test' || l.status === 'test') ? '테스트' : '출석';
+      var text = l.text.length > 40 ? l.text.slice(0, 40) + '…' : l.text;
+      return '<tr>' +
+        '<td class="sub">' + esc(l.date === todayKey() ? l.time : l.date.slice(5)) + '</td>' +
+        '<td class="nm">' + esc(l.name) + '</td>' +
+        '<td><span class="chip">' + label + '</span></td>' +
+        '<td class="sub" style="white-space:normal">' + esc(text) + '</td>' +
+        '<td>' + logStatusChip(l) + '</td>' +
+        '<td>' + smsLinkHtml(l, true) + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function renderAttendanceTable() {
+    var day = todayRecords();
+    var rows = app.students.slice().sort(function (a, b) {
+      return a.name.localeCompare(b.name, 'ko');
+    });
+    var tbody = el('att-table');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="5">등록된 관원이 없습니다</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function (s) {
+      var r = day[s.id] || {};
+      var sent = todayLogsFor(s.id);
+      return '<tr>' +
+        '<td><div class="nm">' + esc(s.name) + '</div></td>' +
+        '<td><div class="sub">' + esc(s.className || '-') + (s.belt ? ' · ' + esc(s.belt) : '') + '</div></td>' +
+        '<td class="cell-time">' + (recInText(r) ? esc(recInText(r)) : '<span class="chip off">미등원</span>') + '</td>' +
+        '<td class="cell-time">' + (recOutText(r) ? esc(recOutText(r)) : '<span class="chip">-</span>') + '</td>' +
+        '<td>' + (sent ? '<span class="chip ok">' + sent + '건 발송</span>' : '<span class="chip wait">없음</span>') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+  function todayLogsFor(studentId) {
+    var key = todayKey();
+    return app.logs.filter(function (l) { return l.date === key && l.studentId === studentId; }).length;
+  }
+
+  function renderStudentsTable() {
+    el('stu-count').textContent = app.students.length + '명';
+    var tbody = el('stu-table');
+    if (!app.students.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="5">관원이 없습니다</td></tr>';
+      return;
+    }
+    tbody.innerHTML = app.students.slice().sort(function (a, b) {
+      return a.name.localeCompare(b.name, 'ko');
+    }).map(function (s) {
+      return '<tr>' +
+        '<td class="nm">' + esc(s.name) + '</td>' +
+        '<td><span class="sub">' + esc(s.className || '-') + '</span></td>' +
+        '<td><span class="chip">' + esc(s.belt || '-') + (studentGrade(s) ? ' · ' + esc(studentGrade(s)) : '') + '</span></td>' +
+        '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
+        '<td style="white-space:nowrap">' +
+        '<button class="btn btn-sm" data-edit="' + esc(s.id) + '">편집</button> ' +
+        '<button class="btn btn-sm btn-danger" data-del="' + esc(s.id) + '">삭제</button>' +
+        '</td></tr>';
+    }).join('');
+  }
+
+  function renderSmsState() {
+    var chip = el('sms-state');
+    if (!chip) { return; }
+    if (!smsConfigured()) {
+      chip.textContent = '미연동 · 시뮬레이션';
+      chip.className = 'chip wait';
+    } else if (!smsAutoOn()) {
+      chip.textContent = '연동됨 · 자동발송 꺼짐';
+      chip.className = 'chip';
+    } else {
+      chip.textContent = '연동됨 · 자동발송 켜짐';
+      chip.className = 'chip ok';
+    }
+  }
+
+  function fillSmsForm() {
+    var s = smsConf();
+    if (el('s-webhook')) { el('s-webhook').value = s.webhookUrl || ''; }
+    if (el('s-method')) { el('s-method').value = s.method === 'json' ? 'json' : 'query'; }
+    if (el('s-autosend')) { el('s-autosend').value = s.autoSend === false ? 'off' : 'on'; }
+    if (el('s-test-phone')) { el('s-test-phone').value = s.testPhone || ''; }
+  }
+  function readSmsForm() {
+    var phone = normalizePhone((el('s-test-phone').value || '').trim());
+    if (phone && el('s-test-phone')) { el('s-test-phone').value = phone; }
+    app.settings.sms = {
+      webhookUrl: (el('s-webhook').value || '').trim(),
+      method: el('s-method').value === 'json' ? 'json' : 'query',
+      autoSend: el('s-autosend').value !== 'off',
+      testPhone: phone
+    };
+    saveSettings();
+    renderSmsState();
+    return app.settings.sms;
+  }
+
+  function setSmsTestResult(kind, html) {
+    var box = el('sms-test-result');
+    if (!box) { return; }
+    box.className = 'sms-test-result' + (kind ? ' ' + kind : '');
+    box.innerHTML = html;
+  }
+  function testSmsText() {
+    return '[' + app.settings.dojoName + '] 테스트 문자입니다. 도장폰 무료문자 연동이 정상입니다. (' + fmtTime() + ')';
+  }
+  function sendTestSms() {
+    var conf = readSmsForm();
+    var phone = conf.testPhone;
+    if (!digitsOnly(phone)) {
+      setSmsTestResult('wait', '테스트 문자를 받을 번호를 먼저 입력해 주세요. (본인 휴대폰 번호)');
+      if (el('s-test-phone')) { el('s-test-phone').focus(); }
+      return;
+    }
+    var text = testSmsText();
+    if (!smsConfigured()) {
+      setSmsTestResult('wait', '웹훅 URL이 아직 없어 실제 발송은 하지 않았습니다. 도장폰 MacroDroid 웹훅 주소를 넣고 [설정 저장]을 누르면 바로 보낼 수 있어요.' +
+        '<div style="margin-top:8px"><a class="sms-link" href="' + esc(smsHref(phone, text)) + '">📲 지금 문자앱으로 보내 보기</a></div>');
+      return;
+    }
+    var btn = el('btn-test-sms');
+    if (btn) { btn.disabled = true; }
+    setSmsTestResult('wait', '📡 도장폰 웹훅으로 요청을 보내는 중…');
+    smsSend(phone, text, { name: '테스트', kind: 'test', time: fmtTime() }).then(function (r) {
+      if (btn) { btn.disabled = false; }
+      var urlLine = r.url
+        ? '<div style="margin-top:7px;font-weight:600;opacity:.8;letter-spacing:0">요청 주소<br>' + esc(r.url) + '</div>'
+        : '';
+      if (r.url && r.url.length > 600) {
+        urlLine = '<div style="margin-top:7px;font-weight:600;opacity:.8">요청 주소가 길어 화면에는 줄여서 표시합니다.</div>';
+      }
+      if (r.state === 'sent') {
+        setSmsTestResult('ok', '✅ ' + esc(r.note) + '<br>수신 번호 <b>' + esc(maskPhone(phone)) + '</b> 로 문자가 도착했는지 확인해 주세요.' + urlLine);
+      } else if (r.state === 'unverified') {
+        setSmsTestResult('wait', '⚠️ ' + esc(r.note) + urlLine);
+      } else {
+        setSmsTestResult('err', '❌ ' + esc(r.note) + urlLine);
+      }
+      var entry = {
+        id: uid('log'), at: new Date().toISOString(), date: todayKey(),
+        studentId: '', name: '테스트', phone: phone, mode: 'in', time: fmtTime(),
+        dojo: app.settings.dojoName, text: text, kind: 'test',
+        status: r.state, statusNote: r.note, webhookUrl: r.url || '',
+        sentAt: new Date().toISOString()
+      };
+      app.logs.unshift(entry);
+      app.logs = app.logs.slice(0, 200);
+      saveLogs();
+      renderLog();
+      renderAdminLog();
+    });
+  }
+
+  function resetStudentForm() {
+    app.editingId = '';
+    el('edit-id').value = '';
+    el('f-name').value = '';
+    el('f-phone').value = '';
+    el('f-class').value = '';
+    el('f-count').value = '0';
+    el('f-grade').value = '';
+    renderBeltOptions('');
+    renderPoomOptions('없음');
+    el('btn-cancel-edit').style.display = 'none';
+    el('btn-save-student').textContent = '관원 저장';
+  }
+
+  function startEdit(id) {
+    var s = app.students.filter(function (x) { return x.id === id; })[0];
+    if (!s) { return; }
+    app.editingId = id;
+    el('edit-id').value = id;
+    el('f-name').value = s.name;
+    el('f-phone').value = s.phone;
+    el('f-class').value = s.className;
+    el('f-count').value = String(Number(s.attendCount) || 0);
+    el('f-grade').value = s.grade || '';
+    renderBeltOptions(s.belt);
+    renderPoomOptions(s.poomDan);
+    el('btn-cancel-edit').style.display = 'inline-block';
+    el('btn-save-student').textContent = '수정 저장';
+    el('f-name').focus();
+    el('f-name').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function saveStudent() {
+    var name = el('f-name').value.trim();
+    var phone = normalizePhone(el('f-phone').value.trim());
+    var className = el('f-class').value.trim();
+    var belt = el('f-belt').value;
+    var attendCount = Math.max(0, parseInt(el('f-count').value, 10) || 0);
+    var grade = el('f-grade').value.trim();
+    var poomDan = el('f-poomdan').value || '없음';
+    if (!name) { toast('관원 이름을 입력해 주세요.'); el('f-name').focus(); return; }
+    if (phone && digitsOnly(phone).length < 4) { toast('보호자 연락처를 다시 확인해 주세요.'); return; }
+
+    if (app.editingId) {
+      var s = app.students.filter(function (x) { return x.id === app.editingId; })[0];
+      if (s) {
+        s.name = name; s.phone = phone; s.className = className; s.belt = belt;
+        s.attendCount = attendCount; s.grade = grade; s.poomDan = poomDan;
+      }
+      toast(name + ' 관원 정보를 수정했어요.');
+    } else {
+      app.students.push({
+        id: uid('stu'), name: name, phone: phone, className: className, belt: belt,
+        attendCount: attendCount, grade: grade, poomDan: poomDan,
+        targetPoomDan: '없음', gukStatus: 'none', gukExamDate: ''
+      });
+      toast(name + ' 관원을 추가했어요.');
+    }
+    saveStudents();
+    resetStudentForm();
+    renderAll();
+  }
+
+  function deleteStudent(id) {
+    var s = app.students.filter(function (x) { return x.id === id; })[0];
+    if (!s) { return; }
+    openModal({
+      title: s.name + ' 관원을 삭제할까요?',
+      sub: '명단에서 지워집니다. 오늘 출석 기록은 남아 있지만 화면에는 표시되지 않아요.',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '삭제', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      app.students = app.students.filter(function (x) { return x.id !== id; });
+      saveStudents();
+      renderAll();
+      toast(s.name + ' 관원을 삭제했어요.');
+    });
+  }
+
+  /* =========================================================
+     11-A. 띠 체계 / 급수
+     ========================================================= */
+  function belts() {
+    var list = app.settings && app.settings.belts;
+    return (Array.isArray(list) && list.length) ? list : defaultBelts(app.settings ? app.settings.promotionThreshold : 20);
+  }
+  function beltIndex(name) {
+    var list = belts();
+    for (var i = 0; i < list.length; i++) { if (list[i].name === name) { return i; } }
+    return -1;
+  }
+  function beltByName(name) {
+    var i = beltIndex(name);
+    return i === -1 ? null : belts()[i];
+  }
+  function beltColor(name) {
+    var b = beltByName(name);
+    if (b) { return b.color; }
+    return BELT_COLORS[name] || '#c7cedb';
+  }
+  function beltGrade(name) {
+    var b = beltByName(name);
+    if (b) { return b.grade || ''; }
+    return BELT_GRADES[name] || '';
+  }
+  function studentGrade(s) {
+    return (s && s.grade) ? s.grade : beltGrade(s ? s.belt : '');
+  }
+  function promoThreshold() {
+    var t = parseInt(app.settings.promotionThreshold, 10);
+    return (isNaN(t) || t < 1) ? 20 : t;
+  }
+  function nextBeltOf(belt) {
+    var list = belts();
+    var i = beltIndex(belt);
+    if (i === -1) { i = 0; }
+    return (i + 1 < list.length) ? list[i + 1].name : null;
+  }
+  function promoState(s) {
+    var list = belts();
+    var idx = beltIndex(s.belt || '');
+    if (idx === -1) { idx = 0; }
+    var cur = list[idx];
+    var next = (idx + 1 < list.length) ? list[idx + 1] : null;
+    var t = Math.max(1, Number(cur && cur.threshold) || promoThreshold());
+    var c = Math.max(0, Number(s.attendCount) || 0);
+    return {
+      count: c, threshold: t,
+      next: next ? next.name : null,
+      target: !!next && c >= t,
+      top: !next,
+      belt: cur ? cur.name : ''
+    };
+  }
+  function monthKey(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1); }
+  function byId(id) {
+    return app.students.filter(function (x) { return x.id === id; })[0] || null;
+  }
+
+  /* 띠 체계 편집기 */
+  function beltDraft() {
+    if (!app.beltDraft) {
+      app.beltDraft = belts().map(function (b) {
+        return { name: b.name, color: b.color, grade: b.grade || '', threshold: Number(b.threshold) || promoThreshold() };
+      });
+    }
+    return app.beltDraft;
+  }
+  function newBeltThreshold() {
+    var v = parseInt(el('p-threshold') ? el('p-threshold').value : promoThreshold(), 10);
+    return (isNaN(v) || v < 1) ? promoThreshold() : v;
+  }
+  function renderBeltEditor(force) {
+    var wrap = el('belt-rows');
+    if (!wrap) { return; }
+    if (!force && wrap.contains && document.activeElement && wrap.contains(document.activeElement)) { return; }
+    var list = beltDraft();
+    if (!list.length) {
+      wrap.innerHTML = '<div class="belt-empty">띠를 하나 이상 남겨 주세요.</div>';
+      return;
+    }
+    wrap.innerHTML = list.map(function (b, i) {
+      return '<div class="belt-row" data-bi="' + i + '">' +
+        '<span class="belt-order">' + (i + 1) + '</span>' +
+        '<input type="color" class="belt-color" data-bf="color" value="' + esc(b.color || '#9aa4b5') + '" aria-label="띠 색상">' +
+        '<input class="input" data-bf="name" value="' + esc(b.name) + '" maxlength="14" placeholder="띠 이름" aria-label="띠 이름">' +
+        '<input class="input" data-bf="grade" value="' + esc(b.grade || '') + '" maxlength="6" placeholder="급수" aria-label="급수">' +
+        '<div class="belt-th"><input class="input" type="number" min="1" step="1" data-bf="threshold" value="' + (Number(b.threshold) || 20) + '" aria-label="승급 기준 출석"><span>회</span></div>' +
+        '<button class="btn" data-bup="' + i + '" title="위로 이동">▲</button>' +
+        '<button class="btn" data-bdown="' + i + '" title="아래로 이동">▼</button>' +
+        '<button class="btn btn-danger" data-bdel="' + i + '" title="띠 삭제">✕</button>' +
+        '</div>';
+    }).join('');
+  }
+  function onBeltInput(e) {
+    var input = (e.target && e.target.closest) ? e.target.closest('[data-bf]') : null;
+    if (!input) { return; }
+    var row = input.closest('.belt-row');
+    if (!row) { return; }
+    var i = Number(row.getAttribute('data-bi'));
+    var b = beltDraft()[i];
+    if (!b) { return; }
+    var f = input.getAttribute('data-bf');
+    if (f === 'threshold') { b.threshold = Math.max(1, parseInt(input.value, 10) || 1); }
+    else if (f === 'name' || f === 'grade' || f === 'color') { b[f] = input.value; }
+  }
+  function moveBelt(i, dir) {
+    var list = beltDraft();
+    var j = i + dir;
+    if (j < 0 || j >= list.length) { return; }
+    var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+    renderBeltEditor(true);
+  }
+  function addBelt() {
+    var list = beltDraft();
+    list.push({ name: '새 띠 ' + (list.length + 1), color: '#9aa4b5', grade: '', threshold: newBeltThreshold() });
+    renderBeltEditor(true);
+    toast('띠를 추가했어요. 이름·색상·급수를 정한 뒤 저장해 주세요.');
+  }
+  function removeBelt(i) {
+    var list = beltDraft();
+    var b = list[i];
+    if (!b) { return; }
+    if (list.length <= 1) { toast('띠는 최소 하나는 남겨야 해요.'); return; }
+    var used = app.students.filter(function (s) { return s.belt === b.name; }).length;
+    openModal({
+      title: '「' + b.name + '」 띠를 삭제할까요?',
+      sub: used
+        ? ('이 띠를 쓰는 관원이 ' + used + '명 있어요. 명단의 띠 이름은 그대로 남고, 승급 순서에서만 빠집니다.')
+        : '승급 순서에서 이 띠가 빠집니다.',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '삭제', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      var cur = beltDraft();
+      cur.splice(i, 1);
+      renderBeltEditor(true);
+    });
+  }
+  function saveBeltSystem() {
+    var list = beltDraft().map(function (b) {
+      var c = String(b.color || '');
+      return {
+        name: String(b.name || '').trim(),
+        color: /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#9aa4b5',
+        grade: String(b.grade || '').trim(),
+        threshold: Math.max(1, parseInt(b.threshold, 10) || promoThreshold())
+      };
+    });
+    if (!list.length) { toast('띠를 하나 이상 남겨 주세요.'); return; }
+    var seen = {};
+    for (var i = 0; i < list.length; i++) {
+      if (!list[i].name) { toast('띠 이름을 모두 채워 주세요.'); return; }
+      if (seen[list[i].name]) { toast('띠 이름이 겹칩니다: ' + list[i].name); return; }
+      seen[list[i].name] = true;
+    }
+    app.settings.belts = list;
+    app.settings.promotionThreshold = newBeltThreshold();
+    saveSettings();
+    app.beltDraft = null;
+    renderAll();
+    toast('띠 체계를 저장했어요. 심사 대상 판정에 바로 반영됩니다.');
+  }
+  function resetBeltSystem() {
+    openModal({
+      title: '띠 체계를 기본값으로 되돌릴까요?',
+      sub: '이름·색상·급수·기준이 기본 10단계로 돌아갑니다. [띠 체계 저장]을 눌러야 실제로 적용됩니다.',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '기본값 불러오기', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      app.beltDraft = defaultBelts(newBeltThreshold());
+      renderBeltEditor(true);
+      toast('기본값을 불러왔어요. [띠 체계 저장]을 눌러 적용하세요.');
+    });
+  }
+
+  /* 관원 폼의 띠/급수/품단 선택지 */
+  function renderBeltOptions(selected) {
+    var sel = el('f-belt');
+    if (!sel) { return; }
+    var list = belts();
+    var names = list.map(function (b) { return b.name; });
+    if (selected && names.indexOf(selected) === -1) { names.push(selected); }
+    sel.innerHTML = names.map(function (n) {
+      return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
+    }).join('');
+    sel.value = (selected && names.indexOf(selected) !== -1) ? selected : (names[0] || '');
+  }
+  function renderPoomOptions(selected) {
+    var sel = el('f-poomdan');
+    if (!sel) { return; }
+    sel.innerHTML = POOM_DAN.map(function (p) {
+      return '<option value="' + esc(p) + '">' + esc(p) + '</option>';
+    }).join('');
+    sel.value = POOM_DAN.indexOf(selected) !== -1 ? selected : '없음';
+  }
+  function renderGradeList() {
+    var dl = el('grade-list');
+    if (!dl) { return; }
+    var seen = {};
+    GRADE_SUGGEST.forEach(function (g) { seen[g] = 1; });
+    belts().forEach(function (b) { if (b.grade) { seen[b.grade] = 1; } });
+    dl.innerHTML = Object.keys(seen).map(function (g) { return '<option value="' + esc(g) + '"></option>'; }).join('');
+  }
+
+  /* =========================================================
+     11-B. 승급심사 관리
+     ========================================================= */
+  function defaultExamDate() {
+    var d = new Date();
+    var add = ((6 - d.getDay()) + 7) % 7;
+    if (add === 0) { add = 7; }
+    d.setDate(d.getDate() + add);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function dateTimeText(raw, time) {
+    if (!raw) { return '일정 조정 중'; }
+    var parts = String(raw).split('-');
+    var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    var days = ['일', '월', '화', '수', '목', '금', '토'];
+    var t = time || '10:00';
+    var h = Number(t.split(':')[0]);
+    var mi = t.split(':')[1] || '00';
+    var ampm = h < 12 ? '오전' : '오후';
+    var h12 = h % 12; if (h12 === 0) { h12 = 12; }
+    return Number(parts[1]) + '월 ' + Number(parts[2]) + '일(' + days[d.getDay()] + ') ' + ampm + ' ' + h12 + ':' + mi;
+  }
+  function examDateText() {
+    return dateTimeText(el('p-exam-date').value, el('p-exam-time').value);
+  }
+  function examPlace() {
+    var v = el('p-exam-place') ? el('p-exam-place').value.trim() : '';
+    return v || app.settings.dojoName + ' 도장';
+  }
+  function saveExamSettings() {
+    app.settings.examDate = el('p-exam-date').value || '';
+    app.settings.examTime = el('p-exam-time').value || '10:00';
+    app.settings.examPlace = el('p-exam-place').value.trim() || DEFAULT_SETTINGS.examPlace;
+    saveSettings();
+  }
+  function buildExamMessage(student) {
+    var st = promoState(student);
+    return '[' + app.settings.dojoName + '] ' + student.name + ' 관원이 승급심사 대상입니다.\n' +
+      '· 심사 구분: ' + (st.belt || student.belt) + ' → ' + (st.next || '다음 단계') + '\n' +
+      '· 누적 출석: ' + st.count + '회\n' +
+      '· 심사 일정: ' + examDateText() + '\n' +
+      '· 장소: ' + examPlace() + '\n' +
+      '참석이 어려우시면 미리 도장으로 알려 주세요.';
+  }
+  function buildPromotionMessage(name, newBelt) {
+    return '[' + app.settings.dojoName + '] 축하합니다! ' + name + ' 관원이 ' + newBelt + '로 승급하였습니다.\n' +
+      '그동안 열심히 수련한 만큼 멋진 성장이었어요.';
+  }
+  function sendExamNotice(student, silent) {
+    addLog(student, 'in', fmtTime(), { kind: 'exam', text: buildExamMessage(student) });
+    if (!silent) {
+      toast(student.name + ' 관원 학부모님께 심사 안내 문자를 보냈어요' + smsToastTail());
+    }
+  }
+  function promoteStudent(student) {
+    var st = promoState(student);
+    if (!st.next) { toast('이미 최고 띠예요.'); return; }
+    var message = buildPromotionMessage(student.name, st.next);
+    var warning = st.target ? '' :
+      '<div class="help" style="margin:10px 0 0; border-color:#f6d9a8; background:#fffaf1; color:#8a5300">아직 기준(' + st.threshold + '회)보다 ' + (st.threshold - st.count) + '회 부족합니다. 그래도 승급 처리할 수 있어요.</div>';
+    openModal({
+      title: student.name + ' 관원을 승급 처리할까요?',
+      sub: (student.belt || '') + ' → ' + st.next + ' · 누적 출석 ' + st.count + '회가 0으로 초기화됩니다.',
+      body: '<div class="help" style="margin-top:0">학부모님께 보낼 승급 축하 문자입니다.' +
+        '<div class="sms-msg" style="margin-top:9px; box-shadow:none">' +
+        '<div class="sms-head"><span class="sms-tag">승급 축하</span><span class="sms-sender">' + esc(app.settings.dojoName) + '</span></div>' +
+        '<div class="sms-bubble">' + esc(message) + '</div>' +
+        '</div></div>' + warning,
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '합격·승급 처리', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      student.belt = st.next;
+      student.attendCount = 0;
+      saveStudents();
+      addLog(student, 'in', fmtTime(), { kind: 'promotion', text: message });
+      renderAll();
+      toast('🎉 ' + student.name + ' 관원이 ' + st.next + '로 승급했어요. 축하 문자' + smsToastTail());
+    });
+  }
+
+  function promoSelectedIds() {
+    var sel = app.promoSelected || {};
+    return Object.keys(sel).filter(function (id) { return sel[id] && byId(id); });
+  }
+  function renderBulkBar() {
+    var bar = el('promo-bulk');
+    if (!bar) { return; }
+    var ids = promoSelectedIds();
+    bar.style.display = ids.length ? 'flex' : 'none';
+    var c = el('promo-bulk-count');
+    if (c) { c.textContent = ids.length + '명 선택'; }
+  }
+  function bulkExamNotice() {
+    var ids = promoSelectedIds();
+    if (!ids.length) { return; }
+    saveExamSettings();
+    openModal({
+      title: '선택한 ' + ids.length + '명에게 심사 안내를 보낼까요?',
+      sub: '심사 일정: ' + examDateText() + ' · 장소: ' + examPlace(),
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '보내기', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      ids.forEach(function (id) {
+        var s = byId(id);
+        if (s) { addLog(s, 'in', fmtTime(), { kind: 'exam', text: buildExamMessage(s) }); }
+      });
+      app.promoSelected = {};
+      renderAll();
+      setView('attendance');
+      toast(ids.length + '명에게 심사 안내 문자' + smsToastTail());
+    });
+  }
+  function bulkPromote() {
+    var ids = promoSelectedIds();
+    var list = ids.map(byId).filter(function (s) {
+      return s && promoState(s).next;
+    });
+    if (!list.length) { toast('승급할 수 있는 관원이 없어요.'); return; }
+    var lines = list.map(function (s) {
+      var st = promoState(s);
+      return '<li>' + esc(s.name) + ' · ' + esc(s.belt) + ' → <b>' + esc(st.next) + '</b></li>';
+    }).join('');
+    openModal({
+      title: list.length + '명을 한꺼번에 승급 처리할까요?',
+      sub: '각 관원의 다음 띠로 넘어가고, 누적 출석이 0으로 초기화됩니다.',
+      body: '<ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.9;color:#344054">' + lines + '</ul>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: list.length + '명 승급', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      list.forEach(function (s) {
+        var st = promoState(s);
+        var msg = buildPromotionMessage(s.name, st.next);
+        s.belt = st.next;
+        s.attendCount = 0;
+        addLog(s, 'in', fmtTime(), { kind: 'promotion', text: msg });
+      });
+      saveStudents();
+      app.promoSelected = {};
+      renderAll();
+      toast(list.length + '명을 승급 처리했어요. 축하 문자' + smsToastTail());
+    });
+  }
+
+  function renderPromotion() {
+    if (!el('promo-table')) { return; }
+    var targets = app.students.filter(function (s) { return promoState(s).target; });
+    var now = new Date();
+    var promoted = app.logs.filter(function (l) {
+      return l.kind === 'promotion' && monthKey(new Date(l.at)) === monthKey(now);
+    }).length;
+    el('ps-target').innerHTML = targets.length + '<small>명</small>';
+    el('ps-threshold').innerHTML = promoThreshold() + '<small>회</small>';
+    el('ps-promoted').innerHTML = promoted + '<small>명</small>';
+    el('ps-total').innerHTML = app.students.length + '<small>명</small>';
+    el('promo-note').textContent = fmtDateKorean(now) + ' 기준';
+    if (document.activeElement !== el('p-threshold')) { el('p-threshold').value = promoThreshold(); }
+    if (!el('p-exam-date').value) { el('p-exam-date').value = app.settings.examDate || defaultExamDate(); }
+    if (!el('p-exam-time').value) { el('p-exam-time').value = app.settings.examTime || '10:00'; }
+    renderBeltEditor();
+
+    var filter = app.promoFilter || 'all';
+    var chips = el('promo-filters').children;
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].classList.toggle('active', chips[i].getAttribute('data-pfilter') === filter);
+    }
+
+    var sel = app.promoSelected || (app.promoSelected = {});
+    Object.keys(sel).forEach(function (id) { if (!byId(id)) { delete sel[id]; } });
+
+    var rows = app.students.slice().sort(function (a, b) {
+      var sa = promoState(a), sb = promoState(b);
+      if (sa.target !== sb.target) { return sa.target ? -1 : 1; }
+      return (sb.count - sa.count) || a.name.localeCompare(b.name, 'ko');
+    }).filter(function (s) {
+      var st = promoState(s);
+      if (filter === 'target') { return st.target; }
+      if (filter === 'waiting') { return !st.target; }
+      return true;
+    });
+
+    var tbody = el('promo-table');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="7">' +
+        (filter === 'target' ? '아직 심사 대상이 없어요. 관원들이 기준 출석일수를 채우면 여기에 올라옵니다.' : '등록된 관원이 없습니다') +
+        '</td></tr>';
+      renderBulkBar();
+      return;
+    }
+    tbody.innerHTML = rows.map(function (s) {
+      var st = promoState(s);
+      var pct = Math.min(100, Math.round(st.count / st.threshold * 100));
+      var grade = studentGrade(s);
+      var statusChip = st.top ? '<span class="chip ok">최고 띠</span>'
+        : st.target ? '<span class="chip wait">심사 대상</span>'
+        : '<span class="chip">' + (st.threshold - st.count) + '회 남음</span>';
+      var expected = app.settings.examDate && st.target ? '<div class="sub">' + esc(examDateText()) + '</div>' : '';
+      return '<tr>' +
+        '<td><input type="checkbox" class="ck" data-check="' + esc(s.id) + '"' + (sel[s.id] ? ' checked' : '') + ' aria-label="' + esc(s.name) + ' 선택"></td>' +
+        '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(s.className || '-') + '</div></td>' +
+        '<td><span class="belt-badge"><i style="background:' + beltColor(s.belt) + '"></i>' + esc(s.belt || '미지정') + '</span>' +
+        (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
+        '<td><div class="bar' + (st.target ? ' full' : '') + '"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="sub">' + st.count + ' / ' + st.threshold + '회</div></td>' +
+        '<td>' + (st.next ? '<span class="sub" style="font-size:12px;color:#344054">' + esc(st.next) + (beltGrade(st.next) ? ' · ' + esc(beltGrade(st.next)) : '') + '</span>' : '<span class="chip">-</span>') + '</td>' +
+        '<td>' + statusChip + expected + '</td>' +
+        '<td style="white-space:nowrap">' +
+        (st.target ? '<button class="btn btn-sm" data-exam="' + esc(s.id) + '">안내</button> ' : '') +
+        (st.top ? '<span class="sub">최고 띠</span>' : '<button class="btn btn-sm ' + (st.target ? 'btn-primary' : '') + '" data-promote="' + esc(s.id) + '">합격·승급</button>') +
+        '</td></tr>';
+    }).join('');
+    var all = el('promo-check-all');
+    if (all) {
+      all.checked = rows.length > 0 && rows.every(function (s) { return !!sel[s.id]; });
+    }
+    renderBulkBar();
+  }
+
+  /* =========================================================
+     11-C. 국기원 승품·승단 심사
+     ========================================================= */
+  function gkStatusOf(s) { return GK_STATUS[s.gukStatus] ? s.gukStatus : 'none'; }
+  function gkActive(s) { var v = gkStatusOf(s); return v === 'target' || v === 'docs' || v === 'applied'; }
+  function gkDateValue() {
+    var v = el('gk-date') ? el('gk-date').value : '';
+    return v || app.settings.gukDate || '';
+  }
+  function gkDateText() {
+    return dateTimeText(gkDateValue(), (el('gk-time') && el('gk-time').value) || app.settings.gukTime || '10:00');
+  }
+  function gkPlace() {
+    var v = el('gk-place') ? el('gk-place').value.trim() : '';
+    return v || app.settings.gukPlace || (app.settings.dojoName + ' 도장');
+  }
+  function saveGukSettings() {
+    app.settings.gukDate = el('gk-date').value || '';
+    app.settings.gukTime = el('gk-time').value || '10:00';
+    app.settings.gukPlace = el('gk-place').value.trim() || '';
+    saveSettings();
+  }
+  function buildGukNotice(s) {
+    var target = (s.targetPoomDan && s.targetPoomDan !== '없음') ? s.targetPoomDan : '품·단';
+    return '[' + app.settings.dojoName + '] ' + s.name + ' 관원이 국기원 승품·승단 심사 대상입니다.\n' +
+      '· 응시 구분: ' + target + '\n' +
+      '· 심사 일정: ' + gkDateText() + '\n' +
+      '· 장소: ' + gkPlace() + '\n' +
+      '· 준비물: 응시원서, 도복, 수련복\n' +
+      '서류 접수는 도장에서 도와드립니다.';
+  }
+  function buildGukPass(s, grade) {
+    return '[' + app.settings.dojoName + '] 축하합니다! ' + s.name + ' 관원이 국기원 ' + grade + ' 심사에 합격하였습니다.\n' +
+      '새로운 품·단을 받은 것을 진심으로 축하드려요.';
+  }
+  function sendGukNotice(s) {
+    if (!gkActive(s)) {
+      toast('응시 상태를 대상·서류준비·접수완료로 먼저 바꿔 주세요.');
+      return;
+    }
+    saveGukSettings();
+    addLog(s, 'in', fmtTime(), { kind: 'guk_notice', text: buildGukNotice(s) });
+    toast(s.name + ' 관원 학부모님께 국기원 안내 문자' + smsToastTail());
+  }
+  function passGuk(s) {
+    var grade = s.targetPoomDan || '';
+    if (!grade || grade === '없음') { toast('목표 품·단을 먼저 선택해 주세요.'); return; }
+    var msg = buildGukPass(s, grade);
+    openModal({
+      title: s.name + ' 관원 국기원 ' + grade + ' 합격 처리할까요?',
+      sub: '현재 품·단: ' + (s.poomDan && s.poomDan !== '없음' ? s.poomDan : '없음') + ' → 합격 후: ' + grade,
+      body: '<div class="help" style="margin-top:0">학부모님께 보낼 국기원 합격 축하 문자입니다.' +
+        '<div class="sms-msg" style="margin-top:9px; box-shadow:none">' +
+        '<div class="sms-head"><span class="sms-tag">국기원 합격</span><span class="sms-sender">' + esc(app.settings.dojoName) + '</span></div>' +
+        '<div class="sms-bubble">' + esc(msg) + '</div></div></div>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '합격 처리', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      s.poomDan = grade;
+      s.gukStatus = 'passed';
+      s.targetPoomDan = '없음';
+      saveStudents();
+      addLog(s, 'in', fmtTime(), { kind: 'guk_pass', text: msg });
+      renderAll();
+      toast('🎉 ' + s.name + ' 관원 국기원 ' + grade + ' 합격 처리했어요.');
+    });
+  }
+  function poomSelect(sid, field, value) {
+    var v = value || '없음';
+    return '<select class="input mini" data-gk="' + field + '" data-sid="' + esc(sid) + '">' +
+      POOM_DAN.map(function (p) {
+        return '<option value="' + esc(p) + '"' + (p === v ? ' selected' : '') + '>' + esc(p) + '</option>';
+      }).join('') + '</select>';
+  }
+  function statusSelect(sid, value) {
+    var v = value || 'none';
+    return '<select class="input mini" data-gk="gukStatus" data-sid="' + esc(sid) + '">' +
+      GK_STATUS_ORDER.map(function (k) {
+        return '<option value="' + k + '"' + (k === v ? ' selected' : '') + '>' + GK_STATUS[k] + '</option>';
+      }).join('') + '</select>';
+  }
+  function renderGukgiwon() {
+    if (!el('gk-table')) { return; }
+    var now = new Date();
+    var targets = app.students.filter(function (s) { return gkStatusOf(s) === 'target'; });
+    var docs = app.students.filter(function (s) { return gkStatusOf(s) === 'docs' || gkStatusOf(s) === 'applied'; });
+    var passed = app.logs.filter(function (l) {
+      return l.kind === 'guk_pass' && monthKey(new Date(l.at)) === monthKey(now);
+    }).length;
+    var holders = app.students.filter(function (s) { return s.poomDan && s.poomDan !== '없음'; }).length;
+    el('gk-target').innerHTML = targets.length + '<small>명</small>';
+    el('gk-docs').innerHTML = docs.length + '<small>명</small>';
+    el('gk-passed').innerHTML = passed + '<small>명</small>';
+    el('gk-holders').innerHTML = holders + '<small>명</small>';
+    el('gk-note').textContent = fmtDateKorean(now) + ' 기준';
+
+    if (el('gk-date') && !el('gk-date').value) { el('gk-date').value = app.settings.gukDate || defaultExamDate(); }
+    if (el('gk-time') && !el('gk-time').value) { el('gk-time').value = app.settings.gukTime || '10:00'; }
+    if (el('gk-place') && !el('gk-place').value) { el('gk-place').value = app.settings.gukPlace || (app.settings.dojoName + ' 도장'); }
+
+    var rows = app.students.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
+    var tbody = el('gk-table');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">등록된 관원이 없습니다</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function (s) {
+      var grade = studentGrade(s);
+      return '<tr>' +
+        '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(s.belt || '') + (grade ? ' · ' + esc(grade) : '') + '</div></td>' +
+        '<td>' + poomSelect(s.id, 'poomDan', s.poomDan) + '</td>' +
+        '<td>' + poomSelect(s.id, 'targetPoomDan', s.targetPoomDan) + '</td>' +
+        '<td>' + statusSelect(s.id, gkStatusOf(s)) + '</td>' +
+        '<td><input type="date" class="input mini" data-gk="gukExamDate" data-sid="' + esc(s.id) + '" value="' + esc(s.gukExamDate || '') + '"></td>' +
+        '<td style="white-space:nowrap">' +
+        '<button class="btn btn-sm" data-gknotice="' + esc(s.id) + '">안내</button> ' +
+        ((s.targetPoomDan && s.targetPoomDan !== '없음')
+          ? '<button class="btn btn-sm btn-primary" data-gkpass="' + esc(s.id) + '">합격</button>'
+          : '') +
+        '</td></tr>';
+    }).join('');
+  }
+
+  /* =========================================================
+     11-D. 공개 / 비공개 · 키오스크 안내
+     ========================================================= */
+  function visPublic(key) {
+    var v = app.settings.visibility || {};
+    return v[key] !== false;
+  }
+  function renderVisibility() {
+    ['beltSystem', 'promotion', 'gukgiwon'].forEach(function (k) {
+      var on = visPublic(k);
+      var btn = el('vis-' + k);
+      var st = el('vis-state-' + k);
+      if (btn) { btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+      if (st) { st.textContent = on ? '공개' : '비공개'; st.classList.toggle('on', on); }
+    });
+  }
+  function toggleVis(key) {
+    var v = Object.assign({ beltSystem: true, promotion: true, gukgiwon: false }, app.settings.visibility || {});
+    v[key] = !(v[key] !== false);
+    app.settings.visibility = v;
+    saveSettings();
+    renderVisibility();
+    renderKioskInfo();
+    renderLog();
+    toast((v[key] ? '공개' : '비공개') + '로 바꿨어요. 키오스크에 바로 반영됩니다.');
+  }
+  function renderKioskInfo() {
+    var bar = el('kiosk-info');
+    if (!bar) { return; }
+    var parts = [];
+    if (visPublic('beltSystem')) {
+      var chips = belts().map(function (b) {
+        return '<span class="ki-chip"><i style="background:' + b.color + '"></i>' + esc(b.name) +
+          (b.grade ? ' <em style="font-style:normal;color:#98a2b3;font-weight:800">' + esc(b.grade) + '</em>' : '') + '</span>';
+      }).join('');
+      parts.push('<div class="ki"><span class="ki-label">급수 체계</span><div class="ki-body">' + chips + '</div></div>');
+    }
+    if (visPublic('promotion')) {
+      var targets = app.students.filter(function (s) { return promoState(s).target; });
+      var best = null;
+      app.students.forEach(function (s) {
+        var st = promoState(s);
+        if (st.top) { return; }
+        var ratio = st.count / st.threshold;
+        if (!best || ratio > best.ratio) { best = { s: s, st: st, ratio: ratio }; }
+      });
+      var html = '<span class="ki-num">' + targets.length + '</span><span class="ki-chip">심사 대상</span>';
+      if (best) {
+        html += '<span class="ki-chip">' + esc(best.s.name) + ' ' + best.st.count + '/' + best.st.threshold + '회</span>';
+      }
+      parts.push('<div class="ki"><span class="ki-label">승급심사</span><div class="ki-body">' + html + '</div></div>');
+    }
+    if (visPublic('gukgiwon')) {
+      var g = app.students.filter(gkActive);
+      var html2 = '<span class="ki-num">' + g.length + '</span><span class="ki-chip">국기원 응시</span>';
+      if (gkDateValue()) { html2 += '<span class="ki-chip">' + esc(gkDateText()) + '</span>'; }
+      parts.push('<div class="ki"><span class="ki-label">국기원 심사</span><div class="ki-body">' + html2 + '</div></div>');
+    }
+    bar.innerHTML = parts.join('');
+    bar.classList.toggle('hidden', !parts.length);
+  }
+
+  function setAdminTab(tab) {
+    var tabs = ['overview', 'promotion', 'gukgiwon', 'monthly'];
+    if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
+    app.adminTab = tab;
+    tabs.forEach(function (t) {
+      var btn = el('atab-' + t);
+      if (btn) { btn.classList.toggle('active', t === tab); }
+    });
+    el('view-admin').classList.toggle('promo-mode', tab === 'promotion');
+    el('view-admin').classList.toggle('guk-mode', tab === 'gukgiwon');
+    el('view-admin').classList.toggle('monthly-mode', tab === 'monthly');
+    el('admin-promotion').style.display = tab === 'promotion' ? 'block' : 'none';
+    el('admin-gukgiwon').style.display = tab === 'gukgiwon' ? 'block' : 'none';
+    el('admin-monthly').style.display = tab === 'monthly' ? 'block' : 'none';
+    if (tab === 'promotion') { renderPromotion(); }
+    if (tab === 'gukgiwon') { renderGukgiwon(); }
+    if (tab === 'monthly') { renderMonthly(); }
+  }
+
+  /* =========================================================
+     11-E. 월간 출석부
+     ========================================================= */
+  var DOW_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+  function ensureMonthly() {
+    if (!app.monthly) { app.monthly = { month: monthKey(new Date()), className: 'all', q: '' }; }
+    return app.monthly;
+  }
+
+  function monthDaysOf(ym) {
+    var y = parseInt(String(ym).slice(0, 4), 10);
+    var m = parseInt(String(ym).slice(5, 7), 10);
+    return new Date(y, m, 0).getDate();
+  }
+  function shiftMonth(ym, delta) {
+    var y = parseInt(String(ym).slice(0, 4), 10);
+    var m = parseInt(String(ym).slice(5, 7), 10) - 1 + delta;
+    var d = new Date(y, m, 1);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+  }
+  function dowOf(dateKey) {
+    var p = String(dateKey).split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).getDay();
+  }
+  function shortDate(dateKey) {
+    return Number(dateKey.slice(5, 7)) + '월 ' + Number(dateKey.slice(8, 10)) + '일';
+  }
+  function monthClasses() {
+    var seen = Object.create(null), out = [];
+    app.students.forEach(function (s) {
+      var c = String(s.className || '').trim();
+      if (!c || seen[c]) { return; }
+      seen[c] = true;
+      out.push(c);
+    });
+    return out.sort(function (a, b) { return a.localeCompare(b, 'ko'); });
+  }
+  function monthRows() {
+    var m = app.monthly || {};
+    var cls = m.className || 'all';
+    var q = String(m.q || '').trim();
+    return app.students.filter(function (s) {
+      if (cls !== 'all' && String(s.className || '').trim() !== cls) { return false; }
+      return matchSearch(s, q);
+    }).sort(function (a, b) {
+      var ca = String(a.className || ''), cb = String(b.className || '');
+      if (ca !== cb) { return ca.localeCompare(cb, 'ko'); }
+      return a.name.localeCompare(b.name, 'ko');
+    });
+  }
+  function monthCellTitle(dateKey, e, future) {
+    var head = shortDate(dateKey) + ' (' + DOW_KO[dowOf(dateKey)] + ')';
+    if (future) { return head + ' · 아직 오지 않은 날'; }
+    if (!e || (!e.inTime && !e.outTime && !e.manual)) {
+      return head + ' · 출석 없음 · 눌러서 표시';
+    }
+    if (e.inTime || e.outTime) {
+      return head + ' · 등원 ' + (e.inTime || '-') + ' · 하원 ' + (e.outTime || '-') +
+        (e.manual ? ' · 수동 보정 포함' : '') + ' · 눌러서 지우기';
+    }
+    return head + ' · 수동 보정 (시각 없음) · 눌러서 지우기';
+  }
+  function renderMonthStats(total, people, topNames, topDays) {
+    if (el('mon-total')) { el('mon-total').innerHTML = total + '<small>일</small>'; }
+    if (el('mon-people')) { el('mon-people').innerHTML = people + '<small>명</small>'; }
+    var avg = people ? Math.round(total / people * 10) / 10 : 0;
+    if (el('mon-avg')) { el('mon-avg').innerHTML = avg + '<small>일</small>'; }
+    var top = el('mon-top');
+    if (!top) { return; }
+    if (!topNames || !topNames.length || topDays <= 0) {
+      top.innerHTML = '<span style="color:#b0b8c6;font-size:14px;font-weight:800">아직 없음</span>';
+      return;
+    }
+    top.innerHTML = esc(topNames[0]) +
+      '<small>' + topDays + '일' + (topNames.length > 1 ? ' · 외 ' + (topNames.length - 1) + '명' : '') + '</small>';
+  }
+  function setMonthNote(ym, count, filtered) {
+    var note = el('mon-note');
+    if (!note) { return; }
+    var label = ym.slice(0, 4) + '년 ' + pad2(parseInt(ym.slice(5, 7), 10)) + '월';
+    note.textContent = label + ' · ' + (filtered ? '필터 적용' : '전체 반') + ' · ' + count + '명';
+  }
+
+  function renderMonthly() {
+    var tbody = el('mon-tbody');
+    if (!tbody) { return; }
+    if (!app.monthly) { app.monthly = { month: monthKey(new Date()), className: 'all', q: '' }; }
+    var ym = app.monthly.month;
+    if (el('mon-label')) {
+      el('mon-label').textContent = ym.slice(0, 4) + '년 ' + pad2(parseInt(ym.slice(5, 7), 10)) + '월';
+    }
+
+    var sel = el('mon-class');
+    var classes = monthClasses();
+    if (sel) {
+      var want = '<option value="all">전체 반</option>' + classes.map(function (c) {
+        return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
+      }).join('');
+      if (sel.getAttribute('data-opts') !== want) {
+        sel.innerHTML = want;
+        sel.setAttribute('data-opts', want);
+      }
+      if (app.monthly.className !== 'all' && classes.indexOf(app.monthly.className) === -1) {
+        app.monthly.className = 'all';
+      }
+      sel.value = app.monthly.className || 'all';
+    }
+    var search = el('mon-search');
+    if (search && document.activeElement !== search) { search.value = app.monthly.q || ''; }
+
+    var days = monthDaysOf(ym);
+    var today = todayKey();
+    var rows = monthRows();
+    var filtered = (app.monthly.className !== 'all') || String(app.monthly.q || '').trim() !== '';
+
+    var head = '<th class="c-name">관원</th>';
+    for (var d = 1; d <= days; d++) {
+      var dk = ym + '-' + pad2(d);
+      var dw = dowOf(dk);
+      var hcls = 'mtb-day' + (dw === 0 ? ' sun' : dw === 6 ? ' sat' : '') + (dk === today ? ' today' : '');
+      head += '<th class="' + hcls + '">' + d + '<span class="dw">' + DOW_KO[dw] + '</span></th>';
+    }
+    head += '<th class="c-sum">합계</th>';
+    el('mon-thead').innerHTML = head;
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="' + (days + 2) + '">' +
+        (app.students.length ? '조건에 맞는 관원이 없어요. 반 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다') +
+        '</td></tr>';
+      renderMonthStats(0, 0, [], 0);
+      setMonthNote(ym, 0, filtered);
+      return;
+    }
+
+    var totalDays = 0, people = 0, topDays = 0, topNames = [];
+    var html = rows.map(function (s) {
+      var cells = '';
+      var cnt = 0;
+      for (var i = 1; i <= days; i++) {
+        var key = ym + '-' + pad2(i);
+        var e = attendanceEntry(s.id, key);
+        var present = !!(e && (e.inTime || e.outTime || e.manual));
+        var future = key > today;
+        var dw2 = dowOf(key);
+        var ccls = 'mtb-cell' + (dw2 === 0 ? ' sun' : dw2 === 6 ? ' sat' : '') + (key === today ? ' today' : '');
+        if (future) { ccls += ' future'; }
+        if (present) {
+          if (e.manual && !e.inTime && !e.outTime) { ccls += ' manual'; }
+          cnt++;
+        }
+        cells += '<td class="' + ccls + '" data-md="' + key + '" data-ms="' + esc(s.id) + '" title="' +
+          esc(monthCellTitle(key, e, future)) + '">' +
+          (present ? '<span class="mk">●</span>' : '<span class="mk-empty">·</span>') + '</td>';
+      }
+      totalDays += cnt;
+      if (cnt > 0) { people++; }
+      if (cnt > topDays) { topDays = cnt; topNames = [s.name]; }
+      else if (cnt === topDays && cnt > 0) { topNames.push(s.name); }
+      var grade = studentGrade(s);
+      return '<tr>' +
+        '<td class="c-name" title="' + esc(s.name + ' · ' + (s.className || '반 미지정') + (grade ? ' · ' + grade : '')) + '">' +
+        '<div class="nm">' + esc(s.name) +
+        '<span class="belt-badge mtb-belt"><i style="background:' + beltColor(s.belt) + '"></i>' +
+        esc(s.belt || '미지정') + '</span></div>' +
+        '<div class="sub">' + esc(s.className || '반 미지정') + (grade ? ' · ' + esc(grade) : '') + '</div></td>' +
+        cells +
+        '<td class="c-sum mtb-sum">' + cnt + '<small>일</small></td>' +
+        '</tr>';
+    }).join('');
+    tbody.innerHTML = html;
+
+    renderMonthStats(totalDays, people, topNames, topDays);
+    setMonthNote(ym, rows.length, filtered);
+  }
+
+  function syncRecordFromHistory(sid, dateKey) {
+    var e = attendanceEntry(sid, dateKey);
+    var rec = app.records[dateKey] || (app.records[dateKey] = {});
+    var r = rec[sid] || (rec[sid] = { in: null, out: null });
+    if (!r.in && e && e.inTime) { r.in = e.inTime; }
+    if (!r.out && e && e.outTime) { r.out = e.outTime; }
+    if (e && e.manual && !r.in && !r.out) { r.manual = true; }
+  }
+  function clearRecordFor(sid, dateKey) {
+    var day = app.records[dateKey];
+    if (!day || !day[sid]) { return; }
+    delete day[sid];
+    if (!Object.keys(day).length) { delete app.records[dateKey]; }
+  }
+
+  function toggleMonthCell(sid, dateKey) {
+    var s = byId(sid);
+    if (!s || !isDateKey(dateKey)) { return; }
+    if (dateKey > todayKey()) { toast('아직 오지 않은 날은 표시할 수 없어요.'); return; }
+    var e = attendanceEntry(sid, dateKey);
+    var present = !!(e && (e.inTime || e.outTime || e.manual));
+
+    if (!present) {
+      setAttendance(sid, dateKey, { inTime: '', outTime: '', manual: true, src: 'manual' });
+      syncRecordFromHistory(sid, dateKey);
+      saveAttendance(); saveRecords();
+      renderAll();
+      toast(s.name + ' · ' + shortDate(dateKey) + ' 출석을 표시했어요 (시각 없음 · 누적 출석은 그대로)');
+      return;
+    }
+
+    var timed = !!(e.inTime || e.outTime);
+    var erase = function () {
+      clearAttendance(sid, dateKey);
+      clearRecordFor(sid, dateKey);
+      saveAttendance(); saveRecords();
+      renderAll();
+      toast(s.name + ' · ' + shortDate(dateKey) + ' 출석 표시를 지웠어요');
+    };
+    if (!timed) { erase(); return; }
+    openModal({
+      title: s.name + ' · ' + shortDate(dateKey) + ' 기록을 지울까요?',
+      sub: '등원 ' + (e.inTime || '-') + ' · 하원 ' + (e.outTime || '-') +
+        ' 기록을 출석부에서 지웁니다. 누적 출석(회)과 승급 진행률은 그대로예요.',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '지우기', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) { if (ok) { erase(); } });
+  }
+
+  function csvCell(v) {
+    var str = String(v == null ? '' : v);
+    if (/[",\r\n]/.test(str)) { return '"' + str.replace(/"/g, '""') + '"'; }
+    return str;
+  }
+  function monthCSVText(ym, days, rows) {
+    var head = ['관원', '반', '띠'];
+    for (var d = 1; d <= days; d++) {
+      var dk = ym + '-' + pad2(d);
+      head.push(d + '일(' + DOW_KO[dowOf(dk)] + ')');
+    }
+    head.push('월 합계');
+    var lines = [head.map(csvCell).join(',')];
+    (rows || []).forEach(function (s) {
+      var line = [s.name, s.className || '', s.belt || ''];
+      var cnt = 0;
+      for (var i = 1; i <= days; i++) {
+        var key = ym + '-' + pad2(i);
+        var on = isPresentOn(s.id, key);
+        if (on) { cnt++; }
+        line.push(on ? '●' : '');
+      }
+      line.push(cnt + '일');
+      lines.push(line.map(csvCell).join(','));
+    });
+    return '\uFEFF' + lines.join('\r\n');
+  }
+  function downloadFile(name, content, mime) {
+    if (typeof Blob !== 'function' || typeof URL === 'undefined' || !URL.createObjectURL) {
+      toast('이 브라우저에서는 파일을 내려받을 수 없어요.');
+      return false;
+    }
+    var blob = new Blob([content], { type: mime || 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    return true;
+  }
+  function downloadMonthlyCSV() {
+    if (!app.monthly) { app.monthly = { month: monthKey(new Date()), className: 'all', q: '' }; }
+    var ym = app.monthly.month;
+    var days = monthDaysOf(ym);
+    var rows = monthRows();
+    if (!rows.length) {
+      toast('이 달에 내려받을 관원이 없어요. 반 필터나 검색을 확인해 주세요.');
+      return;
+    }
+    var csv = monthCSVText(ym, days, rows);
+    if (downloadFile('월간출석부_' + ym + '.csv', csv, 'text/csv;charset=utf-8')) {
+      toast(rows.length + '명 · ' + ym + ' 월간 출석부를 내려받았어요');
+    }
+  }
+
+  /* =========================================================
+     12. 파일 가져오기 (SheetJS + CSV 폴백)
+     ========================================================= */
+  var HEADER_KEYS = {
+    name: ['이름', '성명', '관원명', '관원', '수련생', '학생', '회원명', '회원', '원생', '아동', 'name'],
+    className: ['반', '시간', '클래스', '수업', '부', '과정', '요일', 'program', 'class', 'time', 'schedule'],
+    belt: ['띠', '급', '벨트', '품', 'belt', 'rank'],
+    phone: ['연락처', '전화', '휴대폰', '핸드폰', '보호자', '학부모', '부모', 'phone', 'tel', 'mobile', 'contact'],
+    attendCount: ['누적출석', '출석일수', '출석횟수', '승급출석', '총출석', '출석', 'attend', 'count']
+  };
+
+  function matchField(text) {
+    var t = String(text || '').toLowerCase().replace(/\s+/g, '');
+    if (!t) { return null; }
+    var fields = ['name', 'phone', 'className', 'attendCount', 'belt'];
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i];
+      var keys = HEADER_KEYS[f];
+      for (var k = 0; k < keys.length; k++) {
+        if (t.indexOf(keys[k].toLowerCase()) !== -1) { return f; }
+      }
+    }
+    return null;
+  }
+
+  function detectHeader(rows) {
+    var best = null;
+    var limit = Math.min(rows.length, 15);
+    for (var r = 0; r < limit; r++) {
+      var row = rows[r] || [];
+      var map = {};
+      var score = 0;
+      for (var c = 0; c < row.length; c++) {
+        var f = matchField(row[c]);
+        if (f && map[f] === undefined) { map[f] = c; score++; }
+      }
+      if (map.name !== undefined && score >= 2) {
+        if (!best || score > best.score) { best = { index: r, map: map, score: score }; }
+      }
+    }
+    return best;
+  }
+
+  function rowsToStudents(rows) {
+    rows = (rows || []).filter(function (row) {
+      return row && row.some(function (cell) { return String(cell == null ? '' : cell).trim() !== ''; });
+    });
+    if (!rows.length) { return []; }
+
+    var header = detectHeader(rows);
+    var map, start;
+    if (header) {
+      map = header.map;
+      start = header.index + 1;
+    } else {
+      map = { name: 0, className: 1, belt: 2, phone: 3 };
+      start = 0;
+    }
+    var out = [];
+    for (var i = start; i < rows.length; i++) {
+      var row = rows[i];
+      var name = String(row[map.name] == null ? '' : row[map.name]).trim();
+      if (!name) { continue; }
+      // 머리글이 반복되거나 합계 행인 경우 스킵
+      if (matchField(name) === 'name') { continue; }
+      var phoneRaw = map.phone !== undefined ? row[map.phone] : '';
+      var countRaw = map.attendCount !== undefined ? String(row[map.attendCount] == null ? '' : row[map.attendCount]) : '';
+      out.push({
+        id: uid('stu'),
+        name: name,
+        className: map.className !== undefined ? String(row[map.className] == null ? '' : row[map.className]).trim() : '',
+        belt: map.belt !== undefined ? (String(row[map.belt] == null ? '' : row[map.belt]).trim() || '흰띠') : '흰띠',
+        phone: normalizePhone(String(phoneRaw == null ? '' : phoneRaw).trim()),
+        attendCount: Math.max(0, parseInt(countRaw.replace(/[^0-9]/g, ''), 10) || 0),
+        grade: '',
+        poomDan: '없음',
+        targetPoomDan: '없음',
+        gukStatus: 'none',
+        gukExamDate: ''
+      });
+    }
+    return out;
+  }
+
+  function parseCSV(text) {
+    text = String(text || '').replace(/^\uFEFF/, '');
+    if (text.indexOf('\t') !== -1 && text.indexOf(',') === -1) {
+      return text.split(/\r?\n/).map(function (line) { return line.split('\t'); });
+    }
+    var rows = [];
+    var row = [];
+    var cell = '';
+    var inQuotes = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (inQuotes) {
+        if (ch === '"') {
+          if (text.charAt(i + 1) === '"') { cell += '"'; i++; }
+          else { inQuotes = false; }
+        } else { cell += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ',') { row.push(cell); cell = ''; }
+        else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+        else if (ch === '\r') { /* skip */ }
+        else { cell += ch; }
+      }
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+
+  function handleFile(file) {
+    if (!file) { return; }
+    var name = file.name || '';
+    var ext = name.split('.').pop().toLowerCase();
+    el('file-name').textContent = '📄 ' + name;
+
+    if (ext === 'xlsx' || ext === 'xls') {
+      if (typeof XLSX === 'undefined') {
+        openModal({
+          title: '엑셀 파일을 읽지 못했어요',
+          sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다. 인터넷 연결을 확인하거나, 엑셀에서 [CSV UTF-8]로 저장한 파일을 올려 주세요.',
+          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        });
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+          applyImport(rowsToStudents(rows), name);
+        } catch (err) {
+          toast('엑셀 파일을 해석하지 못했어요: ' + (err && err.message ? err.message : err));
+        }
+      };
+      reader.onerror = function () { toast('파일을 읽는 중 오류가 났어요.'); };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
+
+    var textReader = new FileReader();
+    textReader.onload = function (e) {
+      var rows = parseCSV(e.target.result);
+      applyImport(rowsToStudents(rows), name);
+    };
+    textReader.onerror = function () { toast('파일을 읽는 중 오류가 났어요.'); };
+    textReader.readAsText(file, 'utf-8');
+  }
+
+  function applyImport(students, fileName) {
+    if (!students.length) {
+      openModal({
+        title: '관원을 찾지 못했어요',
+        sub: '파일에서 이름 열을 인식하지 못했습니다. 첫 줄에 이름·반·띠·보호자 연락처 같은 머리글이 있는지 확인해 주세요. 샘플 CSV를 내려받아 형식을 참고하셔도 좋아요.',
+        actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+      });
+      return;
+    }
+    var names = students.slice(0, 5).map(function (s) { return s.name; }).join(', ');
+    var more = students.length > 5 ? ' 외 ' + (students.length - 5) + '명' : '';
+    openModal({
+      title: '관원 ' + students.length + '명을 읽었어요',
+      sub: fileName + ' · ' + names + more,
+      body: '<div class="help" style="margin-top:0">기존 명단과 <b>합칠지</b>, 업로드한 명단으로 <b>교체</b>할지 선택해 주세요. 교체하면 지금 명단(' + app.students.length + '명)이 사라집니다.</div>',
+      actions: [
+        { label: '취소', value: null, kind: 'btn-ghost' },
+        { label: '교체', value: 'replace', kind: 'btn-danger' },
+        { label: '합치기', value: 'merge', kind: 'btn-primary' }
+      ]
+    }).then(function (choice) {
+      if (!choice) { el('file-name').textContent = ''; return; }
+      if (choice === 'replace') {
+        app.students = students;
+      } else {
+        var existing = {};
+        app.students.forEach(function (s) { existing[s.name + '|' + digitsOnly(s.phone)] = true; });
+        students.forEach(function (s) {
+          if (!existing[s.name + '|' + digitsOnly(s.phone)]) { app.students.push(s); }
+        });
+      }
+      saveStudents();
+      renderAll();
+      resetStudentForm();
+      toast('관원 ' + app.students.length + '명으로 명단을 저장했어요.');
+      el('file-name').textContent = '✅ ' + fileName + ' 반영 완료';
+    });
+  }
+
+  function downloadSampleCSV() {
+    var lines = ['이름,반,띠,보호자 연락처,누적 출석'];
+    SAMPLE_STUDENTS.forEach(function (s) {
+      lines.push([s.name, s.className, s.belt, s.phone, s.attendCount || 0].join(','));
+    });
+    var csv = '\uFEFF' + lines.join('\r\n');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'sample_students.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    toast('샘플 CSV를 내려받았어요. 형식 확인용으로 쓰세요.');
+  }
+
+  /* =========================================================
+     13. 초기화 / 이벤트 연결
+     ========================================================= */
+  function renderAll() {
+    renderStudentsList();
+    renderLog();
+    renderAdmin();
+    renderBeltOptions(el('f-belt') ? el('f-belt').value : '');
+    renderKioskInfo();
+    renderVisibility();
+    renderAdminLog();
+    renderGradeList();
+    updateMuteBtn();
+    el('dojo-name').value = app.settings.dojoName;
+    renderPin();
+  }
+
+  function bindEvents() {
+    // 상단
+    el('mode-in').addEventListener('click', function () { setMode('in'); });
+    el('mode-out').addEventListener('click', function () { setMode('out'); });
+    el('tab-att').addEventListener('click', function () { setView('attendance'); });
+    el('tab-admin').addEventListener('click', function () { setView('admin'); });
+    el('mute-btn').addEventListener('click', function () {
+      app.muted = !app.muted;
+      writeJSON(LS.muted, app.muted);
+      updateMuteBtn();
+      if (!app.muted) { playKey(); }
+      toast(app.muted ? '효과음을 껐어요' : '효과음을 켰어요');
+    });
+
+    var nameInput = el('dojo-name');
+    nameInput.addEventListener('input', function () {
+      var v = nameInput.value.trim();
+      if (!v) { return; }
+      app.settings.dojoName = v;
+      saveSettings();
+      renderLog();
+    });
+    nameInput.addEventListener('blur', function () {
+      if (!nameInput.value.trim()) {
+        nameInput.value = app.settings.dojoName;
+      }
+    });
+
+    // 카메라
+    el('btn-camera').addEventListener('click', toggleCamera);
+    el('btn-pick-sim').addEventListener('click', openSimPicker);
+    el('btn-random-sim').addEventListener('click', function () {
+      if (!app.students.length) { toast('명단이 비어 있어요.'); return; }
+      if (app.busy) { return; }
+      var s = app.students[Math.floor(Math.random() * app.students.length)];
+      runRecognition(s);
+    });
+
+    // 키패드
+    el('keypad').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-key]');
+      if (b) { pinPress(b.getAttribute('data-key')); }
+    });
+    // 키보드 숫자 입력도 지원
+    document.addEventListener('keydown', function (e) {
+      if (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { return; }
+      if (!el('view-attendance').classList.contains('active')) { return; }
+      if (app.touchTab !== 'pin') { return; }
+      if (/^[0-9]$/.test(e.key)) { pinPress(e.key); }
+      else if (e.key === 'Backspace') { e.preventDefault(); pinPress('del'); }
+      else if (e.key === 'Escape') { pinPress('clear'); }
+    });
+
+    // 터치 탭 전환
+    el('tt-pin').addEventListener('click', function () { switchTouch('pin'); });
+    el('tt-name').addEventListener('click', function () { switchTouch('name'); });
+
+    // 관원 선택 (이름 검색 + 후보 목록)
+    document.addEventListener('click', function (e) {
+      var row = e.target.closest('[data-student]');
+      if (row) {
+        var id = row.getAttribute('data-student');
+        var s = app.students.filter(function (x) { return x.id === id; })[0];
+        if (s) { checkIn(s, 'touch'); }
+      }
+    });
+
+    // 이름 검색
+    el('name-search').addEventListener('input', renderStudentsList);
+
+    // 관리자: 관원
+    el('btn-save-student').addEventListener('click', saveStudent);
+    el('btn-cancel-edit').addEventListener('click', resetStudentForm);
+    el('btn-sample').addEventListener('click', function () {
+      openModal({
+        title: '샘플 관원 6명으로 복원할까요?',
+        sub: '지금 명단(' + app.students.length + '명)이 샘플 명단으로 바뀝니다.',
+        actions: [
+          { label: '취소', value: false, kind: 'btn-ghost' },
+          { label: '복원', value: true, kind: 'btn-primary' }
+        ]
+      }).then(function (ok) {
+        if (!ok) { return; }
+        app.students = SAMPLE_STUDENTS.map(function (s) { return Object.assign({}, s, { id: uid('stu') }); });
+        saveStudents(); renderAll(); toast('샘플 6명으로 복원했어요.');
+      });
+    });
+    el('stu-table').addEventListener('click', function (e) {
+      var ed = e.target.closest('[data-edit]');
+      if (ed) { startEdit(ed.getAttribute('data-edit')); return; }
+      var del = e.target.closest('[data-del]');
+      if (del) { deleteStudent(del.getAttribute('data-del')); }
+    });
+
+    // 관리자: 오늘 기록 초기화
+    el('btn-reset-today').addEventListener('click', function () {
+      openModal({
+        title: '오늘 출석 기록을 모두 지울까요?',
+        sub: '오늘 날짜의 등원·하원 기록과 문자 발송 로그가 삭제됩니다. 관원 명단은 그대로 남아요.',
+        actions: [
+          { label: '취소', value: false, kind: 'btn-ghost' },
+          { label: '초기화', value: true, kind: 'btn-danger' }
+        ]
+      }).then(function (ok) {
+        if (!ok) { return; }
+        var key = todayKey();
+        delete app.records[key];
+        app.logs = app.logs.filter(function (l) { return l.date !== key; });
+        saveRecords(); saveLogs();
+        renderAll();
+        toast('오늘 기록을 초기화했어요.');
+      });
+    });
+
+    // 관리자: 업로드
+    var drop = el('drop-zone');
+    var fileInput = el('file-input');
+    drop.addEventListener('click', function () { fileInput.click(); });
+    drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('hover'); });
+    drop.addEventListener('dragleave', function () { drop.classList.remove('hover'); });
+    drop.addEventListener('drop', function (e) {
+      e.preventDefault();
+      drop.classList.remove('hover');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files && fileInput.files[0]) { handleFile(fileInput.files[0]); }
+      fileInput.value = '';
+    });
+    el('btn-sample-csv').addEventListener('click', downloadSampleCSV);
+
+    // 관리자: 승급심사 관리
+    el('atab-overview').addEventListener('click', function () { setAdminTab('overview'); });
+    el('atab-promotion').addEventListener('click', function () { setAdminTab('promotion'); });
+    el('promo-filters').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-pfilter]');
+      if (!b) { return; }
+      app.promoFilter = b.getAttribute('data-pfilter');
+      renderPromotion();
+    });
+    // 띠 체계 편집기
+    el('belt-rows').addEventListener('input', onBeltInput);
+    el('belt-rows').addEventListener('click', function (e) {
+      var up = e.target.closest('[data-bup]');
+      if (up) { moveBelt(Number(up.getAttribute('data-bup')), -1); return; }
+      var dn = e.target.closest('[data-bdown]');
+      if (dn) { moveBelt(Number(dn.getAttribute('data-bdown')), 1); return; }
+      var dl = e.target.closest('[data-bdel]');
+      if (dl) { removeBelt(Number(dl.getAttribute('data-bdel'))); }
+    });
+    el('btn-belt-add').addEventListener('click', addBelt);
+    el('btn-belt-save').addEventListener('click', saveBeltSystem);
+    el('btn-belt-reset').addEventListener('click', resetBeltSystem);
+
+    // 선택 일괄 작업
+    el('promo-table').addEventListener('change', function (e) {
+      var cb = e.target.closest('[data-check]');
+      if (!cb) { return; }
+      var id = cb.getAttribute('data-check');
+      app.promoSelected = app.promoSelected || {};
+      if (cb.checked) { app.promoSelected[id] = true; } else { delete app.promoSelected[id]; }
+      renderPromotion();
+    });
+    el('promo-check-all').addEventListener('change', function (e) {
+      app.promoSelected = {};
+      if (e.target.checked) {
+        app.students.forEach(function (s) { app.promoSelected[s.id] = true; });
+      }
+      renderPromotion();
+    });
+    el('btn-bulk-exam').addEventListener('click', bulkExamNotice);
+    el('btn-bulk-promote').addEventListener('click', bulkPromote);
+    el('btn-bulk-clear').addEventListener('click', function () {
+      app.promoSelected = {};
+      renderPromotion();
+    });
+
+    // 공개 / 비공개
+    ['beltSystem', 'promotion', 'gukgiwon'].forEach(function (k) {
+      var btn = el('vis-' + k);
+      if (btn) { btn.addEventListener('click', function () { toggleVis(k); }); }
+    });
+
+    // 국기원 심사
+    el('atab-gukgiwon').addEventListener('click', function () { setAdminTab('gukgiwon'); });
+    el('gk-table').addEventListener('change', function (e) {
+      var f = e.target.closest('[data-gk]');
+      if (!f) { return; }
+      var s = byId(f.getAttribute('data-sid'));
+      if (!s) { return; }
+      var field = f.getAttribute('data-gk');
+      var val = f.value;
+      if (field === 'gukStatus' && !GK_STATUS[val]) { val = 'none'; }
+      s[field] = val;
+      saveStudents();
+      renderGukgiwon();
+      renderKioskInfo();
+      renderLog();
+    });
+    el('gk-table').addEventListener('click', function (e) {
+      var n = e.target.closest('[data-gknotice]');
+      if (n) { var s1 = byId(n.getAttribute('data-gknotice')); if (s1) { sendGukNotice(s1); } return; }
+      var p = e.target.closest('[data-gkpass]');
+      if (p) { var s2 = byId(p.getAttribute('data-gkpass')); if (s2) { passGuk(s2); } }
+    });
+    ['gk-date', 'gk-time', 'gk-place'].forEach(function (id) {
+      el(id).addEventListener('change', function () {
+        saveGukSettings();
+        renderKioskInfo();
+      });
+    });
+    el('btn-gk-apply').addEventListener('click', function () {
+      saveGukSettings();
+      var date = el('gk-date').value;
+      if (!date) { toast('심사 날짜를 먼저 선택해 주세요.'); return; }
+      var act = app.students.filter(gkActive);
+      if (!act.length) { toast('응시 대상자가 없어요.'); return; }
+      act.forEach(function (s) { s.gukExamDate = date; });
+      saveStudents();
+      renderGukgiwon();
+      toast(act.length + '명에게 ' + date + ' 일정을 적용했어요.');
+    });
+    el('btn-gk-all').addEventListener('click', function () {
+      saveGukSettings();
+      var act = app.students.filter(gkActive);
+      if (!act.length) { toast('응시 대상자가 없어요.'); return; }
+      openModal({
+        title: '국기원 심사 안내를 보낼까요?',
+        sub: '응시자 ' + act.length + '명의 학부모님께 보냅니다. ' + smsModalNote(),
+        body: '<div class="help" style="margin-top:0">심사 일정: <b>' + esc(gkDateText()) + '</b><br>장소: <b>' + esc(gkPlace()) + '</b></div>',
+        actions: [
+          { label: '취소', value: false, kind: 'btn-ghost' },
+          { label: act.length + '명에게 보내기', value: true, kind: 'btn-primary' }
+        ]
+      }).then(function (ok) {
+        if (!ok) { return; }
+        act.forEach(function (s) {
+          addLog(s, 'in', fmtTime(), { kind: 'guk_notice', text: buildGukNotice(s) });
+        });
+        setView('attendance');
+        toast('국기원 심사 안내 문자' + smsToastTail() + ' · ' + act.length + '명');
+      });
+    });
+    ['p-exam-date', 'p-exam-time', 'p-exam-place'].forEach(function (id) {
+      el(id).addEventListener('change', saveExamSettings);
+    });
+    el('btn-exam-all').addEventListener('click', function () {
+      saveExamSettings();
+      var targets = app.students.filter(function (s) { return promoState(s).target; });
+      if (!targets.length) { toast('아직 심사 대상자가 없어요.'); return; }
+      openModal({
+        title: '심사 안내 문자를 보낼까요?',
+        sub: '심사 대상 ' + targets.length + '명의 학부모님께 보냅니다. ' + smsModalNote(),
+        body: '<div class="help" style="margin-top:0">심사 일정: <b>' + esc(examDateText()) + '</b><br>장소: <b>' + esc(examPlace()) + '</b></div>',
+        actions: [
+          { label: '취소', value: false, kind: 'btn-ghost' },
+          { label: targets.length + '명에게 보내기', value: true, kind: 'btn-primary' }
+        ]
+      }).then(function (ok) {
+        if (!ok) { return; }
+        targets.forEach(function (s) {
+          addLog(s, 'in', fmtTime(), { kind: 'exam', text: buildExamMessage(s) });
+        });
+        setView('attendance');
+        toast('심사 대상 ' + targets.length + '명에게 안내 문자' + smsToastTail());
+      });
+    });
+    el('btn-exam-preview').addEventListener('click', function () {
+      var s = app.students.filter(function (x) { return promoState(x).target; })[0] || app.students[0];
+      if (!s) { toast('관원이 없어요.'); return; }
+      saveExamSettings();
+      openModal({
+        title: '심사 안내 문자 미리보기',
+        sub: s.name + ' 관원 학부모님 (' + maskPhone(s.phone) + ')',
+        body: '<div class="sms-msg" style="box-shadow:none">' +
+          '<div class="sms-head"><span class="sms-tag">심사 안내</span><span class="sms-sender">' + esc(app.settings.dojoName) + '</span></div>' +
+          '<div class="sms-bubble">' + esc(buildExamMessage(s)) + '</div></div>',
+        actions: [
+          { label: '닫기', value: null, kind: 'btn-ghost' },
+          { label: '이 관원에게 보내기', value: true, kind: 'btn-primary' }
+        ]
+      }).then(function (ok) {
+        if (!ok) { return; }
+        sendExamNotice(s);
+        setView('attendance');
+        setAdminTab('promotion');
+      });
+    });
+    el('promo-table').addEventListener('click', function (e) {
+      var ex = e.target.closest('[data-exam]');
+      if (ex) {
+        var s1 = byId(ex.getAttribute('data-exam'));
+        if (s1) { saveExamSettings(); sendExamNotice(s1); }
+        return;
+      }
+      var pr = e.target.closest('[data-promote]');
+      if (pr) {
+        var s2 = byId(pr.getAttribute('data-promote'));
+        if (s2) { promoteStudent(s2); }
+      }
+    });
+
+    // 관리자: 월간 출석부
+    el('atab-monthly').addEventListener('click', function () { setAdminTab('monthly'); });
+    el('mon-prev').addEventListener('click', function () {
+      ensureMonthly().month = shiftMonth(app.monthly.month, -1);
+      renderMonthly();
+    });
+    el('mon-next').addEventListener('click', function () {
+      ensureMonthly().month = shiftMonth(app.monthly.month, 1);
+      renderMonthly();
+    });
+    el('mon-this').addEventListener('click', function () {
+      ensureMonthly().month = monthKey(new Date());
+      renderMonthly();
+      toast('이번 달로 돌아왔어요');
+    });
+    el('mon-class').addEventListener('change', function () {
+      ensureMonthly().className = el('mon-class').value || 'all';
+      renderMonthly();
+    });
+    el('mon-search').addEventListener('input', function () {
+      ensureMonthly().q = el('mon-search').value || '';
+      renderMonthly();
+    });
+    el('btn-mon-csv').addEventListener('click', downloadMonthlyCSV);
+    el('mon-tbody').addEventListener('click', function (e) {
+      var cell = e.target.closest('[data-md]');
+      if (!cell) { return; }
+      var md = cell.getAttribute('data-md');
+      var ms = cell.getAttribute('data-ms');
+      if (md && ms) { toggleMonthCell(ms, md); }
+    });
+
+    // 관리자: 도장폰 무료문자 연동
+    el('btn-save-sms').addEventListener('click', function () {
+      var conf = readSmsForm();
+      renderLog();
+      if (!conf.webhookUrl) {
+        toast('웹훅 URL이 비어 있어 시뮬레이션 모드로 저장했어요.');
+      } else if (!smsConfigured()) {
+        toast('주소는 https:// 로 시작해야 해요. 지금은 시뮬레이션 모드로 동작합니다.');
+      } else {
+        toast(conf.autoSend ? '도장폰 무료문자 자동발송을 켰어요.' : '설정을 저장했어요. 자동발송은 꺼져 있습니다.');
+      }
+    });
+    el('btn-test-sms').addEventListener('click', sendTestSms);
+    ['s-webhook', 's-method', 's-autosend'].forEach(function (id) {
+      var f = el(id);
+      if (f) { f.addEventListener('change', function () { readSmsForm(); renderLog(); }); }
+    });
+
+    // JSON 내려받기
+    el('btn-export-json').addEventListener('click', function () {
+      var key = todayKey();
+      var payload = {
+        dojo: app.settings.dojoName,
+        date: key,
+        exportedAt: new Date().toISOString(),
+        students: app.students.map(function (s) {
+          var r = (app.records[key] || {})[s.id] || {};
+          return { name: s.name, className: s.className, belt: s.belt, attendCount: s.attendCount || 0, phone: maskPhone(s.phone), in: r.in || null, out: r.out || null };
+        })
+      };
+      var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'attendance_' + key + '.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      toast('오늘 출석 기록을 내려받았어요.');
+    });
+
+    // 배너 클릭으로 닫기
+    el('banner').addEventListener('click', hideBanner);
+
+    // 탭 전환 시 스크롤 맨 위
+    el('tab-admin').addEventListener('click', function () {
+      el('view-admin').scrollTop = 0;
+    });
+  }
+
+  function switchTouch(tab) {
+    app.touchTab = tab;
+    el('tt-pin').classList.toggle('active', tab === 'pin');
+    el('tt-name').classList.toggle('active', tab === 'name');
+    el('touch-pin').style.display = tab === 'pin' ? 'block' : 'none';
+    el('touch-name').style.display = tab === 'name' ? 'block' : 'none';
+    if (tab === 'name') { setTimeout(function () { el('name-search').focus(); }, 60); }
+  }
+
+  function init() {
+    loadState();
+    app._renderedDay = todayKey();
+
+    el('dojo-name').value = app.settings.dojoName;
+    document.title = app.settings.dojoName + ' · AI 출석 알림';
+    el('mode-in').classList.toggle('active', app.settings.mode !== 'out');
+    el('mode-out').classList.toggle('active', app.settings.mode === 'out');
+
+    bindEvents();
+    updateMuteBtn();
+    renderAll();
+    renderPin();
+    fillSmsForm();
+    resetStudentForm();
+    switchTouch('pin');
+    el('p-threshold').value = promoThreshold();
+    el('p-exam-date').value = app.settings.examDate || defaultExamDate();
+    el('p-exam-time').value = app.settings.examTime || '10:00';
+    el('p-exam-place').value = app.settings.examPlace || DEFAULT_SETTINGS.examPlace;
+    el('gk-date').value = app.settings.gukDate || defaultExamDate();
+    el('gk-time').value = app.settings.gukTime || '10:00';
+    el('gk-place').value = app.settings.gukPlace || (app.settings.dojoName + ' 도장');
+    renderBeltEditor(true);
+    renderGradeList();
+    setAdminTab('overview');
+    renderPromotion();
+    renderGukgiwon();
+    renderKioskInfo();
+    renderVisibility();
+    renderAdminLog();
+
+    el('cam-help').innerHTML = app.settings.mode === 'in'
+      ? '관원을 선택하면 인식 → 자동 <b>등원</b> 처리까지 재생됩니다.'
+      : '관원을 선택하면 인식 → 자동 <b>하원</b> 처리까지 재생됩니다.';
+
+    var xlsxOk = (typeof XLSX !== 'undefined') && !window.__xlsxLoadFailed;
+    el('xlsx-state').textContent = xlsxOk ? '엑셀 엔진 준비됨 (SheetJS)' : 'CSV 모드 (오프라인)';
+    el('xlsx-state').style.color = xlsxOk ? '#0b7a55' : '#a35b00';
+    el('stage-tip').textContent = 'AI ENGINE · READY';
+
+    tickClock();
+    clockTimer = setInterval(tickClock, 1000);
+
+    window.addEventListener('beforeunload', function () {
+      if (app.cameraStream) {
+        app.cameraStream.getTracks().forEach(function (t) { t.stop(); });
+      }
+    });
+
+    // 태블릿에서 첫 터치 시 오디오 활성화
+    document.addEventListener('pointerdown', function once() {
+      ensureAudio();
+      document.removeEventListener('pointerdown', once);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
