@@ -4616,7 +4616,7 @@
     var paid = (st === 'paid');
     addLog(s, 'in', fmtTime(), { kind: 'tuition', text: paid ? tuitionThanksMessage(s, mk) : tuitionNoticeMessage(s, mk) });
     if (!silent) {
-      toast(s.name + ' 관원 학부모님께 ' + (paid ? '수납 감사' : '원비 납부 안내') + ' 문자를 보냈어요' + smsToastTail());
+      toast(s.name + ' 관원 학부모님께 ' + (paid ? '수납 감사' : '원비 납부 안내') + ' 문자' + smsToastTail());
     }
     return 'sent';
   }
