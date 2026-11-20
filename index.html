@@ -830,9 +830,11 @@
                 </div>
                 <div class="form-actions">
                   <button class="btn btn-primary" id="btn-face-save">설정 저장</button>
+                  <button class="btn btn-sm" id="btn-face-retry">🔄 AI 모델 다시 불러오기</button>
                   <div class="spacer"></div>
                   <span class="tiny-note" id="face-reg-count">0 / 0명 등록</span>
                 </div>
+                <div class="tiny-note" id="face-load-error" style="margin-top:7px; color:#c0392b; word-break:break-all"></div>
                 <div class="help" style="margin-top:10px">
                   웹캠이 켜져 있고 얼굴이 등록된 관원이 있으면 <b>약 0.9초마다</b> 화면을 분석해 자동으로 출석 처리합니다. 같은 관원이 연속으로 찍히지 않도록 <b>쿨다운</b>을 두고, 등록되지 않은 얼굴은 <b>터치 출석</b>으로 안내합니다.
                   얼굴 특징값(128개 숫자)은 <b>이 태블릿의 localStorage에만</b> 저장되고 외부 서버로 전송되지 않습니다. 관원별 등록은 「관원 명단 관리」 표의 <b>📸 얼굴 등록</b>에서 하세요.
@@ -2380,11 +2382,15 @@
       ai.ready = true;
       ai.error = '';
       setAiState('ready', 'AI 얼굴인식 준비 완료');
+      var okNote = el('face-load-error');
+      if (okNote) { okNote.textContent = ''; }
       startFaceLoop();
     }).catch(function (err) {
       ai.ready = false;
-      ai.error = (err && err.message) ? err.message : 'error';
+      ai.error = (err && (err.message || err)) ? String(err.message || err) : 'error';
       setAiState('offline', '오프라인 · 터치/시뮬레이션');
+      var note = el('face-load-error');
+      if (note) { note.textContent = 'AI 모델을 불러오지 못했습니다: ' + ai.error; }
     });
   }
 
@@ -4812,6 +4818,14 @@
         toast('AI 얼굴인식 설정을 저장했어요 · 거리 ' + f.threshold.toFixed(2) + ' · 쿨다운 ' + f.cooldown + '초');
       });
     }
+    if (el('btn-face-retry')) {
+      el('btn-face-retry').addEventListener('click', function () {
+        if (ai.state === 'loading') { toast('이미 AI 모델을 불러오는 중이에요.'); return; }
+        if (ai.ready) { toast('AI 모델이 이미 준비되어 있어요.'); return; }
+        initFaceAI();
+        toast('AI 모델을 다시 불러옵니다…');
+      });
+    }
 
     // 전체 백업 / 복원
     el('btn-backup-all').addEventListener('click', downloadBackup);
@@ -4942,6 +4956,7 @@
       faceLoopTick: faceLoopTick,
       faceCount: faceCount,
       markModelReady: function () { ai.ready = true; ai.state = 'ready'; },
+      reload: initFaceAI,
       resetSeen: function () { ai.lastSeen = {}; }
     },
     data: {
