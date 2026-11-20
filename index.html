@@ -2364,12 +2364,19 @@
       if (!fa.nets || !fa.nets.tinyFaceDetector) { throw new Error('engine'); }
       var tf = fa.tf;
       var prep = Promise.resolve();
-      if (tf && tf.ready) {
-        prep = tf.ready().catch(function () {}).then(function () {
-          if (tf.setBackend) {
-            return tf.setBackend('webgl').catch(function () { return tf.setBackend('cpu'); });
-          }
+      // face-api 번들은 wasm 백엔드를 최우선으로 등록하지만, wasm 파일을 못 받으면
+      // 초기화되지 않은 채로 남아 모델 로드가 실패한다. WebGL → CPU 순으로 명시적으로 깨운다.
+      if (tf && tf.setBackend) {
+        prep = tf.setBackend('webgl').then(function (ok) {
+          if (ok === false) { throw new Error('webgl'); }
+          return tf.ready();
+        }).catch(function () {
+          return tf.setBackend('cpu').then(function () { return tf.ready(); });
+        }).catch(function () {
+          return tf.ready().catch(function () {});
         });
+      } else if (tf && tf.ready) {
+        prep = tf.ready().catch(function () {});
       }
       return prep.then(function () {
         return fa.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
