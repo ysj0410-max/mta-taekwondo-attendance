@@ -390,7 +390,7 @@
   .admin-tabs{display:flex; gap:5px; margin-bottom:14px; background:#e8edf7; padding:5px; border-radius:14px; width:fit-content; max-width:100%; overflow-x:auto; flex-wrap:wrap}
   .admin-tab{border:0; background:transparent; color:#5b6b85; font-weight:800; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer}
   .admin-tab.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.10)}
-  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov{display:none}
+  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov, #view-admin.sms-mode .ov{display:none}
   .belt-badge{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:800; background:#f6f8fc; border:1px solid #e6ebf4; padding:4px 9px 4px 6px; border-radius:999px; white-space:nowrap}
   .belt-badge i{width:12px; height:12px; border-radius:3px; display:inline-block; box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
   .bar{width:104px; height:7px; background:#edf0f7; border-radius:6px; overflow:hidden; margin-bottom:4px}
@@ -548,6 +548,51 @@
   .tu-note{font-size:10.5px; font-weight:700; color:#8a94a6}
   .tu-status{width:100%}
 
+  /* ---------- 단체문자 ---------- */
+  .bs-grid{display:grid; grid-template-columns:1.04fr 1fr; gap:13px; align-items:start}
+  .bs-count{font-size:13px; font-weight:900; color:var(--navy); background:#eef4ff; border:1px solid #d3e0f7; border-radius:11px; padding:8px 12px; margin-bottom:9px; letter-spacing:-.2px}
+  .bs-count small{font-weight:800; color:var(--muted); font-size:11px}
+  .bs-quick{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:9px}
+  select.input.bs-select{width:auto; min-width:112px; max-width:190px; height:34px; padding:0 8px; font-size:12px}
+  input.input.bs-search{width:100%; height:36px; margin-bottom:0}
+  .bs-list{max-height:min(52vh,470px); overflow:auto; border-top:1px solid #eef1f6; padding:0}
+  .bs-row{display:flex; align-items:center; gap:8px; padding:8px 11px; border-bottom:1px solid #f4f6fa; cursor:pointer}
+  .bs-row:hover{background:#f6faff}
+  .bs-row.sel{background:#eef4ff}
+  .bs-row.nophone{opacity:.6; cursor:not-allowed}
+  .bs-belt{width:11px; height:26px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(0,0,0,.13)}
+  .bs-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:1px}
+  .bs-name{font-size:13px; font-weight:800; letter-spacing:-.2px}
+  .bs-sub{font-size:11px; color:var(--muted); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .bs-phone{font-size:11.5px; font-weight:800; color:#475467; font-variant-numeric:tabular-nums; white-space:nowrap; flex:0 0 auto}
+  .bs-phone i{color:#c0392b; font-style:normal; font-size:10.5px; font-weight:800}
+  .bs-empty{padding:24px 10px; text-align:center; color:#9aa4b5; font-size:12px; font-weight:700}
+  .bs-tpl{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px}
+  .bs-tpl:empty{display:none}
+  .bs-tpl-chip{border:1px solid #e3e8f2; background:#f8fafd; color:#475467; font-weight:800; font-size:11.5px; padding:7px 11px; border-radius:999px; cursor:pointer; display:inline-flex; align-items:center; gap:4px}
+  .bs-tpl-chip:hover{background:#eef4ff; border-color:#c6d5ef}
+  .bs-tpl-chip.active{background:var(--navy); border-color:var(--navy); color:#fff}
+  .bs-tpl-chip .x{border:0; background:transparent; color:#8a94a6; font-weight:900; font-size:13px; cursor:pointer; padding:0 1px; line-height:1; margin-left:2px}
+  .bs-tpl-chip.active .x{color:#dbe6ff}
+  .bs-tpl-label{font-size:10.5px; font-weight:800; color:#8a94a6; align-self:center; margin-right:1px}
+  .bs-tpl-save{display:flex; gap:6px; margin-bottom:9px}
+  .bs-tpl-save .input{height:34px; font-size:12px; flex:1; min-width:0}
+  textarea.input.bs-text{width:100%; min-height:150px; height:auto; padding:11px 12px; line-height:1.62; font-size:13px; resize:vertical; font-family:inherit}
+  .bs-meta{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px}
+  .bs-badge{font-size:11px; font-weight:900; padding:4px 10px; border-radius:999px; background:#e9f9f1; color:#0b7a55; white-space:nowrap}
+  .bs-badge.lms{background:#fff4e6; color:#a35b00}
+  .bs-badge.over{background:#fdecec; color:#c0392b}
+  .bs-vars{font-size:10.5px; font-weight:700; color:#8a94a6}
+  .bs-preview{margin-top:11px; background:#f7f9fd; border:1px solid #e9eef7; border-radius:14px; padding:11px 12px}
+  .bs-preview-head{display:flex; align-items:center; gap:7px; margin-bottom:7px; flex-wrap:wrap}
+  .bs-preview-head b{font-size:11px; font-weight:900; color:#8a94a6; letter-spacing:-.2px}
+  .bs-preview-head span{font-size:10.5px; font-weight:800; color:#0b7a55}
+  .bs-bubble{background:#fff; border:1px solid #e2e8f3; border-radius:14px 14px 14px 4px; padding:10px 12px; font-size:12.5px; line-height:1.62; color:#2b3648; white-space:pre-wrap; word-break:break-word; box-shadow:0 1px 3px rgba(13,27,62,.05); min-height:20px}
+  .bs-bubble.empty{color:#b0b8c6}
+  .bs-send-row{display:flex; align-items:center; gap:9px; margin-top:12px; flex-wrap:wrap}
+  .bs-send-row .btn{min-height:42px; padding:0 18px; font-size:13.5px}
+  .bs-note{font-size:10.5px; font-weight:700; color:#8a94a6; line-height:1.55; flex:1; min-width:150px}
+
   /* 스크롤바 */
   ::-webkit-scrollbar{width:8px; height:8px}
   ::-webkit-scrollbar-thumb{background:#cfd8e6; border-radius:8px}
@@ -568,6 +613,15 @@
     .log-card{min-height:230px}
     .admin-grid{grid-template-columns:1fr}
     .stats{grid-template-columns:repeat(2,1fr)}
+  }
+  /* 좁은 화면: 관리자 탭은 한 줄 가로 스크롤로 정리 */
+  @media (max-width:760px){
+    .admin-tabs{width:100%; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none}
+    .admin-tabs::-webkit-scrollbar{display:none}
+    .admin-tab{flex:0 0 auto; white-space:nowrap; font-size:12px; padding:9px 12px}
+    .bs-grid{grid-template-columns:1fr}
+    .bs-row{padding:9px 4px; gap:6px}
+    .bs-phone{font-size:11px}
   }
 </style>
 </head>
@@ -708,6 +762,7 @@
           <button class="admin-tab" id="atab-gukgiwon" data-atab="gukgiwon">🏅 국기원 심사</button>
           <button class="admin-tab" id="atab-monthly" data-atab="monthly">📅 월간 출석부</button>
           <button class="admin-tab" id="atab-tuition" data-atab="tuition">💳 원비 관리</button>
+          <button class="admin-tab" id="atab-sms" data-atab="sms">📢 단체문자</button>
         </div>
 
         <div class="stats ov">
@@ -1207,6 +1262,76 @@
             </div>
           </div>
         </div>
+
+        <div id="admin-bulk-sms" style="display:none">
+          <div class="bs-grid">
+            <div class="panel">
+              <div class="panel-head">
+                <h3>👥 발송 대상</h3><div class="spacer"></div>
+                <span class="tiny-note" id="bs-scope">-</span>
+              </div>
+              <div class="panel-body" style="padding-bottom:9px">
+                <div class="bs-count" id="bs-count">선택 0명 (발송 가능 0명)</div>
+                <div class="bs-quick">
+                  <button class="btn btn-sm" id="btn-bs-all">전체 선택</button>
+                  <select class="input bs-select" id="bs-class" aria-label="반 선택"><option value="all">전체 반</option></select>
+                  <button class="btn btn-sm" id="btn-bs-class">반별 선택</button>
+                  <select class="input bs-select" id="bs-belt" aria-label="띠 선택"><option value="all">전체 띠</option></select>
+                  <button class="btn btn-sm" id="btn-bs-belt">띠별 선택</button>
+                  <button class="btn btn-sm" id="btn-bs-absent">미등원자만</button>
+                  <button class="btn btn-sm btn-ghost" id="btn-bs-clear">선택 해제</button>
+                </div>
+                <input class="input bs-search" id="bs-search" placeholder="🔍 이름·초성 검색 (예: ㄱㅁㅈ)" autocomplete="off" aria-label="관원 이름·초성 검색">
+              </div>
+              <div class="bs-list" id="bs-list"></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <h3>✍️ 문자 작성</h3><div class="spacer"></div>
+                <span class="tiny-note" id="bs-bytes">0 B</span>
+              </div>
+              <div class="panel-body">
+                <div class="bs-tpl" id="bs-tpl-row"></div>
+                <div class="bs-tpl" id="bs-tpl-custom"></div>
+                <div class="bs-tpl-save">
+                  <input class="input" id="bs-tpl-name" placeholder="템플릿 이름 (예: 여름방학 안내)" maxlength="24" autocomplete="off">
+                  <button class="btn btn-sm" id="btn-bs-tpl-save">템플릿으로 저장</button>
+                </div>
+                <textarea class="input bs-text" id="bs-text" rows="7" placeholder="보낼 문구를 적어 주세요. {도장명} {이름} {반} {띠} 를 넣으면 관원마다 다르게 채워집니다."></textarea>
+                <div class="bs-meta">
+                  <span class="bs-badge" id="bs-type">단문 SMS (90B 이내)</span>
+                  <span class="bs-vars">치환 변수 · {도장명} {이름} {반} {띠}</span>
+                </div>
+                <div class="bs-preview" id="bs-preview"></div>
+                <div class="bs-send-row">
+                  <button class="btn btn-primary" id="btn-bs-send">📨 단체문자 보내기</button>
+                  <span class="bs-note" id="bs-send-note">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top:13px">
+            <div class="panel-head">
+              <h3>📋 보낸 단체문자</h3><div class="spacer"></div>
+              <span class="tiny-note" id="bs-sent-note">-</span>
+            </div>
+            <div class="tablewrap" style="max-height:300px; overflow:auto">
+              <table class="tb">
+                <thead><tr><th style="width:96px">시간</th><th style="width:110px">관원</th><th>내용</th><th style="width:104px">상태</th><th style="width:86px"></th></tr></thead>
+                <tbody id="bs-history"></tbody>
+              </table>
+            </div>
+            <div class="panel-body" style="border-top:1px solid #eef1f6">
+              <div class="help" style="margin-top:0">
+                고른 관원마다 <b>{이름}·{반}·{띠}·{도장명}</b>이 그 관원 정보로 채워져 발송됩니다. 연락처가 없는 관원은 목록에서 <b>번호 없음</b>으로 표시되고 발송 대상에서 빠집니다.<br>
+                단체문자는 도장폰 무료문자 설정(웹훅)을 그대로 쓰고 <b>0.7초 간격으로 한 명씩</b> 나가며, 자동발송이 꺼져 있거나 웹훅이 없으면 로그에 기록되고 각 줄의 <b>📲 문자</b> 버튼으로 직접 보낼 수 있어요.<br>
+                보낸 내역은 <b>관리자 로그에만</b> 쌓이고, 출석 화면(학부모 대기 화면)에는 나오지 않습니다.
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -1231,7 +1356,8 @@
     muted: 'tdk.muted.v1',
     attendance: 'tdk.attendance.v1',
     faces: 'tdk.faces.v1',
-    tuition: 'tdk.tuition.v1'
+    tuition: 'tdk.tuition.v1',
+    smsTemplates: 'tdk.smsTemplates.v1'
   };
 
   var SAMPLE_STUDENTS = [
@@ -1308,7 +1434,9 @@
     adminTab: 'overview',
     monthly: null,
     tuition: {},
-    tuitionUI: null
+    tuitionUI: null,
+    bulkSms: null,
+    smsTemplates: []
   };
 
   /* =========================================================
@@ -1498,6 +1626,8 @@
     migrateAttendance();
     app.monthly = { month: monthKey(new Date()), className: 'all', q: '' };
     app.tuitionUI = null;
+    app.bulkSms = null;
+    app.smsTemplates = loadBulkTemplates();
 
     var logs = readJSON(LS.logs, []);
     app.logs = Array.isArray(logs) ? logs : [];
@@ -1520,6 +1650,7 @@
   function saveAttendance() { writeJSON(LS.attendance, app.attendance); }
   function saveFaces() { writeJSON(LS.faces, app.faces); }
   function saveTuition() { writeJSON(LS.tuition, app.tuition); }
+  function saveBulkTemplates() { writeJSON(LS.smsTemplates, app.smsTemplates || []); }
 
   /* =========================================================
      3-A. 얼굴 특징값 저장소 (온디바이스 전용)
@@ -2083,6 +2214,8 @@
     if (l.kind === 'guk_notice' || l.kind === 'guk_pass') { return visPublic('gukgiwon'); }
     // 원비 안내에는 금액이 들어가므로 학부모 대기 화면(키오스크)에는 띄우지 않고 관리자 로그에만 남깁니다.
     if (l.kind === 'tuition') { return false; }
+    // 단체문자도 관장님(관리자)만 보는 발송 기록입니다.
+    if (l.kind === 'bulk_sms') { return false; }
     return true;
   }
   function logStatusChip(l) {
@@ -3026,6 +3159,7 @@
     renderGukgiwon();
     renderMonthly();
     renderTuition();
+    renderBulkSms();
     renderAdminLog();
   }
 
@@ -3041,6 +3175,7 @@
       var label = l.kind === 'promotion' ? '승급' : l.kind === 'exam' ? '심사'
         : l.kind === 'guk_notice' ? '국기원' : l.kind === 'guk_pass' ? '합격'
         : l.kind === 'tuition' ? '원비'
+        : l.kind === 'bulk_sms' ? '단체문자'
         : (l.kind === 'test' || l.status === 'test') ? '테스트' : '출석';
       var text = l.text.length > 40 ? l.text.slice(0, 40) + '…' : l.text;
       return '<tr>' +
@@ -3949,7 +4084,7 @@
   }
 
   function setAdminTab(tab) {
-    var tabs = ['overview', 'promotion', 'gukgiwon', 'monthly', 'tuition'];
+    var tabs = ['overview', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms'];
     if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
     app.adminTab = tab;
     tabs.forEach(function (t) {
@@ -3960,14 +4095,17 @@
     el('view-admin').classList.toggle('guk-mode', tab === 'gukgiwon');
     el('view-admin').classList.toggle('monthly-mode', tab === 'monthly');
     el('view-admin').classList.toggle('tuition-mode', tab === 'tuition');
+    el('view-admin').classList.toggle('sms-mode', tab === 'sms');
     el('admin-promotion').style.display = tab === 'promotion' ? 'block' : 'none';
     el('admin-gukgiwon').style.display = tab === 'gukgiwon' ? 'block' : 'none';
     el('admin-monthly').style.display = tab === 'monthly' ? 'block' : 'none';
     el('admin-tuition').style.display = tab === 'tuition' ? 'block' : 'none';
+    el('admin-bulk-sms').style.display = tab === 'sms' ? 'block' : 'none';
     if (tab === 'promotion') { renderPromotion(); }
     if (tab === 'gukgiwon') { renderGukgiwon(); }
     if (tab === 'monthly') { renderMonthly(); }
     if (tab === 'tuition') { renderTuition(true); }
+    if (tab === 'sms') { renderBulkSms(true); }
   }
 
   /* =========================================================
@@ -4761,6 +4899,456 @@
   }
 
   /* =========================================================
+     11-G. 단체문자 (관리자 전용 · 학부모 대기 화면 비공개)
+     저장 구조
+       tdk.smsTemplates.v1 = [ { id, name, text } ]  ← 사용자가 저장한 템플릿
+       발송 로그  = app.logs[].kind === 'bulk_sms' (logVisible → false)
+     ========================================================= */
+  var BULK_SMS_LIMIT = 90;
+  var BULK_SMS_VARS = ['도장명', '이름', '반', '띠'];
+  var BULK_SMS_TEMPLATES = [
+    {
+      id: 'btpl_holiday', name: '휴관 안내',
+      text: '[{도장명}] 휴관 안내\n\n{이름} 관원 학부모님, 안녕하세요.\n아래 일정으로 도장을 휴관합니다.\n\n· 휴관일: (날짜를 적어 주세요)\n· 사유: (사유를 적어 주세요)\n\n취소된 수업은 보강 일정으로 다시 안내드리겠습니다.\n보내 주시는 관심에 감사드립니다.'
+    },
+    {
+      id: 'btpl_event', name: '특강/행사 안내',
+      text: '[{도장명}] 특강·행사 안내\n\n{이름} 관원 학부모님, 안녕하세요.\n{반} 반 특강/행사 일정을 안내드립니다.\n\n· 일시: (날짜와 시간을 적어 주세요)\n· 장소: (장소를 적어 주세요)\n· 준비물: (준비물을 적어 주세요)\n\n참석 여부를 문자로 회신해 주시면 준비에 반영하겠습니다.'
+    },
+    {
+      id: 'btpl_uniform', name: '준비물/도복 안내',
+      text: '[{도장명}] 준비물·도복 안내\n\n{이름} 관원 학부모님, 안녕하세요.\n{띠} 과정 수업 준비물을 안내드립니다.\n\n· 준비물: (준비물을 적어 주세요)\n· 지참일: (날짜를 적어 주세요)\n\n도복과 준비물에는 이름표를 달아 주세요.\n확인 부탁드립니다. 감사합니다.'
+    },
+    {
+      id: 'btpl_free', name: '자유 공지',
+      text: '[{도장명}] 안내 말씀\n\n{이름} 관원 학부모님, 안녕하세요.\n(안내 내용을 적어 주세요)\n\n감사합니다.'
+    }
+  ];
+
+  function loadBulkTemplates() {
+    var raw = readJSON(LS.smsTemplates, []);
+    var out = [];
+    if (!Array.isArray(raw)) { return out; }
+    raw.forEach(function (t) {
+      if (!t || typeof t !== 'object' || Array.isArray(t)) { return; }
+      var name = String(t.name == null ? '' : t.name).trim().slice(0, 24);
+      var text = String(t.text == null ? '' : t.text).trim();
+      if (!name || !text) { return; }
+      out.push({ id: String(t.id || uid('tpl')), name: name, text: text.slice(0, 900) });
+    });
+    return out.slice(0, 30);
+  }
+  function ensureBulkSms() {
+    if (!app.bulkSms || typeof app.bulkSms !== 'object') {
+      app.bulkSms = { q: '', selected: {}, text: '', tpl: '', className: 'all', belt: 'all' };
+    }
+    var u = app.bulkSms;
+    if (!u.selected || typeof u.selected !== 'object') { u.selected = {}; }
+    if (typeof u.text !== 'string') { u.text = ''; }
+    if (typeof u.q !== 'string') { u.q = ''; }
+    if (typeof u.tpl !== 'string') { u.tpl = ''; }
+    if (!u.className) { u.className = 'all'; }
+    if (!u.belt) { u.belt = 'all'; }
+    return u;
+  }
+  function bulkHasPhone(s) { return !!(s && String(s.phone || '').trim()); }
+
+  /* 체크한 관원과 발송 가능 인원 — 번호가 없는 관원은 발송에서만 빠집니다 */
+  function bulkSelectedIds() {
+    var u = ensureBulkSms(), sel = u.selected;
+    return Object.keys(sel).filter(function (id) { return sel[id] && byId(id); });
+  }
+  function bulkCounts() {
+    var list = bulkSelectedIds().map(byId).filter(Boolean);
+    var ok = list.filter(bulkHasPhone);
+    return { total: list.length, ok: ok.length, noPhone: list.length - ok.length, list: list, okList: ok };
+  }
+  function bulkRows() {
+    var u = ensureBulkSms();
+    return app.students.filter(function (s) { return matchSearch(s, u.q); }).sort(tuitionSort);
+  }
+  function bulkPreviewStudent() {
+    var ids = bulkSelectedIds();
+    for (var i = 0; i < ids.length; i++) { var s = byId(ids[i]); if (s) { return s; } }
+    return null;
+  }
+  function bulkFirstName() {
+    var ids = bulkSelectedIds();
+    for (var i = 0; i < ids.length; i++) { var s = byId(ids[i]); if (bulkHasPhone(s)) { return s; } }
+    return null;
+  }
+
+  /* {도장명} {이름} {반} {띠} 치환 */
+  function bulkFill(text, s) {
+    var map = {
+      '도장명': String(app.settings.dojoName || DEFAULT_SETTINGS.dojoName),
+      '이름': s ? String(s.name || '') : '{이름}',
+      '반': s ? String(s.className || '반 미지정') : '{반}',
+      '띠': s ? String(s.belt || '띠 미지정') : '{띠}'
+    };
+    return String(text == null ? '' : text).replace(/\{(도장명|이름|반|띠)\}/g, function (m, k) {
+      return map[k] === undefined ? m : map[k];
+    });
+  }
+
+  /* 한글 2바이트(EUC-KR 근사) 기준 바이트 수 */
+  function smsBytes(text) {
+    var str = String(text == null ? '' : text);
+    var n = 0;
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      if (c < 0x80) { n += 1; }
+      else if ((c >= 0xac00 && c <= 0xd7a3) || (c >= 0x3131 && c <= 0x318e)) { n += 2; }
+      else if (c >= 0x4e00 && c <= 0x9fff) { n += 2; }
+      else if (c >= 0xff00 && c <= 0xff60) { n += 2; }
+      else if (c >= 0xd800 && c <= 0xdbff) { n += 2; }
+      else { n += 3; }
+    }
+    return n;
+  }
+  function smsKindOf(bytes) { return bytes > BULK_SMS_LIMIT ? 'lms' : 'sms'; }
+  function smsKindLabel(bytes) { return smsKindOf(bytes) === 'lms' ? '장문 LMS' : '단문 SMS'; }
+
+  function bulkTemplateById(id) {
+    var i;
+    for (i = 0; i < BULK_SMS_TEMPLATES.length; i++) {
+      if (BULK_SMS_TEMPLATES[i].id === id) { return BULK_SMS_TEMPLATES[i]; }
+    }
+    var list = app.smsTemplates || [];
+    for (i = 0; i < list.length; i++) {
+      if (list[i].id === id) { return list[i]; }
+    }
+    return null;
+  }
+
+  function applyBulkTemplate(id) {
+    var t = bulkTemplateById(id);
+    if (!t) { return null; }
+    var u = ensureBulkSms();
+    u.tpl = t.id;
+    u.text = t.text;
+    if (el('bs-text')) { el('bs-text').value = t.text; }
+    renderBulkSms(true);
+    toast('「' + t.name + '」 문구를 불러왔어요');
+    return t;
+  }
+
+  function saveBulkTemplate() {
+    var u = ensureBulkSms();
+    var nameEl = el('bs-tpl-name');
+    var name = String(nameEl ? nameEl.value : '').trim().replace(/\s+/g, ' ').slice(0, 24);
+    var text = String(u.text || '').trim();
+    if (!text) { toast('먼저 문자 내용을 적어 주세요.'); return null; }
+    if (!name) { toast('템플릿 이름을 적어 주세요 (예: 여름방학 안내).'); return null; }
+    app.smsTemplates = app.smsTemplates || [];
+    var found = null;
+    app.smsTemplates.forEach(function (t) { if (t.name === name) { found = t; } });
+    if (found) {
+      found.text = text.slice(0, 900);
+      saveBulkTemplates();
+      u.tpl = found.id;
+      renderBulkSms(true);
+      toast('「' + name + '」 템플릿을 새 문구로 덮어썼어요');
+      return found;
+    }
+    var tpl = { id: uid('tpl'), name: name, text: text.slice(0, 900) };
+    app.smsTemplates.push(tpl);
+    if (app.smsTemplates.length > 30) { app.smsTemplates = app.smsTemplates.slice(-30); }
+    saveBulkTemplates();
+    u.tpl = tpl.id;
+    if (nameEl) { nameEl.value = ''; }
+    renderBulkSms(true);
+    toast('「' + name + '」 템플릿을 저장했어요');
+    return tpl;
+  }
+
+  function deleteBulkTemplate(id) {
+    var list = app.smsTemplates || [];
+    var idx = -1, name = '';
+    list.forEach(function (t, i) { if (t.id === id) { idx = i; name = t.name; } });
+    if (idx < 0) { return false; }
+    list.splice(idx, 1);
+    app.smsTemplates = list;
+    saveBulkTemplates();
+    var u = ensureBulkSms();
+    if (u.tpl === id) { u.tpl = ''; }
+    renderBulkSms(true);
+    toast('「' + name + '」 템플릿을 지웠어요');
+    return true;
+  }
+
+  /* 빠른 대상 선택 — 검색어와 상관없이 전체 명단 기준 */
+  function bulkSetSelection(ids) {
+    var sel = {};
+    (ids || []).forEach(function (id) {
+      var s = byId(id);
+      if (s) { sel[s.id] = true; }
+    });
+    ensureBulkSms().selected = sel;
+    renderBulkSms(true);
+    return Object.keys(sel).length;
+  }
+  function bulkSelectAll() {
+    var n = bulkSetSelection(app.students.map(function (s) { return s.id; }));
+    toast(n ? '전체 ' + n + '명을 선택했어요' : '선택할 관원이 없어요');
+  }
+  function bulkSelectClass() {
+    var u = ensureBulkSms();
+    var cls = (el('bs-class') ? el('bs-class').value : u.className) || 'all';
+    u.className = cls;
+    if (cls === 'all') {
+      renderBulkSms(true);
+      toast('먼저 반을 고르고 「반별 선택」을 눌러 주세요.');
+      return;
+    }
+    var ids = app.students.filter(function (s) { return String(s.className || '').trim() === cls; }).map(function (s) { return s.id; });
+    var n = bulkSetSelection(ids);
+    toast(n ? cls + ' · ' + n + '명을 선택했어요' : cls + ' 반에 등록된 관원이 없어요');
+  }
+  function bulkSelectBelt() {
+    var u = ensureBulkSms();
+    var belt = (el('bs-belt') ? el('bs-belt').value : u.belt) || 'all';
+    u.belt = belt;
+    if (belt === 'all') {
+      renderBulkSms(true);
+      toast('먼저 띠를 고르고 「띠별 선택」을 눌러 주세요.');
+      return;
+    }
+    var ids = app.students.filter(function (s) { return String(s.belt || '').trim() === belt; }).map(function (s) { return s.id; });
+    var n = bulkSetSelection(ids);
+    toast(n ? belt + ' · ' + n + '명을 선택했어요' : belt + ' 관원이 없어요');
+  }
+  function bulkSelectAbsent() {
+    var today = todayKey();
+    var ids = app.students.filter(function (s) { return !isPresentOn(s.id, today); }).map(function (s) { return s.id; });
+    var n = bulkSetSelection(ids);
+    toast(n ? '오늘 미등원 ' + n + '명을 선택했어요' : '오늘은 미등원 관원이 없어요');
+  }
+  function bulkClearSelection() {
+    ensureBulkSms().selected = {};
+    renderBulkSms(true);
+    toast('선택을 해제했어요');
+  }
+  function toggleBulkSelected(id, on) {
+    var u = ensureBulkSms();
+    if (!byId(id)) { return; }
+    if (on) { u.selected[id] = true; } else { delete u.selected[id]; }
+    renderBulkSms(true);
+  }
+
+  function renderBulkSmsFilters() {
+    var u = ensureBulkSms();
+    var sel = el('bs-class');
+    var classes = monthClasses();
+    if (sel) {
+      var opts = '<option value="all">전체 반</option>' + classes.map(function (c) {
+        return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
+      }).join('');
+      if (sel.getAttribute('data-opts') !== opts) {
+        sel.innerHTML = opts;
+        sel.setAttribute('data-opts', opts);
+      }
+      if (u.className !== 'all' && classes.indexOf(u.className) === -1) { u.className = 'all'; }
+      sel.value = u.className || 'all';
+    }
+    var beltSel = el('bs-belt');
+    var beltNames = [];
+    app.students.forEach(function (s) {
+      var b = String(s.belt || '').trim();
+      if (b && beltNames.indexOf(b) === -1) { beltNames.push(b); }
+    });
+    belts().forEach(function (b) {
+      if (b && b.name && beltNames.indexOf(b.name) === -1 && app.students.some(function (s) { return s.belt === b.name; })) {
+        beltNames.push(b.name);
+      }
+    });
+    if (beltSel) {
+      var bopts = '<option value="all">전체 띠</option>' + beltNames.map(function (b) {
+        return '<option value="' + esc(b) + '">' + esc(b) + '</option>';
+      }).join('');
+      if (beltSel.getAttribute('data-opts') !== bopts) {
+        beltSel.innerHTML = bopts;
+        beltSel.setAttribute('data-opts', bopts);
+      }
+      if (u.belt !== 'all' && beltNames.indexOf(u.belt) === -1) { u.belt = 'all'; }
+      beltSel.value = u.belt || 'all';
+    }
+  }
+
+  function renderBulkSmsList() {
+    var wrap = el('bs-list');
+    if (!wrap) { return; }
+    var u = ensureBulkSms();
+    Object.keys(u.selected).forEach(function (id) { if (!byId(id)) { delete u.selected[id]; } });
+    var rows = bulkRows();
+    var total = app.students.length;
+    if (el('bs-scope')) {
+      el('bs-scope').textContent = '전체 ' + total + '명' + (u.q ? ' · 검색 ' + rows.length + '명' : '');
+    }
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="bs-empty">' +
+        (total ? '검색 결과가 없어요. 다른 이름이나 초성으로 찾아보세요.' : '등록된 관원이 없습니다') + '</div>';
+    } else {
+      wrap.innerHTML = rows.map(function (s) {
+        var on = !!u.selected[s.id];
+        var phone = String(s.phone || '').trim();
+        return '<label class="bs-row' + (on ? ' sel' : '') + (phone ? '' : ' nophone') + '">' +
+          '<input type="checkbox" class="ck" data-bscheck="' + esc(s.id) + '"' +
+          (on ? ' checked' : '') + ' aria-label="' + esc(s.name + ' 발송 대상') + '">' +
+          '<span class="bs-belt" style="background:' + beltColor(s.belt) + '"></span>' +
+          '<span class="bs-main"><span class="bs-name">' + esc(s.name) + '</span>' +
+          '<span class="bs-sub">' + esc(s.className || '반 미지정') + ' · ' + esc(s.belt || '띠 미지정') + '</span></span>' +
+          '<span class="bs-phone">' + (phone ? esc(normalizePhone(phone)) : '<i>번호 없음</i>') + '</span>' +
+          '</label>';
+      }).join('');
+    }
+    var cnt = bulkCounts();
+    if (el('bs-count')) {
+      el('bs-count').innerHTML = '선택 ' + cnt.total + '명 <small>(발송 가능 ' + cnt.ok + '명' +
+        (cnt.noPhone ? ' · 번호 없음 ' + cnt.noPhone + '명' : '') + ')</small>';
+    }
+    if (el('bs-send-note')) {
+      el('bs-send-note').textContent = cnt.ok
+        ? cnt.ok + '명에게 보냅니다 · ' + (smsConfigured() ? (smsAutoOn() ? '도장폰 웹훅 · 0.7초 간격' : '자동발송 꺼짐 · 로그만 기록') : '웹훅 미설정 · 로그만 기록')
+        : '발송할 관원을 선택해 주세요.';
+    }
+  }
+
+  function renderBulkTplChips() {
+    var u = ensureBulkSms();
+    var row = el('bs-tpl-row');
+    if (row) {
+      row.innerHTML = BULK_SMS_TEMPLATES.map(function (t) {
+        return '<button type="button" class="bs-tpl-chip' + (u.tpl === t.id ? ' active' : '') + '"' +
+          ' data-bstpl="' + esc(t.id) + '" title="' + esc(t.name + ' 문구 불러오기') + '">' + esc(t.name) + '</button>';
+      }).join('');
+    }
+    var cus = el('bs-tpl-custom');
+    if (cus) {
+      var list = app.smsTemplates || [];
+      cus.innerHTML = list.length
+        ? '<span class="bs-tpl-label">내 템플릿</span>' + list.map(function (t) {
+          return '<span class="bs-tpl-chip' + (u.tpl === t.id ? ' active' : '') + '" data-bstpl="' + esc(t.id) + '"' +
+            ' role="button" tabindex="0" title="' + esc(t.name + ' 문구 불러오기') + '">' + esc(t.name) +
+            '<button type="button" class="x" data-bstpldel="' + esc(t.id) + '" title="' + esc(t.name + ' 템플릿 삭제') +
+            '" aria-label="' + esc(t.name + ' 템플릿 삭제') + '">×</button></span>';
+        }).join('')
+        : '';
+    }
+  }
+
+  function renderBulkSmsPreview() {
+    var box = el('bs-preview');
+    var u = ensureBulkSms();
+    var first = bulkPreviewStudent();
+    var raw = String(u.text || '');
+    var filled = raw.trim() ? bulkFill(raw, first) : '';
+    var bytes = smsBytes(filled);
+    var lms = smsKindOf(bytes) === 'lms';
+    if (el('bs-bytes')) {
+      el('bs-bytes').textContent = bytes + ' B · ' + (lms ? '장문' : '단문');
+    }
+    var badge = el('bs-type');
+    if (badge) {
+      badge.textContent = lms
+        ? '장문 LMS (' + BULK_SMS_LIMIT + 'B 초과)'
+        : '단문 SMS (' + BULK_SMS_LIMIT + 'B 이내)';
+      badge.className = 'bs-badge' + (lms ? ' lms' : '');
+    }
+    if (!box) { return; }
+    box.innerHTML = '<div class="bs-preview-head"><b>미리보기</b>' +
+      (first
+        ? '<span>' + esc(first.name) + ' · ' + esc(first.className || '반 미지정') + ' 기준</span>'
+        : '<span class="bs-note" style="color:#a35b00">관원을 선택하면 {이름}이 채워집니다</span>') +
+      '<span class="bs-note" style="flex:0 0 auto">' + bytes + ' B · ' + smsKindLabel(bytes) + '</span></div>' +
+      '<div class="bs-bubble' + (filled ? '' : ' empty') + '">' + (filled ? esc(filled) : '문구를 입력하면 여기에 보입니다.') + '</div>';
+  }
+
+  function renderBulkSmsHistory() {
+    var tb = el('bs-history');
+    if (!tb) { return; }
+    var list = app.logs.filter(function (l) { return l && l.kind === 'bulk_sms'; });
+    if (el('bs-sent-note')) {
+      var today = list.filter(function (l) { return l.date === todayKey(); }).length;
+      el('bs-sent-note').textContent = list.length
+        ? '오늘 ' + today + '건 · 전체 ' + list.length + '건 (관리자만 보임)'
+        : '아직 보낸 단체문자가 없어요';
+    }
+    if (!list.length) {
+      tb.innerHTML = '<tr class="empty-row"><td colspan="5">아직 보낸 단체문자가 없어요</td></tr>';
+      return;
+    }
+    tb.innerHTML = list.slice(0, 30).map(function (l) {
+      var text = String(l.text || '');
+      var short = text.length > 52 ? text.slice(0, 52) + '…' : text;
+      return '<tr>' +
+        '<td class="sub">' + esc(l.date === todayKey() ? l.time : l.date.slice(5) + ' ' + l.time) + '</td>' +
+        '<td class="nm">' + esc(l.name) + '</td>' +
+        '<td class="sub" style="white-space:normal">' + esc(short) + '</td>' +
+        '<td>' + logStatusChip(l) + '</td>' +
+        '<td>' + smsLinkHtml(l, true) + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function renderBulkSms(force) {
+    var wrap = el('bs-list');
+    if (!wrap) { return; }
+    var u = ensureBulkSms();
+    renderBulkSmsFilters();
+    var search = el('bs-search');
+    if (search && (!force || document.activeElement !== search) && search.value !== (u.q || '')) {
+      search.value = u.q || '';
+    }
+    var ta = el('bs-text');
+    if (ta && document.activeElement !== ta && ta.value !== (u.text || '')) { ta.value = u.text || ''; }
+    renderBulkSmsList();
+    renderBulkTplChips();
+    renderBulkSmsPreview();
+    renderBulkSmsHistory();
+  }
+
+  /* 확인 모달 → 확인 시에만 발송 (기존 addLog → enqueueSms → pumpSms 경로 그대로) */
+  function bulkSmsSend() {
+    var u = ensureBulkSms();
+    var text = String(u.text || '').trim();
+    if (!text) { toast('보낼 문자 내용을 먼저 적어 주세요.'); return null; }
+    var cnt = bulkCounts();
+    if (!cnt.ok) {
+      toast(cnt.total ? '선택한 관원에게 보낼 번호가 없어요. 보호자 연락처를 확인해 주세요.' : '문자를 받을 관원을 선택해 주세요.');
+      return null;
+    }
+    var first = bulkFirstName();
+    var bytes = smsBytes(bulkFill(text, first));
+    var kind = smsKindLabel(bytes);
+    var preview = esc(bulkFill(text, first));
+    return openModal({
+      title: '선택한 ' + cnt.ok + '명에게 단체문자를 보낼까요?',
+      sub: kind + ' · ' + bytes + 'B · ' + (first ? first.name + ' 관원 기준으로 이름·반·띠가 채워집니다' : '관원 정보로 치환됩니다'),
+      body: '<div class="bs-bubble" style="max-height:210px; overflow:auto">' + preview + '</div>' +
+        '<div class="help" style="margin-top:10px">발송 인원 <b>' + cnt.ok + '명</b>' +
+        (cnt.noPhone ? ' · 번호가 없어 제외 <b>' + cnt.noPhone + '명</b>' : '') +
+        '<br>' + esc(smsModalNote()) + ' 0.7초 간격으로 차례대로 나갑니다.</div>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: cnt.ok + '명 보내기', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return 0; }
+      var list = bulkSelectedIds().map(byId).filter(bulkHasPhone);
+      var sent = 0;
+      list.forEach(function (s) {
+        addLog(s, 'in', fmtTime(), { kind: 'bulk_sms', text: bulkFill(text, s) });
+        sent++;
+      });
+      u.selected = {};
+      renderBulkSms(true);
+      toast(sent + '명에게 단체문자' + smsToastTail());
+      return sent;
+    });
+  }
+
+  /* =========================================================
      12. 파일 가져오기 (SheetJS + CSV 폴백)
      ========================================================= */
   var HEADER_KEYS = {
@@ -4983,6 +5571,7 @@
       records: app.records,
       attendance: app.attendance,
       tuition: app.tuition,
+      smsTemplates: app.smsTemplates || [],
       logs: app.logs,
       settings: app.settings
     };
@@ -5033,6 +5622,9 @@
     if (data.logs != null && !Array.isArray(data.logs)) {
       return { ok: false, reason: '문자 로그 형식이 올바르지 않아요.' };
     }
+    if (data.smsTemplates != null && !Array.isArray(data.smsTemplates)) {
+      return { ok: false, reason: '문자 템플릿 형식이 올바르지 않아요.' };
+    }
     return { ok: true };
   }
 
@@ -5049,6 +5641,7 @@
     if (data.records) { writeJSON(LS.records, data.records); }
     if (data.attendance) { writeJSON(LS.attendance, data.attendance); }
     writeJSON(LS.tuition, (data.tuition && typeof data.tuition === 'object' && !Array.isArray(data.tuition)) ? data.tuition : {});
+    writeJSON(LS.smsTemplates, Array.isArray(data.smsTemplates) ? data.smsTemplates : []);
     if (data.logs) { writeJSON(LS.logs, data.logs); }
     if (data.settings) { writeJSON(LS.settings, data.settings); }
 
@@ -5070,6 +5663,7 @@
     renderMonthly();
     renderTuition(true);
     fillTuitionSettings();
+    renderBulkSms(true);
     renderPin();
     refreshAiHint();
     toast('백업을 복원했어요 · 관원 ' + app.students.length + '명 · 얼굴 ' + faceCount() + '명');
@@ -5091,11 +5685,12 @@
       var faces = (data.faces && typeof data.faces === 'object') ? Object.keys(data.faces).length : 0;
       var days = (data.attendance && typeof data.attendance === 'object') ? Object.keys(data.attendance).length : 0;
       var tMonths = (data.tuition && typeof data.tuition === 'object') ? Object.keys(data.tuition).length : 0;
+      var tplCount = Array.isArray(data.smsTemplates) ? data.smsTemplates.length : 0;
       openModal({
         title: '백업 파일로 복원할까요?',
         sub: '지금 이 브라우저의 데이터가 백업 파일 내용으로 바뀝니다.',
         body: '<div class="help" style="margin-top:0">' +
-          '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 띠 체계·문자·원비 설정 포함<br>' +
+          '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 띠 체계·문자·원비 설정 포함<br>' +
           (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
           '</div>',
         actions: [
@@ -5600,6 +6195,51 @@
       }
     });
 
+    // 관리자: 단체문자
+    el('atab-sms').addEventListener('click', function () { setAdminTab('sms'); });
+    el('btn-bs-all').addEventListener('click', bulkSelectAll);
+    el('btn-bs-class').addEventListener('click', bulkSelectClass);
+    el('btn-bs-belt').addEventListener('click', bulkSelectBelt);
+    el('btn-bs-absent').addEventListener('click', bulkSelectAbsent);
+    el('btn-bs-clear').addEventListener('click', bulkClearSelection);
+    el('bs-class').addEventListener('change', function () {
+      ensureBulkSms().className = el('bs-class').value || 'all';
+      renderBulkSms(true);
+    });
+    el('bs-belt').addEventListener('change', function () {
+      ensureBulkSms().belt = el('bs-belt').value || 'all';
+      renderBulkSms(true);
+    });
+    el('bs-search').addEventListener('input', function () {
+      ensureBulkSms().q = el('bs-search').value || '';
+      renderBulkSms();
+    });
+    el('bs-list').addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) { return; }
+      var ck = t.closest('[data-bscheck]');
+      if (ck) { toggleBulkSelected(ck.getAttribute('data-bscheck'), !!ck.checked); }
+    });
+    el('bs-text').addEventListener('input', function () {
+      var u = ensureBulkSms();
+      u.text = el('bs-text').value || '';
+      u.tpl = '';
+      renderBulkSmsPreview();
+      renderBulkTplChips();
+    });
+    ['bs-tpl-row', 'bs-tpl-custom'].forEach(function (id) {
+      el(id).addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t || !t.closest) { return; }
+        var del = t.closest('[data-bstpldel]');
+        if (del) { deleteBulkTemplate(del.getAttribute('data-bstpldel')); return; }
+        var chip = t.closest('[data-bstpl]');
+        if (chip) { applyBulkTemplate(chip.getAttribute('data-bstpl')); }
+      });
+    });
+    el('btn-bs-tpl-save').addEventListener('click', saveBulkTemplate);
+    el('btn-bs-send').addEventListener('click', function () { bulkSmsSend(); });
+
     // 관리자: 도장폰 무료문자 연동
     el('btn-save-sms').addEventListener('click', function () {
       var conf = readSmsForm();
@@ -5735,6 +6375,7 @@
     renderMonthly();
     renderTuition(true);
     fillTuitionSettings();
+    renderBulkSms(true);
     renderKioskInfo();
     renderVisibility();
     renderAdminLog();
@@ -5825,6 +6466,40 @@
       monthLabel: tuitionMonthLabel,
       monthKey: monthKey,
       shiftMonth: shiftMonth
+    },
+    bulkSms: {
+      limit: BULK_SMS_LIMIT,
+      vars: BULK_SMS_VARS,
+      builtins: BULK_SMS_TEMPLATES,
+      templates: function () { return app.smsTemplates || []; },
+      ui: ensureBulkSms,
+      rows: bulkRows,
+      selectedIds: bulkSelectedIds,
+      counts: bulkCounts,
+      fill: bulkFill,
+      bytes: smsBytes,
+      kindOf: smsKindOf,
+      kindLabel: smsKindLabel,
+      hasPhone: bulkHasPhone,
+      applyTemplate: applyBulkTemplate,
+      saveTemplate: saveBulkTemplate,
+      deleteTemplate: deleteBulkTemplate,
+      loadTemplates: loadBulkTemplates,
+      selectAll: bulkSelectAll,
+      selectClass: bulkSelectClass,
+      selectBelt: bulkSelectBelt,
+      selectAbsent: bulkSelectAbsent,
+      clearSelection: bulkClearSelection,
+      toggle: toggleBulkSelected,
+      setSelection: bulkSetSelection,
+      send: bulkSmsSend,
+      render: renderBulkSms,
+      preview: renderBulkSmsPreview,
+      history: renderBulkSmsHistory,
+      setTab: setAdminTab,
+      visible: logVisible,
+      kioskLog: renderLog,
+      adminLog: renderAdminLog
     }
   };
 
