@@ -10183,12 +10183,15 @@
   function addShuttleRow(opts) {
     opts = opts || {};
     var last = (app.shuttle || [])[app.shuttle.length - 1] || null;
+    var u = ensureShuttleUI();
+    // 부 필터를 걸어 둔 채 추가하면 그 부로 만들어, 방금 만든 줄이 필터 밖으로 숨지 않게 한다
+    var filterPart = (u.part !== 'all' && u.part !== 'none') ? u.part : '';
     var row = {
       id: uid('sh'),
       // 연속된 운행을 빨리 적을 수 있게 앞 줄의 시간·부에서 시작한다
       time: normShuttleTime(opts.time) || (last ? last.time : ''),
       kind: opts.kind === 'drop' ? 'drop' : 'pick',
-      part: normShuttlePart(opts.part) || (last ? last.part : ''),
+      part: normShuttlePart(opts.part) || filterPart || (last ? last.part : ''),
       dest: String(opts.dest == null ? '' : opts.dest).trim().slice(0, 60),
       memo: String(opts.memo == null ? '' : opts.memo).trim().slice(0, 80),
       riders: []
@@ -10300,7 +10303,7 @@
     if (!r) { return Promise.resolve(false); }
     return openModal({
       title: '이 운행을 지울까요?',
-      sub: (r.time || '시간 미정') + ' · ' + shuttleKindLabel(r.kind) + ' · ' + (r.dest || '목적지 없음'),
+      sub: (r.part ? shuttlePartLabel(r.part) + ' · ' : '') + (r.time || '시간 미정') + ' · ' + shuttleKindLabel(r.kind) + ' · ' + (r.dest || '목적지 없음'),
       body: '<div class="help" style="margin-top:0">' + (r.riders.length ? '탑승 원생: ' + esc(shuttleRidersText(r)) : '탑승 원생 없음') +
         (r.memo ? '<br>비고: ' + esc(r.memo) : '') + '</div>',
       actions: [
