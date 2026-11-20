@@ -11,7 +11,7 @@
    배포할 때마다 아래 VERSION 값을 올리면 옛 캐시가 정리됩니다.
    ============================================================= */
 
-var VERSION = 'v1-2026-11-20';
+var VERSION = 'v2-2026-11-20';
 var CACHE_NAME = 'mta-taekwondo-' + VERSION;
 var HTML_TIMEOUT_MS = 6000;
 
@@ -58,15 +58,26 @@ self.addEventListener('activate', function (event) {
   );
 });
 
+/* 화면 주소에서 물음표 뒤(?v=1 등)를 뗀 열쇠 — 같은 화면을 여러 벌 캐시하지 않도록 */
+function htmlKey(u) {
+  try {
+    var p = new URL(u);
+    return p.origin + p.pathname;
+  } catch (e) {
+    return u;
+  }
+}
+
 /* ---------- 화면 문서: network-first ---------- */
 function networkFirst(request) {
   /* 화면 이동 요청은 new Request(요청, 옵션)로 다시 만들 수 없어서 URL로 새로 부릅니다.
      cache:'no-store' → GitHub Pages의 짧은 HTTP 캐시(약 10분)에 가로막히지 않고 늘 새 화면을 확인 */
   var url = request.url;
+  var key = htmlKey(url);
   var network = fetch(url, { cache: 'no-store', credentials: 'same-origin', redirect: 'follow' }).then(function (res) {
     if (res && res.ok) {
       var copy = res.clone();
-      caches.open(CACHE_NAME).then(function (cache) { cache.put(url, copy); }).catch(function () {});
+      caches.open(CACHE_NAME).then(function (cache) { cache.put(key, copy); }).catch(function () {});
     }
     return res;
   });
@@ -78,6 +89,9 @@ function networkFirst(request) {
   return Promise.race([network.catch(function () { return null; }), timeout]).then(function (res) {
     if (res && res.ok) { return res; }
     return caches.match(url).then(function (hit) {
+      if (hit) { return hit; }
+      return caches.match(key);
+    }).then(function (hit) {
       if (hit) { return hit; }
       return caches.match('./index.html').then(function (shell) {
         if (shell) { return shell; }
