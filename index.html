@@ -1941,6 +1941,16 @@
      원비 = 수업 기준 단가 − (형제할인 10,000원)   [최소 0원]
      · 관원별 월 원비(monthlyFee)를 직접 넣으면 그 금액이 우선한다(수동 수정).
      ========================================================= */
+  /* 개편 전 데모 명단(이름 + 반/시간) → 새 데모의 부서·수업 */
+  var LEGACY_DEMO_UPGRADE = {
+    '김민준|초등 1부 (월수금 5:00)': { division: '초등부', course: '16회' },
+    '이서연|유치부 (화목 4:00)': { division: '유치부', course: '8회', siblingDiscount: true },
+    '박지호|초등 2부 (월수금 6:00)': { division: '초등부', course: '12회' },
+    '최수아|초등 1부 (월수금 5:00)': { division: '초등부', course: '입시반' },
+    '정도윤|중등부 (화목 7:00)': { division: '고등부', course: '선수단' },
+    '한유진|유치부 (화목 4:00)': { division: '유치부', course: '시범단' }
+  };
+
   var DIVISIONS = ['유치부', '초등부', '중등부', '고등부', '성인부'];
   var COURSES = ['8회', '12회', '16회', '시범단', '선수단', '입시반'];
   var SIBLING_DISCOUNT = 10000;
@@ -2214,6 +2224,16 @@
         })()
       };
     }).filter(function (s) { return s.name; });
+
+    /* 예전 데모 명단(6명)을 손대지 않고 그대로 두고 있으면, 새 데모(부서·수업·형제할인)로 한 번 맞춰 준다.
+       이름·반이 그대로이고 수업·원비를 직접 넣지 않은 경우만 건드린다. */
+    app.students.forEach(function (s) {
+      var up = LEGACY_DEMO_UPGRADE[s.name + '|' + s.className];
+      if (!up || s.course || s.monthlyFee != null) { return; }
+      s.division = up.division;
+      s.course = up.course;
+      s.siblingDiscount = !!up.siblingDiscount;
+    });
 
     var settings = readJSON(LS.settings, null);
     app.settings = Object.assign({}, DEFAULT_SETTINGS, settings || {});
