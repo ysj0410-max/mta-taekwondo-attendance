@@ -681,9 +681,9 @@
   .rp-mrow .rp-pct{flex:0 0 40px; text-align:right; color:#6b7a94; font-weight:800; font-variant-numeric:tabular-nums}
   .rp-bar{height:12px; background:#e8edf7; border-radius:999px; overflow:hidden}
   .rp-bar>i{display:block; height:100%; border-radius:999px; background:linear-gradient(90deg,#2f6fed,#7aa7ff)}
-  .rp-mrow.cash .rp-bar>i{background:linear-gradient(90deg,#12a871,#6bd8ac)}
-  .rp-mrow.bank .rp-bar>i{background:linear-gradient(90deg,#e08a00,#f6c46b)}
-  .rp-mrow.miss .rp-bar>i{background:linear-gradient(90deg,#8a94a6,#c2c9d6)}
+  .rp-mrow.mcash .rp-bar>i{background:linear-gradient(90deg,#12a871,#6bd8ac)}
+  .rp-mrow.mbank .rp-bar>i{background:linear-gradient(90deg,#e08a00,#f6c46b)}
+  .rp-mrow.mmiss .rp-bar>i{background:linear-gradient(90deg,#8a94a6,#c2c9d6)}
   .rp-delta{display:flex; gap:18px; flex-wrap:wrap; align-items:flex-end}
   .rp-dbig{font-size:20px; font-weight:900; letter-spacing:-.5px; font-variant-numeric:tabular-nums}
   .rp-dhead{flex:1 1 100%; font-size:12px; font-weight:700; color:#6b7a94}
@@ -5985,7 +5985,7 @@
     var html = REPORT_METHODS.map(function (m) {
       var amt = d.byMethod[m] || 0;
       var pct = total ? Math.round(amt / total * 100) : 0;
-      var cls = m === '현금' ? 'cash' : (m === '입금' ? 'bank' : 'card');
+      var cls = m === '현금' ? 'mcash' : (m === '입금' ? 'mbank' : 'mcard');
       return '<div class="rp-mrow ' + cls + '">' +
         '<span class="rp-mname">' + REPORT_METHOD_ICON[m] + ' ' + esc(m) + '</span>' +
         '<div class="rp-bar"><i style="width:' + pct + '%"></i></div>' +
@@ -5993,7 +5993,7 @@
     }).join('');
     if (d.noMethod) {
       var np = total ? Math.round(d.noMethod / total * 100) : 0;
-      html += '<div class="rp-mrow miss"><span class="rp-mname">❓ 미기록</span>' +
+      html += '<div class="rp-mrow mmiss"><span class="rp-mname">❓ 미기록</span>' +
         '<div class="rp-bar"><i style="width:' + np + '%"></i></div>' +
         '<b>' + fmtWon(d.noMethod) + '원</b><span class="rp-pct">' + np + '%</span></div>';
     }
