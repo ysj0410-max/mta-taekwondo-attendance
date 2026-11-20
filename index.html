@@ -391,7 +391,7 @@
   .admin-tabs{display:flex; gap:5px; margin-bottom:14px; background:#e8edf7; padding:5px; border-radius:14px; width:fit-content; max-width:100%; overflow-x:auto; flex-wrap:wrap}
   .admin-tab{border:0; background:transparent; color:#5b6b85; font-weight:800; font-size:13px; padding:9px 16px; border-radius:10px; cursor:pointer}
   .admin-tab.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.10)}
-  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov, #view-admin.sms-mode .ov, #view-admin.paused-mode .ov{display:none}
+  #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov, #view-admin.sms-mode .ov, #view-admin.paused-mode .ov, #view-admin.report-mode .ov{display:none}
   .belt-badge{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:800; background:#f6f8fc; border:1px solid #e6ebf4; padding:4px 9px 4px 6px; border-radius:999px; white-space:nowrap}
   .belt-badge i{width:12px; height:12px; border-radius:3px; display:inline-block; box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
   .bar{width:104px; height:7px; background:#edf0f7; border-radius:6px; overflow:hidden; margin-bottom:4px}
@@ -662,6 +662,52 @@
   textarea.cs-text{height:auto; min-height:104px; padding:10px 12px; line-height:1.55; resize:vertical}
   .cs-actions{display:flex; gap:8px; align-items:center; margin-top:2px; flex-wrap:wrap}
 
+  /* ---------- 📈 수납 리포트 ---------- */
+  .rp-mlist{display:flex; flex-direction:column; gap:9px}
+  .rp-mrow{display:flex; align-items:center; gap:9px; font-size:12.5px; font-weight:800; color:#33415c}
+  .rp-mrow .rp-mname{flex:0 0 74px; white-space:nowrap}
+  .rp-mrow .rp-bar{flex:1 1 auto; min-width:56px}
+  .rp-mrow b{flex:0 0 auto; font-variant-numeric:tabular-nums; color:var(--navy)}
+  .rp-mrow .rp-pct{flex:0 0 40px; text-align:right; color:#6b7a94; font-weight:800; font-variant-numeric:tabular-nums}
+  .rp-bar{height:12px; background:#e8edf7; border-radius:999px; overflow:hidden}
+  .rp-bar>i{display:block; height:100%; border-radius:999px; background:linear-gradient(90deg,#2f6fed,#7aa7ff)}
+  .rp-mrow.cash .rp-bar>i{background:linear-gradient(90deg,#12a871,#6bd8ac)}
+  .rp-mrow.bank .rp-bar>i{background:linear-gradient(90deg,#e08a00,#f6c46b)}
+  .rp-mrow.miss .rp-bar>i{background:linear-gradient(90deg,#8a94a6,#c2c9d6)}
+  .rp-delta{display:flex; gap:18px; flex-wrap:wrap; align-items:flex-end}
+  .rp-dbig{font-size:20px; font-weight:900; letter-spacing:-.5px; font-variant-numeric:tabular-nums}
+  .rp-dhead{flex:1 1 100%; font-size:12px; font-weight:700; color:#6b7a94}
+  .rp-up{color:#c0392b}
+  .rp-down{color:#1f8a4c}
+  .rp-flat{color:#6b7a94}
+  .rp-num{font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap}
+  table.tb.rp-tab th.rp-num{text-align:right}
+  table.tb.rp-tab th, table.tb.rp-tab td{white-space:nowrap}
+  table.tb.rp-tab td.nm{font-weight:800; color:var(--navy); white-space:normal; min-width:88px}
+  table.tb.rp-tab tr.rp-paused{background:#fbfaff; color:#7b6b9a}
+  table.tb.rp-tab tr.rp-exempt{background:#fbfcfe}
+  .rp-barcell{width:36%; min-width:104px}
+  .rp-barcell .rp-bar{min-width:60px}
+  table.tb.rp-year tr.rp-zero td{color:#9aa3b2}
+  table.tb.rp-year tr.rp-sum td{font-weight:900; background:#f6f8fd; border-top:2px solid #dde5f3}
+  .rp-state{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:800; white-space:nowrap}
+  .rp-state.paid{background:#e7f7ee; color:#12855b}
+  .rp-state.unpaid{background:#fdecec; color:#c0392b}
+  .rp-state.exempt{background:#eef1f6; color:#5b6b85}
+  .rp-state.paused{background:#f2ecff; color:#6b46c1}
+  .rp-ymethods{font-size:12px; font-weight:800; color:#475467; margin-top:8px; display:flex; gap:12px; flex-wrap:wrap}
+  .rp-ymethods b{color:var(--navy)}
+  .rp-print-head{display:none}
+  @media print{
+    .topbar, .tabs, .admin-tabs, .admin-lockbar, .admin-pw-banner, .btn, .help, .tab-btn, .icon-btn, .mon-nav .btn, select.mon-select{display:none !important}
+    #view-admin{padding:0; overflow:visible}
+    .panel{box-shadow:none !important; border:1px solid #c9d3e4 !important; break-inside:avoid; page-break-inside:avoid}
+    .admin-grid{grid-template-columns:1fr 1fr}
+    .tablewrap{overflow:visible !important; max-height:none !important}
+    .rp-print-head{display:block; margin:0 0 10px; font-size:15px; font-weight:900; color:#0d1b3e}
+    body{background:#fff}
+  }
+
   /* 좁은 화면: 관리자 탭은 한 줄 가로 스크롤로 정리 */
   @media (max-width:760px){
     .admin-tabs{width:100%; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none}
@@ -671,6 +717,11 @@
     .bs-row{padding:9px 4px; gap:6px}
     .bs-phone{font-size:11px}
     .cs-grid{grid-template-columns:1fr}
+    .rp-delta{gap:12px}
+    .rp-dbig{font-size:17px}
+    .rp-mrow{gap:6px; font-size:12px}
+    .rp-mrow .rp-mname{flex:0 0 62px}
+    .rp-mrow .rp-pct{flex:0 0 34px}
   }
 </style>
 </head>
@@ -824,6 +875,7 @@
           <button class="admin-tab" id="atab-tuition" data-atab="tuition">💳 원비 관리</button>
           <button class="admin-tab" id="atab-sms" data-atab="sms">📢 단체문자</button>
           <button class="admin-tab" id="atab-counsel" data-atab="counsel">🗒️ 상담기록</button>
+          <button class="admin-tab" id="atab-report" data-atab="report">📈 수납 리포트</button>
         </div>
 
         <div class="stats ov">
@@ -1392,6 +1444,82 @@
           </div>
         </div>
 
+        <div id="admin-report" style="display:none">
+          <div class="rp-print-head" id="rp-print-head">경희대MTA태권도 · 수납 리포트</div>
+          <div class="mon-bar">
+            <div class="mon-nav">
+              <button class="btn" id="rp-prev" title="이전 달" aria-label="이전 달">◀</button>
+              <div class="mon-label" id="rp-label">-</div>
+              <button class="btn" id="rp-next" title="다음 달" aria-label="다음 달">▶</button>
+              <button class="btn btn-ghost btn-sm" id="rp-this" style="margin-left:4px">이번 달</button>
+            </div>
+            <div class="spacer"></div>
+            <select class="input mon-select" id="rp-year" aria-label="연간 요약 연도"></select>
+            <button class="btn btn-primary" id="btn-rp-csv">📥 월 수납 CSV</button>
+            <button class="btn" id="btn-rp-csv-year">📥 연간 CSV</button>
+            <button class="btn" id="btn-rp-print">🖨️ 인쇄</button>
+          </div>
+
+          <div class="stats tu-stats">
+            <div class="stat in"><div class="stat-label">💰 총 수납액</div><div class="stat-val" id="rp-total">0<small>원</small></div><div class="tu-sub" id="rp-total-n">0명 수납</div></div>
+            <div class="stat"><div class="stat-label">👥 수납 인원</div><div class="stat-val" id="rp-count">0<small>명</small></div><div class="tu-sub" id="rp-count-n">미납 0명</div></div>
+            <div class="stat absent"><div class="stat-label">⏳ 미납</div><div class="stat-val" id="rp-unpaid">0<small>원</small></div><div class="tu-sub" id="rp-unpaid-n">0명</div></div>
+            <div class="stat out"><div class="stat-label">📈 수납률</div><div class="stat-val" id="rp-rate">0<small>%</small></div><div class="tu-sub" id="rp-rate-n">휴관 0명 제외</div></div>
+          </div>
+
+          <div class="admin-grid">
+            <div class="admin-col">
+              <div class="panel">
+                <div class="panel-head"><h3>📊 결제수단별 수납</h3><div class="spacer"></div><span class="tiny-note" id="rp-method-note"></span></div>
+                <div class="panel-body"><div class="rp-mlist" id="rp-methods"></div></div>
+              </div>
+              <div class="panel">
+                <div class="panel-head"><h3>↔️ 전월 대비</h3><div class="spacer"></div><span class="tiny-note">수납액 · 증감률 · 인원</span></div>
+                <div class="panel-body"><div id="rp-delta"></div></div>
+              </div>
+            </div>
+            <div class="admin-col">
+              <div class="panel">
+                <div class="panel-head"><h3>🏷️ 반별 수납 소계</h3></div>
+                <div class="tablewrap"><table class="tb rp-tab"><thead><tr><th>반</th><th class="rp-num">인원</th><th class="rp-num">수납액</th></tr></thead><tbody id="rp-class"></tbody></table></div>
+              </div>
+              <div class="panel">
+                <div class="panel-head"><h3>🥋 띠별 수납 소계</h3></div>
+                <div class="tablewrap"><table class="tb rp-tab"><thead><tr><th>띠</th><th class="rp-num">인원</th><th class="rp-num">수납액</th></tr></thead><tbody id="rp-belt"></tbody></table></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>📈 연간 월별 수납 추이</h3><div class="spacer"></div><span class="tiny-note" id="rp-year-note">-</span></div>
+            <div class="tablewrap">
+              <table class="tb rp-tab rp-year">
+                <thead><tr><th>월</th><th class="rp-num">수납액</th><th class="rp-num">수납 인원</th><th class="rp-barcell">막대</th></tr></thead>
+                <tbody id="rp-months"></tbody>
+              </table>
+            </div>
+            <div class="panel-body" style="padding-top:10px"><div class="rp-ymethods" id="rp-year-methods"></div></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>🧾 관원별 수납 내역</h3><div class="spacer"></div><span class="tiny-note" id="rp-note">-</span></div>
+            <div class="tablewrap tu-tablewrap">
+              <table class="tb rp-tab">
+                <thead><tr><th>관원</th><th>반</th><th>띠</th><th class="rp-num">원비 단가</th><th>결제수단</th><th>납부일</th><th>상태</th><th class="rp-num">수납액</th></tr></thead>
+                <tbody id="rp-table"></tbody>
+              </table>
+            </div>
+            <div class="panel-body" style="border-top:1px solid #eef1f6">
+              <div class="help" style="margin-top:0">
+                이 리포트는 <b>원비 관리 탭에 이미 쌓인 납부 기록만으로</b> 자동으로 계산됩니다. 따로 입력할 것은 없어요.<br>
+                <b>휴관생</b>은 수납 집계·수납률에서 빠지고 표에만 <b>휴관</b>으로 표시됩니다. <b>면제</b>도 집계에서 빠집니다.
+                결제수단이 비어 있는 완납 건은 <b>미기록</b>으로 따로 잡히니, 원비 관리 탭에서 수단을 눌러 주면 정확해집니다.<br>
+                <b>CSV</b>는 엑셀에서 바로 열리고(한글 안 끊김), <b>인쇄</b>는 브라우저 인쇄 창에서 PDF로 저장할 수도 있습니다.
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div id="admin-bulk-sms" style="display:none">
           <div class="bs-grid">
             <div class="panel">
@@ -1670,6 +1798,7 @@
     monthly: null,
     tuition: {},
     tuitionUI: null,
+    reportUI: null,
     bulkSms: null,
     smsTemplates: [],
     stuFilter: 'all',
@@ -4773,7 +4902,7 @@
   }
 
   function setAdminTab(tab) {
-    var tabs = ['overview', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'counsel'];
+    var tabs = ['overview', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'counsel', 'report'];
     if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
     app.adminTab = tab;
     tabs.forEach(function (t) {
@@ -4787,6 +4916,7 @@
     el('view-admin').classList.toggle('sms-mode', tab === 'sms');
     el('view-admin').classList.toggle('paused-mode', tab === 'paused');
     el('view-admin').classList.toggle('cs-mode', tab === 'counsel');
+    el('view-admin').classList.toggle('report-mode', tab === 'report');
     el('admin-promotion').style.display = tab === 'promotion' ? 'block' : 'none';
     el('admin-gukgiwon').style.display = tab === 'gukgiwon' ? 'block' : 'none';
     el('admin-monthly').style.display = tab === 'monthly' ? 'block' : 'none';
@@ -4794,6 +4924,7 @@
     el('admin-bulk-sms').style.display = tab === 'sms' ? 'block' : 'none';
     el('admin-paused').style.display = tab === 'paused' ? 'block' : 'none';
     el('admin-counsel').style.display = tab === 'counsel' ? 'block' : 'none';
+    el('admin-report').style.display = tab === 'report' ? 'block' : 'none';
     if (tab === 'promotion') { renderPromotion(); }
     if (tab === 'gukgiwon') { renderGukgiwon(); }
     if (tab === 'monthly') { renderMonthly(); }
@@ -4801,6 +4932,7 @@
     if (tab === 'sms') { renderBulkSms(true); }
     if (tab === 'paused') { renderPaused(true); }
     if (tab === 'counsel') { renderCounsel(); }
+    if (tab === 'report') { renderReport(true); }
   }
 
   /* =========================================================
@@ -5591,6 +5723,450 @@
     if (open) { fillTuitionSettings(); }
     var b = el('btn-tu-settings');
     if (b) { b.textContent = open ? '⚙️ 원비 설정 닫기' : '⚙️ 원비 설정'; }
+  }
+
+  /* =========================================================
+     11-F-2. 수납 리포트 (월별 매출 자동 집계 · 관리자 전용)
+     기존 원비 데이터(tdk.tuition.v1) + 관원 명단·반/띠·휴관 상태만 읽어 계산한다.
+     새로 입력받는 값은 없다(수동 입력 필드 없음).
+     ========================================================= */
+  var REPORT_METHODS = ['카드', '현금', '입금'];
+  var REPORT_METHOD_ICON = { '카드': '💳', '현금': '💵', '입금': '🏦' };
+
+  function emptyMethodMap() { return { '카드': 0, '현금': 0, '입금': 0 }; }
+
+  function ensureReport() {
+    if (!app.reportUI) {
+      var mk = monthKey(new Date());
+      app.reportUI = { month: mk, year: parseInt(mk.slice(0, 4), 10) };
+    }
+    return app.reportUI;
+  }
+
+  /* 반별·띠별 소계 (수납이 발생한 관원만) */
+  function reportGroup(rows, key) {
+    var map = {}, order = [];
+    (rows || []).forEach(function (r) {
+      if (r.status !== 'paid') { return; }
+      var name = r[key] || (key === 'className' ? '반 미지정' : '띠 미지정');
+      if (!map[name]) { map[name] = { name: name, total: 0, count: 0 }; order.push(name); }
+      map[name].total += r.amount;
+      map[name].count++;
+    });
+    var list = order.map(function (k) { return map[k]; });
+    if (key === 'belt') {
+      list.sort(function (a, b) {
+        var ia = BELT_ORDER.indexOf(a.name); if (ia < 0) { ia = 99; }
+        var ib = BELT_ORDER.indexOf(b.name); if (ib < 0) { ib = 99; }
+        if (ia !== ib) { return ia - ib; }
+        return a.name.localeCompare(b.name, 'ko');
+      });
+    } else {
+      list.sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
+    }
+    return list;
+  }
+
+  /* 그 달의 수납 집계 — 화면·CSV·연간 요약이 모두 이 함수를 쓴다 */
+  function reportMonth(mk) {
+    mk = String(mk || '');
+    var out = {
+      month: mk, total: 0, paidRoster: 0, expected: 0, unpaid: 0,
+      paidCount: 0, unpaidCount: 0, exemptCount: 0, pausedCount: 0,
+      noMethod: 0, noMethodCount: 0, orphanCount: 0, rate: 0,
+      byMethod: emptyMethodMap(), byMethodCount: emptyMethodMap(),
+      byClass: [], byBelt: [], rows: []
+    };
+    var seen = {};
+    var list = (app.students || []).slice().sort(tuitionSort);
+    list.forEach(function (s) {
+      seen[s.id] = true;
+      var row = {
+        id: s.id, name: s.name, className: s.className || '', belt: s.belt || '',
+        fee: studentFee(s), status: 'unpaid', statusLabel: '미납',
+        method: '', paidDate: '', amount: 0, orphan: false
+      };
+      if (isPaused(s)) {
+        row.status = 'paused';
+        row.statusLabel = '휴관';
+        row.fee = 0;
+        out.pausedCount++;
+        out.rows.push(row);
+        return;
+      }
+      var st = tuitionStatusOf(mk, s.id);
+      var amt = tuitionAmountOf(mk, s.id);
+      if (st === 'exempt') {
+        row.status = 'exempt';
+        row.statusLabel = '면제';
+        out.exemptCount++;
+        out.rows.push(row);
+        return;
+      }
+      row.amount = amt;
+      out.expected += amt;
+      if (st === 'paid') {
+        var rec = tuitionOf(mk, s.id) || {};
+        var m = rec.method || '';
+        row.status = 'paid';
+        row.statusLabel = '완납';
+        row.method = m || '미기록';
+        row.paidDate = rec.paidDate || '';
+        out.total += amt;
+        out.paidRoster += amt;
+        out.paidCount++;
+        if (m && out.byMethod[m] !== undefined) {
+          out.byMethod[m] += amt;
+          out.byMethodCount[m]++;
+        } else {
+          out.noMethod += amt;
+          out.noMethodCount++;
+        }
+      } else {
+        out.unpaid += amt;
+        out.unpaidCount++;
+      }
+      out.rows.push(row);
+    });
+
+    /* 지금 명단에 없는 관원(퇴원 등)의 그 달 납부 기록도 매출에는 포함한다 */
+    var monthRecs = (app.tuition && app.tuition[mk]) || {};
+    Object.keys(monthRecs).sort().forEach(function (sid) {
+      if (seen[sid]) { return; }
+      var rec = monthRecs[sid];
+      if (!rec || rec.status !== 'paid') { return; }
+      var amt = (typeof rec.amount === 'number' && !isNaN(rec.amount) && rec.amount >= 0) ? rec.amount : 0;
+      if (!amt) { return; }
+      var m = rec.method || '';
+      out.orphanCount++;
+      out.total += amt;
+      out.paidCount++;
+      if (m && out.byMethod[m] !== undefined) {
+        out.byMethod[m] += amt;
+        out.byMethodCount[m]++;
+      } else {
+        out.noMethod += amt;
+        out.noMethodCount++;
+      }
+      out.rows.push({
+        id: sid, name: '명단 외', className: '기타', belt: '', fee: 0,
+        status: 'paid', statusLabel: '완납', method: m || '미기록',
+        paidDate: rec.paidDate || '', amount: amt, orphan: true
+      });
+    });
+
+    out.rate = out.expected ? Math.round(out.paidRoster / out.expected * 100) : 0;
+    out.byClass = reportGroup(out.rows, 'className');
+    out.byBelt = reportGroup(out.rows, 'belt');
+    return out;
+  }
+
+  function reportPrevDelta(cur, prev) {
+    var a = (cur && typeof cur.total === 'number') ? cur.total : 0;
+    var b = (prev && typeof prev.total === 'number') ? prev.total : 0;
+    var amount = a - b;
+    var pct = null;
+    if (b) {
+      var mag = Math.round(Math.abs(amount) / b * 1000) / 10;
+      pct = amount < 0 ? -mag : mag;
+    }
+    return {
+      prevTotal: b,
+      total: a,
+      amount: amount,
+      pct: pct,
+      count: ((cur && cur.paidCount) || 0) - ((prev && prev.paidCount) || 0)
+    };
+  }
+
+  /* 연간 요약 (1~12월) */
+  function reportYear(year) {
+    var y = parseInt(year, 10);
+    if (isNaN(y) || y < 2000 || y > 2100) { y = new Date().getFullYear(); }
+    var months = [], total = 0, paidCount = 0, monthsWith = 0, max = 0;
+    var byMethod = emptyMethodMap();
+    for (var m = 1; m <= 12; m++) {
+      var mk = y + '-' + pad2(m);
+      var d = reportMonth(mk);
+      months.push({ month: mk, label: m + '월', total: d.total, paidCount: d.paidCount, byMethod: d.byMethod });
+      total += d.total;
+      paidCount += d.paidCount;
+      if (d.total) { monthsWith++; }
+      if (d.total > max) { max = d.total; }
+      REPORT_METHODS.forEach(function (k) { byMethod[k] += d.byMethod[k]; });
+    }
+    return {
+      year: y, months: months, total: total, byMethod: byMethod,
+      paidCount: paidCount, monthsWith: monthsWith, max: max,
+      average: monthsWith ? Math.round(total / monthsWith) : 0
+    };
+  }
+
+  /* ---- CSV (엑셀 바로 열기: BOM + CRLF, 기존 원비 CSV와 같은 방식) ---- */
+  function reportPad(arr) {
+    var out = arr.slice();
+    while (out.length < 8) { out.push(''); }
+    return out;
+  }
+  function reportMonthCSVText(mk, data) {
+    var d = data || reportMonth(mk);
+    var prev = reportMonth(shiftMonth(mk, -1));
+    var del = reportPrevDelta(d, prev);
+    var lines = [];
+    lines.push(reportPad(['수납 리포트 · ' + tuitionMonthLabel(mk)]));
+    lines.push(reportPad(['구분', '카드', '현금', '입금', '합계']));
+    lines.push(reportPad(['수납 금액(원)', d.byMethod['카드'], d.byMethod['현금'], d.byMethod['입금'], d.total]));
+    lines.push(reportPad(['수납 인원(명)', d.byMethodCount['카드'], d.byMethodCount['현금'], d.byMethodCount['입금'], d.paidCount]));
+    lines.push(reportPad(['총 수납액(원)', '', '', '', d.total]));
+    lines.push(reportPad(['미납 금액(원)', '', '', '', d.unpaid]));
+    lines.push(reportPad(['미납 인원(명)', '', '', '', d.unpaidCount]));
+    lines.push(reportPad(['수납률', d.rate + '%']));
+    lines.push(reportPad(['면제(명)', '', '', '', d.exemptCount]));
+    lines.push(reportPad(['휴관 제외(명)', '', '', '', d.pausedCount]));
+    lines.push(reportPad(['수단 미기록(원)', '', '', '', d.noMethod]));
+    lines.push(reportPad(['전월 수납액(원)', '', '', '', prev.total]));
+    lines.push(reportPad(['전월 대비(원)', '', '', '', del.amount]));
+    lines.push(reportPad(['전월 대비(%)', del.pct === null ? '' : del.pct + '%']));
+    lines.push(reportPad([]));
+    lines.push(reportPad(['관원', '반', '띠', '월 원비(원)', '상태', '결제 수단', '납부일', '수납 금액(원)']));
+    (d.rows || []).forEach(function (r) {
+      var paid = r.status === 'paid';
+      lines.push(reportPad([
+        r.orphan ? '명단 외' : r.name,
+        r.className || '',
+        r.belt || '',
+        r.status === 'paused' ? '' : r.fee,
+        r.statusLabel,
+        paid ? r.method : '',
+        paid ? r.paidDate : '',
+        r.amount || 0
+      ]));
+    });
+    return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
+  }
+  function reportYearCSVText(year, data) {
+    var d = data || reportYear(year);
+    var lines = [];
+    lines.push(reportPad(['수납 리포트 · ' + d.year + '년 연간']));
+    lines.push(reportPad(['월', '카드', '현금', '입금', '합계', '수납 인원(명)']));
+    d.months.forEach(function (m) {
+      lines.push(reportPad([m.label, m.byMethod['카드'], m.byMethod['현금'], m.byMethod['입금'], m.total, m.paidCount]));
+    });
+    lines.push(reportPad(['연 누계', d.byMethod['카드'], d.byMethod['현금'], d.byMethod['입금'], d.total, d.paidCount]));
+    lines.push(reportPad([]));
+    lines.push(reportPad(['수납 있는 달', d.monthsWith + '개월']));
+    lines.push(reportPad(['월 평균 수납액(원)', d.average]));
+    return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
+  }
+
+  /* ---- 화면 ---- */
+  function reportYearOptions() {
+    var years = {};
+    var y = new Date().getFullYear();
+    years[String(y)] = true;
+    var ui = ensureReport();
+    if (ui && ui.year) { years[String(ui.year)] = true; }
+    Object.keys(app.tuition || {}).forEach(function (mk) { years[mk.slice(0, 4)] = true; });
+    return Object.keys(years).sort(function (a, b) { return Number(b) - Number(a); });
+  }
+
+  function reportMethodRows(d) {
+    var total = d.total || 0;
+    var html = REPORT_METHODS.map(function (m) {
+      var amt = d.byMethod[m] || 0;
+      var pct = total ? Math.round(amt / total * 100) : 0;
+      var cls = m === '현금' ? 'cash' : (m === '입금' ? 'bank' : 'card');
+      return '<div class="rp-mrow ' + cls + '">' +
+        '<span class="rp-mname">' + REPORT_METHOD_ICON[m] + ' ' + esc(m) + '</span>' +
+        '<div class="rp-bar"><i style="width:' + pct + '%"></i></div>' +
+        '<b>' + fmtWon(amt) + '원</b><span class="rp-pct">' + pct + '%</span></div>';
+    }).join('');
+    if (d.noMethod) {
+      var np = total ? Math.round(d.noMethod / total * 100) : 0;
+      html += '<div class="rp-mrow miss"><span class="rp-mname">❓ 미기록</span>' +
+        '<div class="rp-bar"><i style="width:' + np + '%"></i></div>' +
+        '<b>' + fmtWon(d.noMethod) + '원</b><span class="rp-pct">' + np + '%</span></div>';
+    }
+    return html;
+  }
+
+  function reportDeltaHTML(del) {
+    var cls = del.amount > 0 ? 'rp-up' : (del.amount < 0 ? 'rp-down' : 'rp-flat');
+    var sign = del.amount > 0 ? '+' : (del.amount < 0 ? '-' : '');
+    var pctCls = del.pct === null ? 'rp-flat' : (del.pct > 0 ? 'rp-up' : (del.pct < 0 ? 'rp-down' : 'rp-flat'));
+    var countCls = del.count > 0 ? 'rp-up' : (del.count < 0 ? 'rp-down' : 'rp-flat');
+    return '<div class="rp-delta">' +
+      '<div><div class="tu-sub">전월 대비 금액</div><div class="rp-dbig ' + cls + '">' +
+      sign + fmtWon(Math.abs(del.amount)) + '원</div></div>' +
+      '<div><div class="tu-sub">증감률</div><div class="rp-dbig ' + pctCls + '">' +
+      (del.pct === null ? '—' : ((del.pct > 0 ? '+' : '') + del.pct + '%')) + '</div></div>' +
+      '<div><div class="tu-sub">수납 인원</div><div class="rp-dbig ' + countCls + '">' +
+      (del.count > 0 ? '+' : '') + del.count + '명</div></div>' +
+      '<div class="rp-dhead">' + (del.prevTotal ? '전월 ' + fmtWon(del.prevTotal) + '원' : '전월 수납 없음') + '</div></div>';
+  }
+
+  function reportSubtotalRows(list, emptyText) {
+    if (!list.length) { return '<tr class="empty-row"><td colspan="3">' + emptyText + '</td></tr>'; }
+    return list.map(function (g) {
+      return '<tr><td class="nm">' + esc(g.name) + '</td>' +
+        '<td class="rp-num">' + g.count + '명</td>' +
+        '<td class="rp-num">' + fmtWon(g.total) + '원</td></tr>';
+    }).join('');
+  }
+
+  function reportMonthRows(d) {
+    if (!d.rows.length) {
+      return '<tr class="empty-row"><td colspan="8">등록된 관원이 없어요. 「출석 · 명단」에서 관원을 먼저 등록해 주세요.</td></tr>';
+    }
+    return d.rows.map(function (r) {
+      var stateCls = r.status === 'paid' ? 'paid' : (r.status === 'unpaid' ? 'unpaid' : (r.status === 'paused' ? 'paused' : 'exempt'));
+      var feeTxt = (r.status === 'paused' || r.status === 'exempt') ? '-' : (fmtWon(r.fee) + '원');
+      var amtTxt = (r.status === 'paid') ? (fmtWon(r.amount) + '원') : (r.status === 'unpaid' ? '0원' : '-');
+      return '<tr class="rp-' + r.status + '">' +
+        '<td class="nm">' + esc(r.name) + '</td>' +
+        '<td>' + esc(r.className || '반 미지정') + '</td>' +
+        '<td>' + esc(r.belt || '-') + '</td>' +
+        '<td class="rp-num">' + feeTxt + '</td>' +
+        '<td>' + (r.status === 'paid' ? esc(r.method) : '-') + '</td>' +
+        '<td>' + (r.status === 'paid' ? esc(r.paidDate || '-') : '-') + '</td>' +
+        '<td><span class="rp-state ' + stateCls + '">' + esc(r.statusLabel) + '</span></td>' +
+        '<td class="rp-num">' + amtTxt + '</td></tr>';
+    }).join('');
+  }
+
+  function reportYearRows(yd) {
+    var rows = yd.months.map(function (m) {
+      var w = yd.max ? Math.round(m.total / yd.max * 100) : 0;
+      return '<tr' + (m.total ? '' : ' class="rp-zero"') + '>' +
+        '<td class="nm">' + m.label + '</td>' +
+        '<td class="rp-num">' + fmtWon(m.total) + '원</td>' +
+        '<td class="rp-num">' + (m.paidCount ? m.paidCount + '명' : '-') + '</td>' +
+        '<td class="rp-barcell"><div class="rp-bar"><i style="width:' + w + '%"></i></div></td></tr>';
+    }).join('');
+    rows += '<tr class="rp-sum"><td>연 누계</td><td class="rp-num">' + fmtWon(yd.total) + '원</td>' +
+      '<td class="rp-num">' + yd.paidCount + '명</td><td class="rp-barcell">' + yd.year + '년</td></tr>';
+    return rows;
+  }
+
+  function renderReport(force) {
+    var body = el('rp-table');
+    if (!body) { return; }
+    var ui = ensureReport();
+    var mk = ui.month;
+    var d = reportMonth(mk);
+    var prevMk = shiftMonth(mk, -1);
+    var prev = reportMonth(prevMk);
+    var del = reportPrevDelta(d, prev);
+
+    if (el('rp-label')) { el('rp-label').textContent = tuitionMonthLabel(mk); }
+
+    var sel = el('rp-year');
+    var years = reportYearOptions();
+    if (sel) {
+      var want = years.map(function (y) {
+        return '<option value="' + esc(y) + '">' + esc(y) + '년</option>';
+      }).join('');
+      if (sel.getAttribute('data-opts') !== want) {
+        sel.innerHTML = want;
+        sel.setAttribute('data-opts', want);
+      }
+      if (years.indexOf(String(ui.year)) === -1) { ui.year = parseInt(years[0], 10); }
+      sel.value = String(ui.year);
+    }
+
+    if (el('rp-total')) { el('rp-total').innerHTML = fmtWon(d.total) + '<small>원</small>'; }
+    if (el('rp-total-n')) { el('rp-total-n').textContent = d.paidCount + '명 수납'; }
+    if (el('rp-count')) { el('rp-count').innerHTML = d.paidCount + '<small>명</small>'; }
+    if (el('rp-count-n')) { el('rp-count-n').textContent = '미납 ' + d.unpaidCount + '명'; }
+    if (el('rp-unpaid')) { el('rp-unpaid').innerHTML = fmtWon(d.unpaid) + '<small>원</small>'; }
+    if (el('rp-unpaid-n')) { el('rp-unpaid-n').textContent = d.unpaidCount + '명 · ' + fmtWon(d.unpaid) + '원'; }
+    if (el('rp-rate')) { el('rp-rate').innerHTML = d.rate + '<small>%</small>'; }
+    if (el('rp-rate-n')) {
+      el('rp-rate-n').textContent = '휴관 ' + d.pausedCount + '명 · 면제 ' + d.exemptCount + '명 제외';
+    }
+
+    if (el('rp-methods')) { el('rp-methods').innerHTML = reportMethodRows(d); }
+    if (el('rp-method-note')) {
+      el('rp-method-note').textContent = d.total
+        ? '총 ' + fmtWon(d.total) + '원 기준 비율'
+        : '이 달 수납 없음';
+    }
+    if (el('rp-delta')) { el('rp-delta').innerHTML = reportDeltaHTML(del); }
+
+    if (el('rp-class')) { el('rp-class').innerHTML = reportSubtotalRows(d.byClass, '이 달 수납한 반이 없어요.'); }
+    if (el('rp-belt')) { el('rp-belt').innerHTML = reportSubtotalRows(d.byBelt, '이 달 수납한 띠가 없어요.'); }
+
+    var yd = reportYear(ui.year);
+    if (el('rp-months')) { el('rp-months').innerHTML = reportYearRows(yd); }
+    if (el('rp-year-note')) {
+      el('rp-year-note').textContent = yd.year + '년 연 누계 ' + fmtWon(yd.total) + '원 · 수납 있는 달 ' + yd.monthsWith + '개월';
+    }
+    if (el('rp-year-methods')) {
+      el('rp-year-methods').innerHTML = REPORT_METHODS.map(function (m) {
+        return '<span>' + REPORT_METHOD_ICON[m] + ' ' + esc(m) + ' <b>' + fmtWon(yd.byMethod[m]) + '원</b></span>';
+      }).join('') + '<span>📅 월 평균 <b>' + fmtWon(yd.average) + '원</b></span>';
+    }
+
+    if (el('rp-table')) { el('rp-table').innerHTML = reportMonthRows(d); }
+    if (el('rp-note')) {
+      el('rp-note').textContent = tuitionMonthLabel(mk) + ' · ' + d.rows.length + '명' +
+        (d.orphanCount ? ' · 명단 외 납부 ' + d.orphanCount + '건 포함' : '');
+    }
+    if (el('rp-print-head')) {
+      el('rp-print-head').textContent = (app.settings && app.settings.dojoName ? app.settings.dojoName : '경희대MTA태권도') +
+        ' · ' + tuitionMonthLabel(mk) + ' 수납 리포트 · 총 ' + fmtWon(d.total) + '원';
+    }
+    return d;
+  }
+
+  /* ---- 조작 ---- */
+  function reportStep(delta) {
+    var ui = ensureReport();
+    ui.month = shiftMonth(ui.month, delta);
+    ui.year = parseInt(ui.month.slice(0, 4), 10);
+    renderReport(true);
+  }
+  function reportThisMonth() {
+    var ui = ensureReport();
+    ui.month = monthKey(new Date());
+    ui.year = parseInt(ui.month.slice(0, 4), 10);
+    renderReport(true);
+  }
+  function reportSetYear(y) {
+    var ui = ensureReport();
+    var v = parseInt(y, 10);
+    if (!isNaN(v) && v >= 2000 && v <= 2100) { ui.year = v; }
+    renderReport(true);
+  }
+  function downloadReportCSV() {
+    var ui = ensureReport();
+    var mk = ui.month;
+    var d = reportMonth(mk);
+    if (!d.rows.length) {
+      toast('이 달에 내려받을 관원이 없어요.');
+      return;
+    }
+    var csv = reportMonthCSVText(mk, d);
+    if (downloadFile('수납리포트_' + mk + '.csv', csv, 'text/csv;charset=utf-8')) {
+      toast(tuitionMonthLabel(mk) + ' 수납 리포트를 내려받았어요 · 총 ' + fmtWon(d.total) + '원');
+    }
+  }
+  function downloadReportYearCSV() {
+    var ui = ensureReport();
+    var yd = reportYear(ui.year);
+    var csv = reportYearCSVText(ui.year, yd);
+    if (downloadFile('수납리포트_' + ui.year + '연간.csv', csv, 'text/csv;charset=utf-8')) {
+      toast(ui.year + '년 연간 수납 리포트를 내려받았어요 · 연 누계 ' + fmtWon(yd.total) + '원');
+    }
+  }
+  function printReport() {
+    renderReport(true);
+    if (typeof window !== 'undefined' && window && typeof window.print === 'function') {
+      window.print();
+      return true;
+    }
+    toast('이 브라우저에서는 인쇄 창을 열 수 없어요.');
+    return false;
   }
 
   /* =========================================================
@@ -8207,6 +8783,14 @@
     // 관리자: 휴관생 관리
     el('atab-paused').addEventListener('click', function () { setAdminTab('paused'); });
     el('atab-counsel').addEventListener('click', function () { setAdminTab('counsel'); });
+    el('atab-report').addEventListener('click', function () { setAdminTab('report'); });
+    el('rp-prev').addEventListener('click', function () { reportStep(-1); });
+    el('rp-next').addEventListener('click', function () { reportStep(1); });
+    el('rp-this').addEventListener('click', reportThisMonth);
+    el('rp-year').addEventListener('change', function () { reportSetYear(el('rp-year').value); });
+    el('btn-rp-csv').addEventListener('click', downloadReportCSV);
+    el('btn-rp-csv-year').addEventListener('click', downloadReportYearCSV);
+    el('btn-rp-print').addEventListener('click', printReport);
     bindCounselEvents();
     el('pz-search').addEventListener('input', function () {
       ensurePausedUI().q = el('pz-search').value || '';
@@ -8559,6 +9143,21 @@
       monthLabel: tuitionMonthLabel,
       monthKey: monthKey,
       shiftMonth: shiftMonth
+    },
+    report: {
+      ui: ensureReport,
+      compute: reportMonth,
+      year: reportYear,
+      delta: reportPrevDelta,
+      csvMonth: reportMonthCSVText,
+      csvYear: reportYearCSVText,
+      downloadMonth: downloadReportCSV,
+      downloadYear: downloadReportYearCSV,
+      render: renderReport,
+      step: reportStep,
+      thisMonth: reportThisMonth,
+      setYear: reportSetYear,
+      print: printReport
     },
     bulkSms: {
       limit: BULK_SMS_LIMIT,
