@@ -496,23 +496,24 @@
 
   /* ---------- 월간 출석부 ---------- */
   .mon-bar{display:flex; align-items:center; gap:9px; margin-bottom:10px; flex-wrap:wrap}
-  .mon-nav{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
-  .mon-nav .mon-step{height:38px; padding:0 13px; font-size:12.5px; font-weight:800; border-radius:11px; display:inline-flex; align-items:center; gap:5px}
-  .mon-nav .mon-step .mon-arrow{font-size:9.5px; color:#5b6b85; line-height:1}
+  .mon-nav{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  /* 월 선택: 왼쪽(지난 달) ◀ · 가운데 연·월 · 오른쪽(다음 달) ▶ */
+  .mon-monthsel{display:inline-flex; align-items:center; gap:8px; flex:0 0 auto}
+  .mon-nav .mon-step{height:42px; padding:0 15px; font-size:13px; font-weight:800; border-radius:12px; display:inline-flex; align-items:center; gap:7px; white-space:nowrap}
+  .mon-nav .mon-step .mon-arrow{font-size:12px; color:var(--navy); line-height:1}
+  .mon-nav .mon-step:hover{border-color:#c6d5ef; background:#f4f8ff}
   .mon-nav .mon-step:hover .mon-arrow{color:var(--navy)}
-  .mon-label{font-size:18px; font-weight:900; letter-spacing:-.5px; min-width:132px; text-align:center; font-variant-numeric:tabular-nums; color:var(--navy)}
-  input.mon-pick{height:38px; width:132px; font-size:12px; font-weight:700; border-radius:11px}
-  .mon-quick{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:0 0 13px}
-  .mon-quick .mq-label{font-size:10.5px; font-weight:800; color:#98a2b3; margin-right:2px}
-  .mon-chip{border:1px solid #e3e8f2; background:#fff; color:#475467; font-weight:800; font-size:11.5px; padding:7px 12px; border-radius:999px; cursor:pointer; white-space:nowrap; min-height:34px}
-  .mon-chip:hover{border-color:#c6d5ef; background:#f4f8ff}
-  .mon-chip.now{border-color:#bfe9d4; color:#0b7a55}
-  .mon-chip.active{background:var(--navy); border-color:var(--navy); color:#fff}
+  .mon-monthsel .mon-step{flex:0 0 auto}
+  .mon-label{font-size:19px; font-weight:900; letter-spacing:-.5px; min-width:146px; text-align:center; font-variant-numeric:tabular-nums; color:var(--navy)}
+  input.mon-pick{height:42px; width:132px; font-size:12px; font-weight:700; border-radius:12px}
   select.input.mon-select{width:auto; min-width:172px; height:38px; padding:0 10px}
   .mon-search{width:206px; height:38px}
   .mon-stats{margin-bottom:13px}
   .stats.mon-stats{grid-template-columns:repeat(3,1fr)}
   .mon-stats .stat-val{font-size:27px}
+  .mon-label{cursor:pointer}
+  .mtb-paused{font-size:9.5px; padding:2px 6px; margin-left:5px; vertical-align:middle}
+  table.mtb tr.paused-row td.c-name{background:#fbf8ff}
   .mon-tablewrap{max-height:min(60vh,620px); overflow:auto}
   table.mtb{width:auto; min-width:100%; border-collapse:separate; border-spacing:0; font-size:12px}
   table.mtb th, table.mtb td{padding:0; text-align:center; border-bottom:1px solid #f1f4f9}
@@ -794,7 +795,7 @@
   .rp-ymethods b{color:var(--navy)}
   .rp-print-head{display:none}
   @media print{
-    .topbar, .tabs, .admin-tabs, .admin-lockbar, .admin-pw-banner, .btn, .help, .tab-btn, .icon-btn, .mon-nav .btn, select.mon-select, input.mon-pick, .mon-quick{display:none !important}
+    .topbar, .tabs, .admin-tabs, .admin-lockbar, .admin-pw-banner, .btn, .help, .tab-btn, .icon-btn, .mon-nav .btn, select.mon-select, input.mon-pick{display:none !important}
     #view-admin{padding:0; overflow:visible}
     .panel{box-shadow:none !important; border:1px solid #c9d3e4 !important; break-inside:avoid; page-break-inside:avoid}
     .admin-grid{grid-template-columns:1fr 1fr}
@@ -946,16 +947,19 @@
     #view-admin .tablewrap > table.tb{min-width:540px}
     .tablewrap{-webkit-overflow-scrolling:touch}
     .mon-tablewrap{max-height:min(58vh,520px)}
-    table.mtb .c-name{width:112px; min-width:112px; max-width:112px; padding:6px 7px}
-    .mon-label{font-size:16px; min-width:112px}
-    .mon-nav{width:100%; gap:5px; flex-wrap:wrap}
-    .mon-nav .mon-step{padding:0 9px; font-size:11.5px; flex:0 0 auto; height:36px}
-    .mon-nav #mon-this{margin-left:0 !important; flex:1 1 auto; min-width:72px}
-    input.mon-pick{flex:1 1 130px; width:auto; min-width:0; height:36px}
-    .mon-quick{gap:5px; margin-bottom:10px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; padding-bottom:2px}
-    .mon-quick::-webkit-scrollbar{display:none}
-    .mon-quick .mq-label{display:none}
-    .mon-chip{flex:0 0 auto; min-height:34px; padding:7px 11px}
+    table.mtb .c-name{width:120px; min-width:120px; max-width:120px; padding:6px 7px}
+    /* 폰에서는 이름·띠·휴관 배지가 잘리지 않고 줄바꿈으로 모두 보이게 */
+    table.mtb .c-name .nm{white-space:normal; overflow:visible; text-overflow:clip; line-height:1.3}
+    .mon-nav{width:100%; gap:6px; flex-wrap:wrap}
+    .mon-bar .spacer{display:none}
+    .mon-bar select.input.mon-select{width:100%; min-width:0}
+    /* 폰에서는 ◀ 이전 달 · 연·월 · 다음 달 ▶ 한 줄을 꽉 채워 크게 */
+    .mon-monthsel{width:100%; flex:1 1 100%; gap:5px}
+    .mon-monthsel .mon-step{padding:0 12px; font-size:12px; height:46px}
+    .mon-monthsel .mon-step .mon-arrow{font-size:13px}
+    .mon-monthsel .mon-label{flex:1 1 auto; min-width:0; font-size:17px; min-width:104px}
+    .mon-nav #mon-this{margin-left:0 !important; flex:1 1 auto; min-width:72px; height:40px}
+    input.mon-pick{flex:1 1 130px; width:auto; min-width:0; height:40px}
     select.input.mon-select{min-width:140px}
     .mon-search, input.input.pz-search{width:100%}
     .cs-list{max-height:60vh}
@@ -1627,10 +1631,10 @@
 
         <div id="admin-monthly" style="display:none">
           <div class="mon-bar">
-            <div class="mon-nav">
-              <button class="btn mon-step" id="mon-prev" title="이전 달" aria-label="이전 달"><span class="mon-arrow">◀</span> 이전 달</button>
-              <div class="mon-label" id="mon-label">-</div>
-              <button class="btn mon-step" id="mon-next" title="다음 달" aria-label="다음 달">다음 달 <span class="mon-arrow">▶</span></button>
+            <div class="mon-nav" id="mon-monthsel" role="group" aria-label="보는 달 선택 — 왼쪽은 지난 달, 오른쪽은 다음 달">
+              <button class="btn mon-step" id="mon-prev" title="이전 달" aria-label="이전 달로 이동"><span class="mon-arrow">◀</span><span class="mon-step-txt">이전 달</span></button>
+              <div class="mon-label" id="mon-label" aria-live="polite" title="눌러서 달 직접 선택">-</div>
+              <button class="btn mon-step" id="mon-next" title="다음 달" aria-label="다음 달로 이동"><span class="mon-step-txt">다음 달</span><span class="mon-arrow">▶</span></button>
               <button class="btn btn-ghost btn-sm" id="mon-this">이번 달</button>
               <input type="month" class="input mon-pick" id="mon-pick" aria-label="월 직접 선택">
             </div>
@@ -1642,7 +1646,6 @@
             <button class="btn btn-ghost" id="btn-att-template">📄 출결 양식 CSV</button>
             <input type="file" id="att-import-file" accept=".csv,.xlsx,.xls,text/csv" style="display:none" aria-label="출결기록 파일 선택">
           </div>
-          <div class="mon-quick" id="mon-quick" role="group" aria-label="빠른 월 이동"></div>
 
           <div class="stats mon-stats">
             <div class="stat"><div class="stat-label">📊 총 출석</div><div class="stat-val" id="mon-total">0<small>일</small></div></div>
@@ -1669,6 +1672,8 @@
               <div class="help" style="margin-top:0">
                 칸을 누르면 그 날 출석을 <b>켜고 끌 수 있어요</b>. 키오스크에서 못 찍은 날은 한 번 누르면 <b>주황색 ●</b>로 표시되고, 다시 누르면 지워집니다.
                 등·하원 시각이 있는 기록을 지울 때는 확인을 한 번 묻습니다.<br>
+                보는 달은 위 <b>◀ 이전 달 · 다음 달 ▶</b>로 한 달씩 넘기고, 가운데 연·월을 누르면 달을 바로 고를 수도 있어요. 과거 출석 기록은 달이 바뀌거나 날짜가 지나도 <b>지워지지 않고 월별로 계속 쌓입니다</b>.<br>
+                <b>휴관생</b>도 그 달에 출석한 기록이 있으면 지우지 않고 표 <b>맨 아래</b>에 <b>휴관</b> 배지로 함께 보여 줍니다. 월간 합계·평균과 CSV에도 그대로 들어갑니다.<br>
                 보정은 <b>이 출석부에만</b> 적용되고, 관원의 <b>누적 출석</b>과 승급 진행률은 바뀌지 않아요. 승급 진행률까지 맞추려면 아래 <b>📥 출결 엑셀 동기화</b>로 과거 출석을 한꺼번에 옮기면 누적 출석과 최근 출석일이 그 기록 기준으로 다시 계산됩니다.<br>
                 <b>평균 출석</b>은 그 달에 한 번이라도 출석한 관원을 기준으로 하고, <b>CSV</b>는 화면에 보이는 목록(부서 필터·검색 결과) 그대로 내려받습니다.<br>
                 <b>📥 출결 엑셀 동기화</b>는 학원 관리 프로그램에서 내려받은 1년치 출결기록을 한 번에 옮겨 옵니다. <b>이름+날짜</b> 목록형과 <b>이름+1~31일</b> 달력형을 모두 읽고, 저장 전에 미리보기로 건수를 확인할 수 있어요.
@@ -5761,8 +5766,8 @@
   /* =========================================================
      3-C. 재원생 / 휴관생
      학생 상태: status 'active'(재원생, 기본값) | 'paused'(휴관생)
-     휴관생은 키오스크·미등원·월간 출석부·원비 예상액·승급심사·단체문자에서 빠지고,
-     누적 출석·띠·얼굴 데이터는 그대로 남아 복귀하면 바로 이어진다.
+     휴관생은 키오스크·미등원·원비 예상액·승급심사·단체문자에서 빠지고,
+     누적 출석·띠·얼굴 데이터와 출석 이력은 그대로 남아 복귀하면 바로 이어진다.
      ========================================================= */
   function isPaused(s) { return !!(s && s.status === 'paused'); }
   function isActive(s) { return !isPaused(s); }
@@ -5803,7 +5808,7 @@
     var draft = { date: todayKey(), reason: '' };
     openModal({
       title: s.name + ' 관원을 휴관 처리할까요?',
-      sub: '휴관생은 출석·미등원 집계·월간 출석부·원비 예상액·승급심사·단체문자 대상에서 빠집니다.',
+      sub: '휴관생은 출석·미등원 집계·원비 예상액·승급심사·단체문자 대상에서 빠집니다. 월간 출석부에서는 그 달 출석 기록이 그대로 남아 표 맨 아래에 휴관 배지로 보입니다.',
       body: '<div class="row2">' +
         '<div class="field"><label>휴관일</label><input class="input" id="pz-modal-date" type="date" value="' + esc(todayKey()) + '"></div>' +
         '<div class="field"><label>휴관 사유/메모</label><input class="input" id="pz-modal-reason" maxlength="40" placeholder="예: 개인 사정 3개월"></div>' +
@@ -6523,14 +6528,32 @@
     });
     return out.sort(function (a, b) { return divisionRank(a) - divisionRank(b); });
   }
+  /* 그 달에 출석 기록이 며칠 있는지 — 휴관생도 과거 기록은 지우지 않고 표에 보여 준다 */
+  function monthAttendanceCount(sid, ym) {
+    if (!sid || !/^\d{4}-\d{2}$/.test(String(ym || ''))) { return 0; }
+    var days = monthDaysOf(ym);
+    var n = 0;
+    for (var d = 1; d <= days; d++) {
+      if (isPresentOn(sid, ym + '-' + pad2(d))) { n++; }
+    }
+    return n;
+  }
+  /* 재원생 전부 + 그 달 출석 기록이 있는 휴관생. 재원생 가나다순 다음에 휴관생 가나다순으로 맨 밑에. */
   function monthRows() {
     var m = app.monthly || {};
     var cls = m.className || 'all';
     var q = String(m.q || '').trim();
-    return activeStudents().filter(function (s) {
+    var ym = m.month || monthKey(new Date());
+    return app.students.filter(function (s) {
       if (cls !== 'all' && divisionOf(s) !== cls) { return false; }
-      return matchSearch(s, q);
-    }).sort(rosterSort);
+      if (!matchSearch(s, q)) { return false; }
+      if (isPaused(s)) { return monthAttendanceCount(s.id, ym) > 0; }
+      return true;
+    }).sort(function (a, b) {
+      var pa = isPaused(a) ? 1 : 0, pb = isPaused(b) ? 1 : 0;
+      if (pa !== pb) { return pa - pb; }
+      return String(a.name).localeCompare(String(b.name), 'ko');
+    });
   }
   function monthCellTitle(dateKey, e, future) {
     var head = shortDate(dateKey) + ' (' + DOW_KO[dowOf(dateKey)] + ')';
@@ -6550,57 +6573,15 @@
     var avg = people ? Math.round(total / people * 10) / 10 : 0;
     if (el('mon-avg')) { el('mon-avg').innerHTML = avg + '<small>일</small>'; }
   }
-  function setMonthNote(ym, count, filtered) {
+  function setMonthNote(ym, count, filtered, pausedCount) {
     var note = el('mon-note');
     if (!note) { return; }
     var label = ym.slice(0, 4) + '년 ' + pad2(parseInt(ym.slice(5, 7), 10)) + '월';
-    note.textContent = label + ' · ' + (filtered ? '필터 적용' : '전체 부서') + ' · ' + count + '명';
+    note.textContent = label + ' · ' + (filtered ? '필터 적용' : '전체 부서') + ' · ' + count + '명' +
+      (pausedCount ? ' (휴관 ' + pausedCount + '명 포함)' : '');
   }
 
-  /* ---------- 월 이동: 크게 누르는 이전/다음 달 + 빠른 월 칩 ---------- */
-  function monthChipLabel(ym) {
-    var y = String(ym).slice(0, 4);
-    var m = parseInt(String(ym).slice(5, 7), 10);
-    if (y === String(new Date().getFullYear())) { return m + '월'; }
-    return y + '년 ' + m + '월';
-  }
-  /* 최근 6개월 + 다음 달 + 기록이 있는 최근 달 + 지금 보는 달 (최신순, 최대 9개) */
-  function monthQuickList(selected) {
-    var now = monthKey(new Date());
-    var set = Object.create(null);
-    function add(k) {
-      var v = String(k == null ? '' : k);
-      if (/^\d{4}-\d{2}$/.test(v)) { set[v] = true; }
-    }
-    for (var i = 0; i < 6; i++) { add(shiftMonth(now, -i)); }
-    add(shiftMonth(now, 1));
-    add(selected);
-    var cut = shiftMonth(now, -14);
-    Object.keys(app.attendance || {}).forEach(function (dk) {
-      var v = String(dk).slice(0, 7);
-      if (v >= cut && v <= shiftMonth(now, 1)) { add(v); }
-    });
-    var list = Object.keys(set).sort().reverse();
-    if (list.length > 9) {
-      var top = list.slice(0, 9);
-      if (top.indexOf(selected) === -1) { top[8] = selected; }
-      list = top.sort().reverse();
-    }
-    return list;
-  }
-  function renderMonthQuick(selected) {
-    var box = el('mon-quick');
-    if (!box) { return; }
-    var now = monthKey(new Date());
-    var list = monthQuickList(selected);
-    box.innerHTML = '<span class="mq-label">바로 가기</span>' + list.map(function (ym) {
-      var cls = 'mon-chip' + (ym === selected ? ' active' : '') + (ym === now ? ' now' : '');
-      return '<button type="button" class="' + cls + '" data-mpick="' + esc(ym) + '"' +
-        ' aria-label="' + esc(ym.slice(0, 4) + '년 ' + parseInt(ym.slice(5, 7), 10) + '월 출석부 보기') + '"' +
-        (ym === selected ? ' aria-current="true"' : '') + '>' + esc(monthChipLabel(ym)) +
-        (ym === now ? ' · 이번 달' : '') + '</button>';
-    }).join('');
-  }
+  /* ---------- 월 이동: 좌우 화살표(◀ 이전 달 · 다음 달 ▶)로만 한 달씩 ---------- */
 
   function renderMonthly() {
     var tbody = el('mon-tbody');
@@ -6611,7 +6592,6 @@
       el('mon-label').textContent = ym.slice(0, 4) + '년 ' + pad2(parseInt(ym.slice(5, 7), 10)) + '월';
     }
     if (el('mon-pick') && el('mon-pick').value !== ym) { el('mon-pick').value = ym; }
-    renderMonthQuick(ym);
 
     var sel = el('mon-class');
     var classes = monthClasses();
@@ -6655,8 +6635,10 @@
       return;
     }
 
-    var totalDays = 0, people = 0;
+    var totalDays = 0, people = 0, pausedRows = 0;
     var html = rows.map(function (s) {
+      var paused = isPaused(s);
+      if (paused) { pausedRows++; }
       var cells = '';
       var cnt = 0;
       for (var i = 1; i <= days; i++) {
@@ -6678,11 +6660,12 @@
       totalDays += cnt;
       if (cnt > 0) { people++; }
       var grade = studentGrade(s);
-      return '<tr>' +
-        '<td class="c-name" title="' + esc(s.name + ' · ' + studentLabel(s) + (grade ? ' · ' + grade : '')) + '">' +
+      return '<tr' + (paused ? ' class="paused-row"' : '') + '>' +
+        '<td class="c-name" title="' + esc(s.name + ' · ' + studentLabel(s) + (grade ? ' · ' + grade : '') + (paused ? ' · 휴관생 (그 달 출석 기록 보존)' : '')) + '">' +
         '<div class="nm">' + esc(s.name) +
-        '<span class="belt-badge mtb-belt">' + beltSwatchHtml(s.belt) + +
-        esc(s.belt || '미지정') + '</span></div>' +
+        '<span class="belt-badge mtb-belt">' + beltSwatchHtml(s.belt) +
+        esc(s.belt || '미지정') + '</span>' +
+        (paused ? '<span class="chip pause mtb-paused">휴관</span>' : '') + '</div>' +
         '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) + '</div></td>' +
         cells +
         '<td class="c-sum mtb-sum">' + cnt + '<small>일</small></td>' +
@@ -6691,7 +6674,7 @@
     tbody.innerHTML = html;
 
     renderMonthStats(totalDays, people);
-    setMonthNote(ym, rows.length, filtered);
+    setMonthNote(ym, rows.length, filtered, pausedRows);
   }
 
   function syncRecordFromHistory(sid, dateKey) {
@@ -6751,7 +6734,7 @@
     return str;
   }
   function monthCSVText(ym, days, rows) {
-    var head = ['관원', '부서', '수업', '띠', '형제할인'];
+    var head = ['관원', '부서', '수업', '띠', '형제할인', '상태'];
     for (var d = 1; d <= days; d++) {
       var dk = ym + '-' + pad2(d);
       head.push(d + '일(' + DOW_KO[dowOf(dk)] + ')');
@@ -6759,7 +6742,7 @@
     head.push('월 합계');
     var lines = [head.map(csvCell).join(',')];
     (rows || []).forEach(function (s) {
-      var line = [s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', siblingOf(s) ? '형제' : ''];
+      var line = [s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', siblingOf(s) ? '형제' : '', isPaused(s) ? '휴관' : '재원'];
       var cnt = 0;
       for (var i = 1; i <= days; i++) {
         var key = ym + '-' + pad2(i);
@@ -9005,9 +8988,7 @@
     return app.pausedUI;
   }
   function pausedSort(a, b) {
-    var da = a.pausedDate || '', db = b.pausedDate || '';
-    if (da !== db) { return db.localeCompare(da); }
-    return a.name.localeCompare(b.name, 'ko');
+    return String(a.name).localeCompare(String(b.name), 'ko');
   }
   function pausedSummary() {
     var list = pausedStudents();
@@ -9080,7 +9061,7 @@
     var rows = pausedRows();
     if (el('pz-note')) {
       el('pz-note').textContent = sum.total
-        ? ((u.q ? '검색 ' + rows.length + '명 · ' : '') + '최근 휴관 순 · 휴관 90일 넘으면 복귀 안내를 보내 보세요')
+        ? ((u.q ? '검색 ' + rows.length + '명 · ' : '') + '이름 가나다순 · 휴관 90일이 넘으면 복귀 안내를 보내 보세요')
         : '휴관생 없음';
     }
     if (!rows.length) {
@@ -11185,13 +11166,24 @@
         renderMonthly();
       });
     }
-    if (el('mon-quick')) {
-      el('mon-quick').addEventListener('click', function (e) {
-        var b = e.target.closest('[data-mpick]');
-        if (!b) { return; }
-        var v = b.getAttribute('data-mpick');
-        if (!/^\d{4}-\d{2}$/.test(v)) { return; }
-        ensureMonthly().month = v;
+    if (el('mon-label')) {
+      el('mon-label').addEventListener('click', function () {
+        var p = el('mon-pick');
+        if (!p) { return; }
+        if (typeof p.showPicker === 'function') {
+          try { p.showPicker(); return; } catch (e) {}
+        }
+        if (typeof p.focus === 'function') { p.focus(); }
+      });
+    }
+    if (el('mon-monthsel')) {
+      // 초점이 월 선택 영역에 있을 때 ← → 키로도 한 달씩
+      el('mon-monthsel').addEventListener('keydown', function (e) {
+        var k = e.key || '';
+        if (k !== 'ArrowLeft' && k !== 'ArrowRight') { return; }
+        if (e.target && e.target.tagName === 'INPUT') { return; }
+        if (e.preventDefault) { e.preventDefault(); }
+        ensureMonthly().month = shiftMonth(app.monthly.month, k === 'ArrowLeft' ? -1 : 1);
         renderMonthly();
       });
     }
@@ -11951,10 +11943,11 @@
       render: renderMonthly,
       days: monthDaysOf,
       shift: shiftMonth,
-      quick: monthQuickList,
-      chipLabel: monthChipLabel,
+      records: monthAttendanceCount,
       current: function () { return ensureMonthly().month; },
-      rows: monthRows
+      rows: monthRows,
+      csv: monthCSVText,
+      paused: isPaused
     },
     gukgiwon: {
       render: renderGukgiwon,
