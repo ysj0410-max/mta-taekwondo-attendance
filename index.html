@@ -314,7 +314,7 @@
   .nm{font-weight:800; color:var(--ink)}
   .sub{font-size:10.5px; color:var(--muted); font-weight:600}
   .cell-time{font-variant-numeric:tabular-nums; font-weight:800}
-  .chip{display:inline-block; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; background:#f0f3f9; color:var(--muted)}
+  .chip{display:inline-block; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; background:#f0f3f9; color:var(--muted); white-space:nowrap}
   .chip.ok{background:#e6f7f0; color:#0b7a55}
   .chip.wait{background:#fff4e6; color:#a35b00}
   .chip.off{background:#fdecec; color:#c0392b}
@@ -487,10 +487,18 @@
 
   /* 표 안 작은 컨트롤 */
   .input.mini{height:30px; font-size:11.5px; padding:0 6px; border-radius:9px; background:#fff}
-  input.gk-grade-input{width:86px; text-align:center; font-weight:800; color:var(--navy)}
-  input.gk-grade-input::placeholder{font-weight:600; color:#a9b3c4}
+  select.gk-grade-input{width:92px; min-width:92px; font-weight:800; color:var(--navy)}
+  /* 국기원 표: 품·단·급수·상태 고르는 칸이 잘리지 않게 폭을 잡아 둔다 */
+  #admin-gukgiwon table.tb th, #admin-gukgiwon table.tb td{padding:9px 6px}
+  #gk-table select.input.mini{min-width:58px}
+  #gk-table select[data-gk="gukStatus"]{min-width:80px}
+  #gk-table input[type="date"].input.mini{width:112px; min-width:112px}
+  #gk-table td:first-child{min-width:82px; white-space:nowrap}
   .ck{width:17px; height:17px; accent-color:#16294f; cursor:pointer; vertical-align:middle}
-  .grade-chip{font-size:10px; font-weight:800; color:#475467; background:#eef2f9; padding:2px 6px; border-radius:6px; margin-left:4px}
+  .grade-chip{font-size:10px; font-weight:800; color:#475467; background:#eef2f9; padding:2px 6px; border-radius:6px; margin-left:4px; white-space:nowrap}
+  /* 승급심사 표: 띠·급수 배지와 다음 띠·상태가 두 줄로 꺾이지 않게 한 줄로 */
+  #promo-table td:nth-child(3), #promo-table td:nth-child(4){white-space:nowrap}
+  #promo-table td:nth-child(3) .sub{white-space:nowrap}
   .bulk-bar{display:flex; align-items:center; gap:8px; background:#eef4ff; border:1px solid #d3e0f7; border-radius:12px; padding:8px 11px; margin:0 0 10px; flex-wrap:wrap}
   .bulk-bar b{font-size:12px; color:var(--navy)}
 
@@ -945,6 +953,11 @@
     .belt-row .input{height:32px; font-size:11.5px}
     /* 표는 칸을 눌러 담지 말고 표 안에서 옆으로 넘겨 봄 */
     #view-admin .tablewrap > table.tb{min-width:540px}
+    /* 승급심사 표: 여섯 칸이 한 줄에 깔끔하게 — 관원 설명도 꺾이지 않게 */
+    #admin-promotion table.tb{min-width:560px}
+    #promo-table td:nth-child(2) .sub{white-space:nowrap}
+    /* 국기원 표: 칸이 잘리지 않게 표 폭을 넓히고 안에서 옆으로 넘겨 봄 */
+    #admin-gukgiwon table.tb{min-width:680px}
     .tablewrap{-webkit-overflow-scrolling:touch}
     .mon-tablewrap{max-height:min(58vh,520px)}
     table.mtb .c-name{width:120px; min-width:120px; max-width:120px; padding:6px 7px}
@@ -1527,7 +1540,7 @@
                 </div>
                 <div class="tablewrap">
                   <table class="tb">
-                    <thead><tr><th style="width:28px"><input type="checkbox" class="ck" id="promo-check-all" aria-label="전체 선택"></th><th>관원</th><th>현재 띠 · 급수</th><th>누적 출석</th><th>다음 띠</th><th>상태</th><th style="width:142px"></th></tr></thead>
+                    <thead><tr><th style="width:28px"><input type="checkbox" class="ck" id="promo-check-all" aria-label="전체 선택"></th><th>관원</th><th>현재 띠 · 급수</th><th>다음 띠</th><th>상태</th><th style="width:142px"></th></tr></thead>
                     <tbody id="promo-table"></tbody>
                   </table>
                 </div>
@@ -2292,12 +2305,8 @@
   }
   function divisionRank(d) { var i = DIVISIONS.indexOf(d); return i < 0 ? 99 : i; }
   function courseRank(c) { var i = COURSES.indexOf(c); return i < 0 ? 99 : i; }
-  /* 명단 정렬: 부서(유치부→성인부) → 수업(8회→입시반) → 이름 */
+  /* 명단 정렬: 이름 가나다(ㄱㄴㄷ)순 — 앱의 모든 관원 명단이 이 순서를 따른다 */
   function rosterSort(a, b) {
-    var da = divisionRank(divisionOf(a)), db = divisionRank(divisionOf(b));
-    if (da !== db) { return da - db; }
-    var ca = courseRank(courseOf(a)), cb = courseRank(courseOf(b));
-    if (ca !== cb) { return ca - cb; }
     return String(a.name).localeCompare(String(b.name), 'ko');
   }
   function siblingBadge(s) {
@@ -3532,7 +3541,8 @@
 
   function renderStudentsList() {
     var q = el('name-search') ? el('name-search').value : '';
-    var list = activeStudents().filter(function (s) { return matchSearch(s, q); });
+    var list = activeStudents().filter(function (s) { return matchSearch(s, q); })
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); });
     var wrap = el('stu-list');
     if (!list.length) {
       wrap.innerHTML = '<div class="log-empty" style="padding:18px 10px"><span>🔍</span>검색 결과가 없어요.</div>';
@@ -3587,7 +3597,7 @@
     if (pin.length !== 4) { return; }
     var matches = activeStudents().filter(function (s) {
       return digitsOnly(s.phone).slice(-4) === pin;
-    });
+    }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); });
     var listEl = el('cand-list');
 
     if (matches.length === 1) {
@@ -3781,7 +3791,9 @@
 
   function openSimPicker() {
     if (!app.students.length) { toast('명단이 비어 있어요. 관리자 탭에서 관원을 추가해 주세요.'); return; }
-    var body = '<div class="pick-grid">' + app.students.map(function (s) {
+    var body = '<div class="pick-grid">' + app.students.slice()
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); })
+      .map(function (s) {
       return '<button class="pick" data-pick="' + esc(s.id) + '">' +
         '<b>' + esc(s.name) + '</b><span>' + esc(s.belt || '') + '</span>' +
         '<span>' + esc(studentLabel(s)) + '</span></button>';
@@ -4639,7 +4651,6 @@
       if (filter === 'paused') { return isPaused(s); }
       return true;
     }).slice().sort(function (a, b) {
-      if (isPaused(a) !== isPaused(b)) { return isPaused(a) ? 1 : -1; }
       return a.name.localeCompare(b.name, 'ko');
     });
 
@@ -6217,9 +6228,7 @@
     Object.keys(sel).forEach(function (id) { if (!byId(id)) { delete sel[id]; } });
 
     var rows = activeStudents().slice().sort(function (a, b) {
-      var sa = promoState(a), sb = promoState(b);
-      if (sa.target !== sb.target) { return sa.target ? -1 : 1; }
-      return (sb.count - sa.count) || a.name.localeCompare(b.name, 'ko');
+      return a.name.localeCompare(b.name, 'ko');
     }).filter(function (s) {
       var st = promoState(s);
       if (filter === 'target') { return st.target; }
@@ -6229,7 +6238,7 @@
 
     var tbody = el('promo-table');
     if (!rows.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="7">' +
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">' +
         (filter === 'target' ? '지금은 모두 최고 띠예요. 아래 띠를 차고 있는 재원생이 생기면 여기에 올라옵니다.' : '등록된 관원이 없습니다') +
         '</td></tr>';
       renderBulkBar();
@@ -6243,9 +6252,8 @@
       return '<tr>' +
         '<td><input type="checkbox" class="ck" data-check="' + esc(s.id) + '"' + (sel[s.id] ? ' checked' : '') + ' aria-label="' + esc(s.name) + ' 선택"></td>' +
         '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(studentLabel(s)) + '</div></td>' +
-        '<td>' + beltSwatchHtml(s.belt) + ' <span class="sub" style="font-size:12px;color:#344054;font-weight:800">' + esc(s.belt || '미지정') + '</span>' +
+        '<td style="white-space:nowrap">' + beltSwatchHtml(s.belt) + ' <span class="sub" style="font-size:12px;color:#344054;font-weight:800;white-space:nowrap">' + esc(s.belt || '미지정') + '</span>' +
         (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
-        '<td><span class="cell-time">' + st.count + '</span><span class="sub">회</span></td>' +
         '<td>' + (st.next ? '<span class="sub" style="font-size:12px;color:#344054">' + esc(st.next) + (beltGrade(st.next) ? ' · ' + esc(beltGrade(st.next)) : '') + '</span>' : '<span class="chip">-</span>') + '</td>' +
         '<td>' + statusChip + expected + '</td>' +
         '<td style="white-space:nowrap">' +
@@ -6330,6 +6338,41 @@
         return '<option value="' + esc(p) + '"' + (p === v ? ' selected' : '') + '>' + esc(p) + '</option>';
       }).join('') + '</select>';
   }
+  /* 유품자 급수 — 1품은 12급까지 · 2품은 24급까지 · 3품은 36급까지 */
+  var POOM_GRADE_MAX = { '1품': 12, '2품': 24, '3품': 36 };
+  var PLAIN_GRADES = ['10급', '9급', '8급', '7급', '6급', '5급', '4급', '3급', '2급', '1급'];
+  function poomGradesOf(poom) {
+    var max = POOM_GRADE_MAX[poom] || 0;
+    var out = [];
+    for (var i = 1; i <= max; i++) { out.push(poom + ' ' + i + '급'); }
+    return out;
+  }
+  function poomGradeGroups(poom) {
+    if (POOM_GRADE_MAX[poom]) { return [{ label: '', items: poomGradesOf(poom) }]; }
+    return [
+      { label: '유품자 급수', items: poomGradesOf('1품').concat(poomGradesOf('2품'), poomGradesOf('3품')) },
+      { label: '일반 급수', items: PLAIN_GRADES.slice() }
+    ];
+  }
+  /* 급수 선택 칸 — 현재 품·단에 맞는 유품자 급수 목록을 바로 고를 수 있다 */
+  function gradeSelect(s) {
+    var poom = (s && s.poomDan) || '없음';
+    var cur = String((s && s.grade) || '');
+    var seen = { '': 1 };
+    var opts = ['<option value=""' + (cur ? '' : ' selected') + '>미지정</option>'];
+    poomGradeGroups(poom).forEach(function (g) {
+      var body = g.items.map(function (v) {
+        seen[v] = 1;
+        return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(v) + '</option>';
+      }).join('');
+      opts.push(g.label ? '<optgroup label="' + esc(g.label) + '">' + body + '</optgroup>' : body);
+    });
+    if (cur && !seen[cur]) {
+      opts.splice(1, 0, '<option value="' + esc(cur) + '" selected>' + esc(cur) + ' (기존)</option>');
+    }
+    return '<select class="input mini gk-grade-input" data-gk="grade" data-sid="' + esc(s.id) + '" aria-label="' + esc(s.name) + ' 급수">' +
+      opts.join('') + '</select>';
+  }
   function statusSelect(sid, value) {
     var v = value || 'none';
     return '<select class="input mini" data-gk="gukStatus" data-sid="' + esc(sid) + '">' +
@@ -6367,7 +6410,7 @@
       return '<tr>' +
         '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(s.belt || '') + (grade ? ' · ' + esc(grade) : '') + '</div></td>' +
         '<td>' + poomSelect(s.id, 'poomDan', s.poomDan) + '</td>' +
-        '<td><input class="input mini gk-grade-input" data-gk="grade" data-sid="' + esc(s.id) + '" maxlength="12" list="grade-list" value="' + esc(s.grade || '') + '" placeholder="' + esc(beltGrade(s.belt) || '예: 7급') + '" aria-label="' + esc(s.name) + ' 급수"></td>' +
+        '<td>' + gradeSelect(s) + '</td>' +
         '<td>' + poomSelect(s.id, 'targetPoomDan', s.targetPoomDan) + '</td>' +
         '<td>' + statusSelect(s.id, gkStatusOf(s)) + '</td>' +
         '<td><input type="date" class="input mini" data-gk="gukExamDate" data-sid="' + esc(s.id) + '" value="' + esc(s.gukExamDate || '') + '"></td>' +
@@ -9410,8 +9453,6 @@
       list = app.students.filter(function (s) {
         return matchSearch(s, query);
       }).sort(function (a, b) {
-        var pa = isPaused(a) ? 1 : 0, pb = isPaused(b) ? 1 : 0;
-        if (pa !== pb) { return pa - pb; }
         return String(a.name).localeCompare(String(b.name), 'ko');
       }).slice(0, 8);
     }
@@ -11021,7 +11062,7 @@
       var val = f.value;
       if (field === 'gukStatus' && !GK_STATUS[val]) { val = 'none'; }
       if (field === 'grade') {
-        // 급수: 비우면 띠 기준 자동값으로 돌아간다 (student.grade 하나만 고친다)
+        // 급수: 목록에서 고른 유품자·일반 급수를 student.grade 하나에 저장한다 (미지정이면 띠 기준 자동값)
         val = String(val == null ? '' : val).trim().slice(0, 12);
         s.grade = val;
         saveStudents();
@@ -11030,7 +11071,8 @@
         renderPromotion();
         renderKioskInfo();
         renderLog();
-        toast(s.name + ' 관원 급수를 ' + (val || '띠 기준 자동(' + (studentGrade(s) || '없음') + ')') + '(으)로 저장했어요');
+        toast(s.name + ' 관원 급수를 ' +
+          (val ? val + '(으)로' : '미지정(띠 기준 ' + (studentGrade(s) || '없음') + ')으로') + ' 저장했어요');
         return;
       }
       s[field] = val;
@@ -11956,7 +11998,9 @@
       csv: gkCSVText,
       download: downloadGkCSV,
       dateText: gkDateText,
-      notice: buildGukNotice
+      notice: buildGukNotice,
+      gradeSelect: gradeSelect,
+      poomGrades: poomGradesOf
     },
     bulkSms: {
       limit: BULK_SMS_LIMIT,
