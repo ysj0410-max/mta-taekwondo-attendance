@@ -4070,7 +4070,7 @@
       title: s.name + ' 관원을 재원으로 복귀시킬까요?',
       sub: '복귀하면 출석·원비·단체문자 대상에 다시 포함됩니다.',
       body: '<div class="help" style="margin-top:0">누적 출석 <b>' + (Number(s.attendCount) || 0) + '회</b> · 띠 <b>' + esc(s.belt || '미지정') +
-        '</b> · 얼굴 등록 <b>' + (app.faces[s.id] ? '있음' : '없음') + '</b>은 그대로 이어집니다.' +
+        '</b> · 얼굴 등록 <b>' + (app.faces[s.id] ? '있음' : '없음') + '</b> — 모두 그대로 이어집니다.' +
         (s.pauseReason ? '<br>휴관 사유: ' + esc(s.pauseReason) : '') + '</div>',
       actions: [
         { label: '취소', value: null, kind: 'btn-ghost' },
