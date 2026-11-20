@@ -5157,10 +5157,14 @@
       var b = String(s.belt || '').trim();
       if (b && beltNames.indexOf(b) === -1) { beltNames.push(b); }
     });
-    belts().forEach(function (b) {
-      if (b && b.name && beltNames.indexOf(b.name) === -1 && app.students.some(function (s) { return s.belt === b.name; })) {
-        beltNames.push(b.name);
-      }
+    // 띠 체계 순서대로 (체계에 없는 띠는 뒤로)
+    var beltOrder = {};
+    belts().forEach(function (b, i) { if (b && b.name) { beltOrder[b.name] = i; } });
+    beltNames.sort(function (a, b) {
+      var ia = beltOrder[a] === undefined ? 999 : beltOrder[a];
+      var ib = beltOrder[b] === undefined ? 999 : beltOrder[b];
+      if (ia !== ib) { return ia - ib; }
+      return a.localeCompare(b, 'ko');
     });
     if (beltSel) {
       var bopts = '<option value="all">전체 띠</option>' + beltNames.map(function (b) {
