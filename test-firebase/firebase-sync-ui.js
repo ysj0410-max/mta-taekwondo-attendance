@@ -28,6 +28,7 @@
     queueOpen: false,
     auth: null,
     busy: false,
+    connecting: null,
     msg: '',
     msgKind: '',
     timer: null
@@ -180,6 +181,8 @@
   }
 
   function connectFirestore() {
+    /* 연결 중에 「설정 저장·연결」을 또 눌러도 같은 연결을 기다린다 (앱 중복 생성 방지) */
+    if (S.connecting) { return S.connecting; }
     var v = FB.validateConfig(S.cfg.config || {});
     if (!v.ok) {
       S.msg = '⚠️ 설정을 확인해 주세요: ' + v.errors.join(' / ');
@@ -206,7 +209,7 @@
       showError('⚠️ 연결하지 못했습니다: ', err);
       return Promise.resolve(false);
     }
-    return connecting.then(function (adapter) {
+    var result = connecting.then(function (adapter) {
       try {
         S.adapter = adapter;
         var engine = makeEngine(adapter);
@@ -259,6 +262,10 @@
       renderAll();
       return false;
     });
+    S.connecting = result;
+    result.then(function () { if (S.connecting === result) { S.connecting = null; } },
+      function () { if (S.connecting === result) { S.connecting = null; } });
+    return result;
   }
 
   function disconnect() {
