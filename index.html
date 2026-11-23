@@ -9119,31 +9119,25 @@
     var freeList = function (list) {
       return (list || []).filter(function (s) { return !used[s.id]; });
     };
-    /* 같은 이름이 여럿이면 파일의 칸(재원 / 휴관·퇴관)에 맞는 쪽을 먼저 */
+    /* 같은 이름이 여럿일 때 — 구간(재원/휴관)으로 가린 뒤에는 명단 순서대로 */
     var pickFrom = function (list, preferPaused) {
       var free = freeList(list);
       if (free.length <= 1) { return free[0] || null; }
       var pref = free.filter(function (s) { return preferPaused ? isPaused(s) : !isPaused(s); });
       return pref[0] || free[0];
     };
-    /* 같은 이름이 여럿일 때 고를 수 있는지 — 구간으로 가르거나 숫자로 구분된 경우만 */
-    var pickPool = function (list, preferPaused) {
-      var free = freeList(list);
-      if (free.length <= 1) { return free[0] || null; }
-      var pref = free.filter(function (s) { return preferPaused ? isPaused(s) : !isPaused(s); });
-      if (pref.length === 1) { return pref[0]; }
-      return null;
-    };
     var items = [], unmatched = [], ambiguous = [];
     ((parsed && parsed.rows) || []).forEach(function (row) {
       var k = row.name;
       var preferPaused = !!row.pausedSection;
-      var s = pickPool(byKey[k], preferPaused);
-      if (!s && freeList(byKey[k]).length > 1 && /\d$/.test(k)) {
-        s = pickFrom(byKey[k], preferPaused);      // 김연우7·김연우8 처럼 숫자로 구분한 동명이인
-      } else if (!s && freeList(byKey[k]).length > 1 && !/\d$/.test(k)) {
-        ambiguous.push(row.name);
+      /* 어느 쪽인지 가를 수 없는 동명이인은 알려만 두고, 명단 순서대로 연결한다
+         (그래야 다시 올려도 새 관원을 만들지 않는다) */
+      var pool = freeList(byKey[k]);
+      if (pool.length > 1 && !/\d$/.test(k)) {
+        var pref = pool.filter(function (s) { return preferPaused ? isPaused(s) : !isPaused(s); });
+        if (pref.length !== 1) { ambiguous.push(row.name); }
       }
+      var s = pickFrom(byKey[k], preferPaused);
       if (!s) {
         var base = k.replace(/\d+$/, '');
         if (base && base !== k) {
@@ -9192,7 +9186,7 @@
       '명단에 있음 <b>' + plan.matched + '명</b> · 명단 외 <b>' + plan.unmatched.length + '명</b>' +
       (plan.unmatched.length ? ' (' + esc(unknown) +
         (plan.unmatched.length > 8 ? ' 외 ' + (plan.unmatched.length - 8) + '명' : '') + ')' : '') +
-      (plan.ambiguous.length ? '<br>동명이인이라 못 가른 이름: ' + esc(plan.ambiguous.slice(0, 5).join(', ')) : '') +
+      (plan.ambiguous.length ? '<br>동명이인이라 가릴 수 없는 이름은 명단 순서대로 연결: ' + esc(plan.ambiguous.slice(0, 5).join(', ')) : '') +
       (parsed.pausedRows ? '<br>「휴관 및 퇴관자」 칸 아래 <b>' + parsed.pausedRows + '명</b>은 휴관생으로 연결·등록하고, 「원비 날짜」 ' + dayCount + '명도 함께 맞춥니다.' : '') +
       (parsed.pausedRows ? '<br>' : '<br>이 파일의 「원비 날짜」 <b>' + dayCount + '명</b>을 「🥋 원생 관리」의 원비 날짜로도 맞춥니다.<br>') +
       '새로 넣을 기록 <b>' + fmtWon(add) + '칸</b> · 이미 있어 그대로 둘 <b>' + fmtWon(keep) + '칸</b>' +
@@ -9299,6 +9293,9 @@
     if (!parsed || !parsed.ok || !parsed.rows || !parsed.rows.length) { return out; }
     var plan = tuitionSyncMatch(parsed);
     var touched = {};
+    var idsInUse = {};
+    (app.students || []).forEach(function (s) { idsInUse[s.id] = true; });
+    var idSeq = 0;
 
     /* 1) 관원 연결 · 새로 등록 · 원비 날짜·수업·형제할인·비고 */
     plan.items.forEach(function (it) {
@@ -9307,6 +9304,12 @@
         /* 「휴관 및 퇴관자」 칸 아래 이름은 파일이 휴관생이라고 말하므로 휴관생으로 등록 */
         var makePaused = it.row.pausedSection ? true : (missing === 'paused');
         it.student = attCreateStudent(it.row.name, '', makePaused);
+        /* 같은 밀리초에 여러 명을 만들 때 id 가 겹치지 않게 */
+        if (idsInUse[it.student.id]) {
+          idSeq++;
+          it.student.id = it.student.id + 'i' + idSeq;
+        }
+        idsInUse[it.student.id] = true;
         out.created++;
         if (makePaused) { out.createdPaused++; }
       }
