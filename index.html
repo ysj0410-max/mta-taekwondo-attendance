@@ -450,6 +450,8 @@
   .att-filters .input{height:34px; flex:0 1 190px; min-width:140px; padding:0 11px; font-size:12px; border-radius:10px}
   .pchip{border:1px solid #e3e8f2; background:#f8fafd; color:#5b6b85; font-weight:800; font-size:11.5px; padding:7px 12px; border-radius:999px; cursor:pointer}
   .pchip.active{background:var(--navy); border-color:var(--navy); color:#fff}
+  /* 🛌 휴관생 납부 — 재원생 칩과 색으로 구분 */
+  .pchip.tu-paused-chip.active{background:#6b4fa8; border-color:#6b4fa8}
   .belt-head, .belt-row{display:grid; grid-template-columns:20px 172px minmax(56px,1fr) 54px 26px 26px 26px; gap:5px; align-items:center}
   .belt-head{font-size:9.5px; font-weight:800; color:var(--muted); padding:0 1px 7px; text-align:center}
   .belt-head span:nth-child(3){text-align:left}
@@ -689,6 +691,32 @@
   .tu-mbtn.on{background:var(--mint); border-color:var(--mint); color:#fff; box-shadow:0 1px 4px rgba(18,184,134,.28)}
   .tu-act{white-space:nowrap}
   .tu-act .btn{margin-right:3px}
+  .tu-year-btn{margin-left:4px; background:#f4f7fd; border:1px solid #dde4f0; color:#5b6b85; font-weight:800; font-size:9.5px; padding:1px 5px; border-radius:7px; cursor:pointer; white-space:nowrap; line-height:1.35; vertical-align:1px}
+  .tu-year-btn:hover{background:#eef4ff; border-color:#c6d5ef; color:#1d4ed8}
+  table.tub .tub-paused{font-size:10px; padding:2px 7px; margin-left:1px}
+  /* 📅 원생별 1년 납부 조회 */
+  .sy-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:9px}
+  .sy-year{display:flex; align-items:center; gap:6px}
+  .sy-year b{font-size:14px; color:var(--navy); min-width:64px; text-align:center}
+  .sy-bar .input{flex:1 1 180px; min-width:150px}
+  .sy-list{display:flex; flex-direction:column; gap:4px; max-height:188px; overflow:auto; margin-bottom:10px}
+  .sy-item{display:flex; align-items:center; gap:8px; justify-content:space-between; width:100%; background:#fbfcff; border:1px solid #e5eaf4; border-radius:10px; padding:7px 10px; cursor:pointer; text-align:left; font:inherit}
+  .sy-item:hover{border-color:#c6d5ef; background:#f5f9ff}
+  .sy-item.on{border-color:#6b4fa8; background:#f5f1ff}
+  .sy-item-nm{font-weight:800; font-size:12.5px; display:inline-flex; align-items:center; gap:5px}
+  .sy-head{border:1px solid #e6ebf4; background:#fafbff; border-radius:12px; padding:9px 11px; margin-bottom:8px}
+  .sy-head .sub{font-size:11.5px; color:var(--muted); font-weight:700; margin-top:2px}
+  .sy-sum{font-size:11.5px; font-weight:800; color:#344054; margin-top:5px}
+  .sy-tablewrap{max-height:min(44vh,350px); overflow:auto; border:1px solid #e6ebf4; border-radius:10px}
+  table.sy-table{width:100%; min-width:470px; font-size:12px}
+  table.sy-table th{position:sticky; top:0; background:#f7f9fd; z-index:1; font-size:11px}
+  table.sy-table td{padding:6px 8px}
+  table.sy-table tr.sy-row{cursor:pointer}
+  table.sy-table tr.sy-row:hover td{background:#f5f9ff}
+  table.sy-table tr.sy-row.none td{color:#98a2b3}
+  table.sy-table tr.sy-row.paid td:nth-child(2){color:#0ca678; font-weight:800}
+  table.sy-table tr.sy-row.exempt td:nth-child(2){color:#6b4fa8; font-weight:800}
+  .sy-memo{max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .tu-note{font-size:10.5px; font-weight:700; color:#8a94a6}
   .fee-sec{border-top:1px solid #e8edf5; margin-top:14px; padding-top:13px}
   .fee-sec-head{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:10px}
@@ -1941,8 +1969,14 @@
             <div class="spacer"></div>
             <select class="input mon-select" id="tu-class" aria-label="부서 필터"><option value="all">전체 부서</option></select>
             <input class="input mon-search" id="tu-search" placeholder="🔍 이름·초성 검색" autocomplete="off" aria-label="관원 이름 검색">
+            <select class="input mon-select" id="tu-sort" aria-label="정렬 방식">
+              <option value="name">이름순</option>
+              <option value="tuitionDay">원비 날짜순 (1일~31일)</option>
+              <option value="paidDate">납부일순 (최근순)</option>
+            </select>
             <button class="btn" id="btn-tu-settings">⚙️ 원비 설정</button>
             <button class="btn" id="btn-tu-fee-settings">💵 수업별 원비</button>
+            <button class="btn" id="btn-tu-year">📅 원생별 1년 조회</button>
             <button class="btn btn-primary" id="btn-tu-csv">📥 원비 내역 CSV 다운로드</button>
             <button class="btn btn-mint" id="btn-tu-import">📤 원비 엑셀/CSV 동기화</button>
             <input type="file" id="tu-import-file" accept=".csv,.xlsx,.xls,text/csv" style="display:none" aria-label="원비 명단 파일 선택">
@@ -2028,6 +2062,7 @@
                 <button class="pchip" data-tfilter="unpaid">미납</button>
                 <button class="pchip" data-tfilter="paid">완납</button>
                 <button class="pchip" data-tfilter="exempt">면제·휴원</button>
+                <button class="pchip tu-paused-chip" data-tfilter="paused" id="tu-paused-chip" title="휴관생이 낸 원비 기록만 따로 봅니다 · 위 요약 카드는 재원생 기준">🛌 휴관생 납부</button>
               </div>
               <div class="bulk-bar" id="tu-bulk">
                 <b id="tu-bulk-count">선택 없음</b>
@@ -8363,7 +8398,7 @@
 
   function ensureTuition() {
     if (!app.tuitionUI) {
-      app.tuitionUI = { month: monthKey(new Date()), className: 'all', status: 'all', method: 'all', q: '', selected: {} };
+      app.tuitionUI = { month: monthKey(new Date()), className: 'all', status: 'all', method: 'all', q: '', sort: 'name', selected: {} };
     }
     return app.tuitionUI;
   }
@@ -8418,6 +8453,40 @@
   }
 
   function tuitionSort(a, b) { return rosterSort(a, b); }
+  /* 정렬 선택 — 이름순(기본) · 원비 날짜순(1일~31일) · 납부일순(최근순) */
+  var TUITION_SORTS = {
+    name: '이름순',
+    tuitionDay: '원비 날짜순 (1일~31일)',
+    paidDate: '납부일순 (최근순)'
+  };
+  function tuitionSortMode() {
+    var u = ensureTuition();
+    return TUITION_SORTS[u.sort] ? u.sort : 'name';
+  }
+  /* 그 달 납부일 — 완납 기록의 paidDate 만 (없으면 '') */
+  function tuitionPaidKey(mk, s) {
+    var r = tuitionOf(mk, s.id);
+    return (r && r.status === 'paid' && isDateKey(r.paidDate)) ? String(r.paidDate) : '';
+  }
+  function tuitionOrder(a, b) {
+    var mode = tuitionSortMode();
+    if (mode === 'tuitionDay') {
+      var da = tuitionDayOf(a), db = tuitionDayOf(b);
+      if (!da && db) { return 1; }
+      if (da && !db) { return -1; }
+      if (da !== db) { return da - db; }
+      return rosterSort(a, b);
+    }
+    if (mode === 'paidDate') {
+      var mk = ensureTuition().month;
+      var pa = tuitionPaidKey(mk, a), pb = tuitionPaidKey(mk, b);
+      if (!pa && pb) { return 1; }
+      if (pa && !pb) { return -1; }
+      if (pa !== pb) { return pa > pb ? -1 : 1; }   /* 최근 납부일이 위 */
+      return rosterSort(a, b);
+    }
+    return rosterSort(a, b);
+  }
   /* 완납할 때 기본 납부일 — 관원의 원비 날짜(일자)가 있으면 그 달의 그 날, 없으면 오늘 */
   function tuitionPaidDefault(sid) {
     var u = ensureTuition();
@@ -8429,10 +8498,36 @@
     return activeStudents().filter(function (s) {
       if (u.className !== 'all' && divisionOf(s) !== u.className) { return false; }
       return matchSearch(s, u.q);
-    }).sort(tuitionSort);
+    }).sort(tuitionOrder);
+  }
+  /* 휴관생이 그 달에 남긴 원비 기록이 있는지 — 완납·면제, 또는 메모(환불 등)·차감·납부일·수단이 적힌 기록 */
+  function tuitionHasRecord(mk, sid) {
+    var r = tuitionOf(mk, sid);
+    if (!r) { return false; }
+    if (r.status === 'paid' || r.status === 'exempt') { return true; }
+    return !!(r.memo || r.deduction || r.deductionReason || r.paidDate || r.method);
+  }
+  /* 🛌 휴관생 납부 — 휴관생 중 그 달 원비 기록이 있는 관원만 (부서·검색 필터 함께 적용) */
+  function tuitionPausedRows() {
+    var u = ensureTuition(), mk = u.month;
+    return pausedStudents().filter(function (s) {
+      if (u.className !== 'all' && divisionOf(s) !== u.className) { return false; }
+      if (!matchSearch(s, u.q)) { return false; }
+      return tuitionHasRecord(mk, s.id);
+    }).sort(tuitionOrder);
   }
   function tuitionTableRows() {
     var u = ensureTuition();
+    /* 휴관생 납부 보기 — 기록 상태가 완납·면제·메모로 섞여 있어 납부 상태 필터 대신 기록 유무로 고른다 */
+    if (u.status === 'paused') {
+      return tuitionPausedRows().filter(function (s) {
+        if (u.method !== 'all') {
+          var r = tuitionOf(u.month, s.id);
+          if (!r || r.status !== 'paid' || r.method !== u.method) { return false; }
+        }
+        return true;
+      });
+    }
     return tuitionScopeRows().filter(function (s) {
       if (u.status !== 'all' && tuitionStatusOf(u.month, s.id) !== u.status) { return false; }
       if (u.method !== 'all') {
@@ -8519,10 +8614,19 @@
     }
     var search = el('tu-search');
     if (search && document.activeElement !== search) { search.value = u.q || ''; }
+    var sortSel = el('tu-sort');
+    if (sortSel) { sortSel.value = tuitionSortMode(); }
 
     var chips = el('tu-status-filters') ? el('tu-status-filters').children : [];
     for (var ci = 0; ci < chips.length; ci++) {
       chips[ci].classList.toggle('active', chips[ci].getAttribute('data-tfilter') === u.status);
+    }
+    /* 🛌 휴관생 납부 칩 — 이 달에 기록이 있는 휴관생 수를 함께 보여 준다 */
+    var pzRows = tuitionPausedRows();
+    var pausedChip = el('tu-paused-chip');
+    if (pausedChip) {
+      pausedChip.classList.toggle('active', u.status === 'paused');
+      pausedChip.textContent = '🛌 휴관생 납부' + (pzRows.length ? ' (' + pzRows.length + ')' : '');
     }
     var mchips = [['all', 'tu-m-all'], ['카드', 'tu-m-card'], ['현금', 'tu-m-cash'], ['입금', 'tu-m-bank']];
     mchips.forEach(function (p) {
@@ -8532,17 +8636,20 @@
 
     var scope = tuitionScopeRows();
     var sum = tuitionSummary(scope);
+    /* 휴관생 전용 보기에서는 위 요약 카드가 재원생 기준임을 카드 안에서도 밝힌다 */
+    var pzView = (u.status === 'paused');
+    var pzPfx = pzView ? '재원생 ' : '';
     if (el('tu-expected')) { el('tu-expected').innerHTML = fmtWon(sum.expected) + '<small>원</small>'; }
     if (el('tu-expected-n')) {
-      el('tu-expected-n').textContent = (scope.length - sum.exemptCount) + '명 기준' +
+      el('tu-expected-n').textContent = pzPfx + (scope.length - sum.exemptCount) + '명 기준' +
         (sum.deduction ? ' · 차감 ' + fmtWon(sum.deduction) + '원' : '');
     }
     if (el('tu-paid')) { el('tu-paid').innerHTML = fmtWon(sum.paid) + '<small>원</small>'; }
-    if (el('tu-paid-n')) { el('tu-paid-n').textContent = sum.paidCount + '명'; }
+    if (el('tu-paid-n')) { el('tu-paid-n').textContent = pzPfx + sum.paidCount + '명'; }
     if (el('tu-unpaid')) { el('tu-unpaid').innerHTML = fmtWon(sum.unpaid) + '<small>원</small>'; }
-    if (el('tu-unpaid-n')) { el('tu-unpaid-n').textContent = sum.unpaidCount + '명'; }
+    if (el('tu-unpaid-n')) { el('tu-unpaid-n').textContent = pzPfx + sum.unpaidCount + '명'; }
     if (el('tu-rate')) { el('tu-rate').innerHTML = sum.rate + '<small>%</small>'; }
-    if (el('tu-rate-n')) { el('tu-rate-n').textContent = '면제·휴원 ' + sum.exemptCount + '명'; }
+    if (el('tu-rate-n')) { el('tu-rate-n').textContent = pzPfx + '면제·휴원 ' + sum.exemptCount + '명'; }
     if (el('tu-m-all-v')) { el('tu-m-all-v').textContent = fmtWon(sum.paid) + '원'; }
     if (el('tu-m-card-v')) { el('tu-m-card-v').textContent = fmtWon(sum.byMethod['카드']) + '원'; }
     if (el('tu-m-cash-v')) { el('tu-m-cash-v').textContent = fmtWon(sum.byMethod['현금']) + '원'; }
@@ -8553,18 +8660,33 @@
         : '';
     }
     if (el('tu-note')) {
-      var filtered = (u.status !== 'all' || u.method !== 'all');
-      el('tu-note').textContent = tuitionMonthLabel(mk) + ' · 납부 기한 매월 ' + tuitionDueDay() + '일 · ' +
-        (u.className === 'all' ? '전체 부서' : u.className) + ' ' + scope.length + '명' +
-        (sum.deduction ? ' · 차감 ' + fmtWon(sum.deduction) + '원 반영' : '') +
-        (filtered ? ' · 표는 필터 적용' : '');
+      if (pzView) {
+        var pzSum = tuitionSummary(pzRows);
+        el('tu-note').textContent = tuitionMonthLabel(mk) + ' · 🛌 휴관생 납부 기록 ' + pzRows.length + '명' +
+          (pzSum.paidCount ? ' · 완납 ' + pzSum.paidCount + '명' : '') +
+          (pzSum.exemptCount ? ' · 면제 ' + pzSum.exemptCount + '명' : '') +
+          ' · 합계 ' + fmtWon(pzSum.paid) + '원' +
+          (u.className === 'all' ? '' : ' · ' + u.className) +
+          (u.method !== 'all' ? ' · 표는 ' + u.method + ' 수납만' : '') +
+          ' · 위 요약 카드는 재원생 기준';
+      } else {
+        var filtered = (u.status !== 'all' || u.method !== 'all');
+        el('tu-note').textContent = tuitionMonthLabel(mk) + ' · 납부 기한 매월 ' + tuitionDueDay() + '일 · ' +
+          (u.className === 'all' ? '전체 부서' : u.className) + ' ' + scope.length + '명' +
+          (sum.deduction ? ' · 차감 ' + fmtWon(sum.deduction) + '원 반영' : '') +
+          (filtered ? ' · 표는 필터 적용' : '');
+      }
     }
 
     var rows = tuitionTableRows();
     var selMap = u.selected || {};
     if (!rows.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="11">' +
-        (app.students.length ? '조건에 맞는 관원이 없어요. 부서·상태 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다') +
+        (pzView
+          ? (pausedStudents().length
+            ? '이 달에 납부 기록이 있는 휴관생이 없어요. 달을 바꾸거나 「전체」 칩으로 돌아가 보세요.'
+            : '휴관생이 없어요. 「🛌 휴관생 관리」에서 명단을 먼저 확인해 주세요.')
+          : (app.students.length ? '조건에 맞는 관원이 없어요. 부서·상태 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다')) +
         '</td></tr>';
     } else {
       tbody.innerHTML = rows.map(function (s) {
@@ -8585,7 +8707,10 @@
           '<td><input type="checkbox" class="ck" data-tcheck="' + esc(s.id) + '"' + (selMap[s.id] ? ' checked' : '') +
           ' aria-label="' + esc(s.name + ' 선택') + '"></td>' +
           '<td class="nm"><div class="nm-line">' + esc(s.name) +
+          (isPaused(s) ? '<span class="chip pause tub-paused" title="휴관생 — 이 달 원비 기록">🛌 휴관</span>' : '') +
           '<span class="belt-badge tub-belt">' + beltSwatchHtml(s.belt) + esc(s.belt || '미지정') + '</span></div>' +
+          '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) +
+          '<button type="button" class="tu-year-btn" data-tyear="' + esc(s.id) + '" title="1년 납부 기록 보기" aria-label="1년 납부 기록 보기">1년</button></div></td>' +
           '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) + '</div></td>' +
           '<td><select class="input mini tu-tday" data-ttday="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 원비 날짜') + '"' +
           ' title="원비 날짜(매달 원비 내는 날) · 원생 관리와 함께 바뀝니다">' + tuitionDayOptions(tuitionDayOf(s)) + '</select></td>' +
@@ -8795,15 +8920,224 @@
   }
   function downloadTuitionCSV() {
     var u = ensureTuition();
-    var rows = tuitionScopeRows();
+    /* 🛌 휴관생 납부 보기에서는 화면에 보이는 휴관생 기록을 그대로 내려받는다 */
+    var rows = (u.status === 'paused') ? tuitionTableRows() : tuitionScopeRows();
     if (!rows.length) {
-      toast('이 달에 내려받을 관원이 없어요. 부서 필터나 검색을 확인해 주세요.');
+      toast(u.status === 'paused'
+        ? '이 달에 내려받을 휴관생 납부 기록이 없어요. 달을 바꾸거나 부서 필터를 확인해 주세요.'
+        : '이 달에 내려받을 관원이 없어요. 부서 필터나 검색을 확인해 주세요.');
       return;
     }
     var csv = tuitionCSVText(u.month, rows);
     if (downloadFile('원비내역_' + u.month + '.csv', csv, 'text/csv;charset=utf-8')) {
       toast(rows.length + '명 · ' + tuitionMonthLabel(u.month) + ' 원비 내역을 내려받았어요');
     }
+  }
+
+  /* =========================================================
+     11-F-1B. 📅 원생별 1년 납부 조회
+     · 재원생·휴관생을 모두 검색해 한 관원의 1~12월 원비 기록을 한 번에 본다
+     · 줄을 누르면 그 달 「💳 원비 관리」로 이동해 바로 고친다
+     ========================================================= */
+  function studentYearDefaultYear() {
+    var u = ensureTuition();
+    var y = parseInt(String(u.month || '').slice(0, 4), 10);
+    if (y >= 1990 && y <= 2100) { return y; }
+    return new Date().getFullYear();
+  }
+  /* 1월~12월 기록 — 화면·테스트가 같은 계산을 보게 순수 배열로 돌려준다 */
+  function studentYearRows(sid, year) {
+    var out = [];
+    var y = parseInt(year, 10) || studentYearDefaultYear();
+    for (var m = 1; m <= 12; m++) {
+      var mk = y + '-' + pad2(m);
+      var rec = tuitionOf(mk, sid);
+      var has = !!rec;
+      var st = has ? tuitionStatusOf(mk, sid) : 'unpaid';
+      out.push({
+        month: m, mk: mk, hasRecord: has, status: st, statusLabel: TUITION_STATUS[st],
+        paidDate: (has && st === 'paid' && isDateKey(rec.paidDate)) ? String(rec.paidDate) : '',
+        method: (has && st === 'paid' && rec.method) ? String(rec.method) : '',
+        amount: has ? tuitionCharge(mk, sid) : null,
+        memo: String((has && rec.memo) || '')
+      });
+    }
+    return out;
+  }
+  function studentYearSummary(sid, year) {
+    var out = {
+      paidCount: 0, paidTotal: 0, exemptCount: 0, unpaidCount: 0, recordCount: 0, memoCount: 0,
+      byMethod: { '카드': 0, '현금': 0, '입금': 0 }
+    };
+    studentYearRows(sid, year).forEach(function (r) {
+      if (!r.hasRecord) { return; }
+      out.recordCount++;
+      if (r.status === 'paid') {
+        out.paidCount++;
+        out.paidTotal += (r.amount || 0);
+        if (r.method && out.byMethod[r.method] !== undefined) { out.byMethod[r.method] += (r.amount || 0); }
+      } else if (r.status === 'exempt') { out.exemptCount++; }
+      else { out.unpaidCount++; }
+      if (r.memo) { out.memoCount++; }
+    });
+    return out;
+  }
+  /* 재원생·휴관생 모두 — 이름·초성·부서(기존 matchSearch) + 전화 뒷자리 */
+  function studentYearCandidates(q) {
+    var raw = String(q || '').replace(/\s+/g, '');
+    var qd = raw.replace(/[^0-9]/g, '');
+    return app.students.filter(function (s) {
+      if (matchSearch(s, q)) { return true; }
+      if (qd.length >= 3 && digitsOnly(s.phone).indexOf(qd) !== -1) { return true; }
+      return false;
+    }).sort(tuitionSort);
+  }
+  function studentYearListHtml(q, sid) {
+    var query = String(q || '').trim();
+    if (!query) {
+      return '<div class="help" style="margin-top:0">이름·초성·전화 뒷자리로 검색하면 <b>재원생·휴관생 모두</b>에서 찾아 드려요.' +
+        (pausedStudents().length ? ' (휴관생 ' + pausedStudents().length + '명 포함)' : '') + '</div>';
+    }
+    var list = studentYearCandidates(query);
+    if (!list.length) {
+      return '<div class="help" style="margin-top:0">「' + esc(query) + '」에 맞는 관원이 없어요.</div>';
+    }
+    var show = list.slice(0, 8);
+    return '<div class="sy-list">' + show.map(function (s) {
+      return '<button type="button" class="sy-item' + (s.id === sid ? ' on' : '') + '" data-sy-pick="' + esc(s.id) + '">' +
+        '<span class="sy-item-nm">' + esc(s.name) +
+        (isPaused(s) ? '<span class="chip pause">🛌 휴관</span>' : '') + '</span>' +
+        '<span class="sub" style="font-size:11px;color:#8a94a6;font-weight:700">' + esc(studentLabel(s)) + '</span></button>';
+    }).join('') + '</div>' +
+      (list.length > show.length
+        ? '<div class="help" style="margin-top:-6px">' + list.length + '명 중 ' + show.length + '명만 보여요 — 더 정확하게 검색해 주세요.</div>'
+        : '');
+  }
+  function studentYearDetailHtml(sid, year) {
+    var s = byId(sid);
+    if (!s) {
+      return '<div class="help" style="margin-top:0">관원을 고르면 1월~12월 기록이 여기에 나옵니다.</div>';
+    }
+    var y = parseInt(year, 10) || studentYearDefaultYear();
+    var rows = studentYearRows(sid, y);
+    var sum = studentYearSummary(sid, y);
+    var day = tuitionDayOf(s);
+    var head = '<div class="sy-head"><div class="nm-line"><b>' + esc(s.name) + '</b>' +
+      (isPaused(s) ? '<span class="chip pause">🛌 휴관</span>' : '') +
+      '<span class="belt-badge tub-belt">' + beltSwatchHtml(s.belt) + esc(s.belt || '미지정') + '</span></div>' +
+      '<div class="sub">' + esc(studentLabel(s)) + ' · 원비 날짜 ' + (day ? day + '일' : '미지정') + '</div>' +
+      '<div class="sy-sum">' + y + '년 완납 <b>' + sum.paidCount + '건</b> · 납부 합계 <b>' + fmtWon(sum.paidTotal) + '원</b>' +
+      (sum.exemptCount ? ' · 면제 ' + sum.exemptCount + '건' : '') +
+      (sum.unpaidCount ? ' · 미납 ' + sum.unpaidCount + '건' : '') +
+      (sum.memoCount ? ' · 메모 ' + sum.memoCount + '건' : '') + '</div></div>';
+    var table = '<div class="sy-tablewrap"><table class="tb sy-table"><thead><tr>' +
+      '<th style="width:46px">월</th><th style="width:74px">상태</th><th style="width:96px">납부일</th>' +
+      '<th style="width:64px">결제 수단</th><th style="width:92px">금액</th><th>메모</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr class="sy-row ' + r.status + (r.hasRecord ? '' : ' none') + '" data-sy-month="' + r.mk + '" title="' + r.month + '월 원비 관리로 이동">' +
+          '<td>' + r.month + '월</td>' +
+          '<td>' + (r.hasRecord ? esc(r.statusLabel) : '기록 없음') + '</td>' +
+          '<td>' + (r.paidDate ? esc(r.paidDate) : '-') + '</td>' +
+          '<td>' + (r.method ? esc(r.method) : '-') + '</td>' +
+          '<td>' + (r.hasRecord ? fmtWon(r.amount) + '원' : '-') + '</td>' +
+          '<td class="sy-memo">' + esc(r.memo || '') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="help" style="margin-top:8px">줄을 누르면 그 달 「💳 원비 관리」로 이동해 바로 고칠 수 있어요.</div>';
+    return head + table;
+  }
+  /* 그 달 원비 관리로 이동 — 휴관생이면 「🛌 휴관생 납부」 보기로 맞춰 준다 */
+  function studentYearJump(mk, sid) {
+    var s = byId(sid);
+    var u = ensureTuition();
+    if (isMonthKey(mk)) { u.month = mk; }
+    u.className = 'all';
+    u.method = 'all';
+    u.q = '';
+    u.selected = {};
+    u.status = (s && isPaused(s)) ? 'paused' : 'all';
+    closeActiveModal(null);
+    renderTuition(true);
+    toast(tuitionMonthLabel(u.month) + ' · ' + (s ? s.name + ' ' : '') + '원비 관리로 이동했어요');
+    var tb = el('tu-table');
+    if (tb && tb.scrollIntoView) { tb.scrollIntoView({ block: 'center' }); }
+  }
+
+  var studentYearClickHandler = null;
+  var studentYearInputHandler = null;
+  function openStudentYearLookup(opts) {
+    opts = opts || {};
+    var st = {
+      year: parseInt(opts.year, 10) || studentYearDefaultYear(),
+      q: '',
+      sid: (opts.sid && byId(opts.sid)) ? opts.sid : ''
+    };
+    if (st.sid) { st.q = byId(st.sid).name; }
+
+    function syRender() {
+      var yl = el('sy-year-label');
+      if (yl) { yl.textContent = st.year + '년'; }
+      var list = el('sy-list');
+      if (list) { list.innerHTML = studentYearListHtml(st.q, st.sid); }
+      var detail = el('sy-detail');
+      if (detail) { detail.innerHTML = studentYearDetailHtml(st.sid, st.year); }
+    }
+
+    openModal({
+      title: '📅 원생별 1년 납부 조회',
+      sub: '재원생·휴관생 모두 검색할 수 있어요 · 줄을 누르면 그 달 원비 관리로 이동합니다',
+      body: '<div id="sy-body">' +
+        '<div class="sy-bar">' +
+        '<div class="sy-year"><button type="button" class="btn btn-sm" data-sy-nav="-1" aria-label="이전 연도">◀</button>' +
+        '<b id="sy-year-label">' + st.year + '년</b>' +
+        '<button type="button" class="btn btn-sm" data-sy-nav="1" aria-label="다음 연도">▶</button></div>' +
+        '<input class="input" id="sy-q" placeholder="🔍 이름·초성·전화 뒷자리 (재원생·휴관생)" autocomplete="off" aria-label="관원 검색" value="' + esc(st.q) + '">' +
+        '</div>' +
+        '<div id="sy-list"></div>' +
+        '<div id="sy-detail"></div>' +
+        '</div>',
+      actions: [{ label: '닫기', value: null, kind: 'btn-ghost' }]
+    });
+
+    var host = el('sy-body');
+    if (host) {
+      if (studentYearClickHandler) { host.removeEventListener('click', studentYearClickHandler); }
+      studentYearClickHandler = function (e) {
+        var t = e && e.target;
+        if (!t || !t.closest) { return; }
+        var nav = t.closest('[data-sy-nav]');
+        if (nav) {
+          var by = parseInt(nav.getAttribute('data-sy-nav'), 10) || 0;
+          st.year = Math.min(2100, Math.max(1990, st.year + by));
+          syRender();
+          return;
+        }
+        var pick = t.closest('[data-sy-pick]');
+        if (pick) {
+          st.sid = pick.getAttribute('data-sy-pick') || '';
+          var ps = byId(st.sid);
+          if (ps) { st.q = ps.name; }
+          var inp = el('sy-q');
+          if (inp && ps) { inp.value = ps.name; }
+          syRender();
+          return;
+        }
+        var row = t.closest('[data-sy-month]');
+        if (row) { studentYearJump(row.getAttribute('data-sy-month'), st.sid); return; }
+      };
+      host.addEventListener('click', studentYearClickHandler);
+    }
+
+    var box = el('sy-q');
+    if (box) {
+      if (studentYearInputHandler) { box.removeEventListener('input', studentYearInputHandler); }
+      studentYearInputHandler = function () {
+        st.q = box.value || '';
+        var list = el('sy-list');
+        if (list) { list.innerHTML = studentYearListHtml(st.q, st.sid); }
+      };
+      box.addEventListener('input', studentYearInputHandler);
+    }
+    syRender();
   }
 
   /* =========================================================
@@ -15021,11 +15355,18 @@
       ensureTuition().q = el('tu-search').value || '';
       renderTuition();
     });
+    if (el('tu-sort')) {
+      el('tu-sort').addEventListener('change', function () {
+        var v = el('tu-sort').value;
+        ensureTuition().sort = TUITION_SORTS[v] ? v : 'name';
+        renderTuition(true);
+      });
+    }
     el('tu-status-filters').addEventListener('click', function (e) {
       var b = e.target.closest('[data-tfilter]');
       if (!b) { return; }
       var v = b.getAttribute('data-tfilter');
-      ensureTuition().status = TUITION_STATUS[v] ? v : 'all';
+      ensureTuition().status = (v === 'paused' || TUITION_STATUS[v]) ? v : 'all';
       renderTuition(true);
     });
     el('tu-methods').addEventListener('click', function (e) {
@@ -15039,6 +15380,7 @@
     });
     el('btn-tu-settings').addEventListener('click', function () { toggleTuitionSettings(); });
     el('btn-tu-fee-settings').addEventListener('click', openFeeSettings);
+    el('btn-tu-year').addEventListener('click', function () { openStudentYearLookup(); });
     el('btn-tu-save-settings').addEventListener('click', saveTuitionSettings);
     el('btn-ft-save').addEventListener('click', saveFeeTable);
     el('btn-ft-reset').addEventListener('click', resetFeeTable);
@@ -15074,6 +15416,8 @@
       if (mb) { setTuitionMethod(mb.getAttribute('data-sid'), mb.getAttribute('data-tmethod')); return; }
       var pb = t.closest('[data-tpaid]');
       if (pb) { toggleTuitionPaid(pb.getAttribute('data-tpaid')); return; }
+      var yb = t.closest('[data-tyear]');
+      if (yb) { openStudentYearLookup({ sid: yb.getAttribute('data-tyear') }); return; }
       var sb = t.closest('[data-tsms]');
       if (sb) { sendTuitionSms(sb.getAttribute('data-tsms')); return; }
     });
@@ -15723,6 +16067,18 @@
       bulkSms: tuitionBulkSms,
       summary: tuitionSummary,
       scopeRows: tuitionScopeRows,
+      pausedRows: tuitionPausedRows,
+      hasRecord: tuitionHasRecord,
+      sorts: TUITION_SORTS,
+      sortMode: tuitionSortMode,
+      order: tuitionOrder,
+      paidKey: tuitionPaidKey,
+      yearRows: studentYearRows,
+      yearSummary: studentYearSummary,
+      yearCandidates: studentYearCandidates,
+      yearList: studentYearListHtml,
+      yearDetail: studentYearDetailHtml,
+      openYear: openStudentYearLookup,
       tableRows: tuitionTableRows,
       csvText: tuitionCSVText,
       download: downloadTuitionCSV,
