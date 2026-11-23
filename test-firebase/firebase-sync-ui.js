@@ -29,6 +29,7 @@
     auth: null,
     busy: false,
     connecting: null,
+    migrating: null,
     msg: '',
     msgKind: '',
     timer: null
@@ -1124,27 +1125,30 @@
     deviceId();
     ensurePill();
     bind();
+    /* 화면이 뜨자마자 옛 동기화 그림자를 IndexedDB 로 옮긴다 —
+       localStorage 5MB 한도를 먼저 비워야 앱 데이터 저장이 "저장공간 부족"으로 멈추지 않는다.
+       (연결을 하지 않는 로컬 모드에서도 마찬가지) */
+    var migrating = null;
+    try { migrating = FB.migrateShadowCache(localStorage); } catch (e) { migrating = null; }
+    S.migrating = Promise.resolve(migrating).then(function (r) {
+      if (r && r.migrated) {
+        S.msg = '💾 동기화 내부 기록(그림자)을 IndexedDB 로 옮기고 localStorage ' +
+          Math.max(1, Math.round((r.bytesFreed || 0) / 1024)) + 'KB 를 비웠습니다.';
+        S.msgKind = 'ok';
+      }
+      return r;
+    }, function () { return null; });
     /* 저장해 둔 훅이 없으면 앱이 준비될 때까지 잠깐 기다린다 */
     var tries = 0;
     (function ready() {
       tries++;
       var ok = window.__tdk && window.__tdk.app;
       if (!ok && tries < 60) { setTimeout(ready, 150); return; }
-      /* 연결을 하지 않는(로컬) 모드에서도 옛 동기화 그림자를 IndexedDB 로 옮겨
-         localStorage 5MB 한도를 먼저 비운다 — 앱 데이터 저장이 "저장공간 부족"으로 멈추지 않게 */
-      function afterShadowMigrate(r) {
-        if (r && r.migrated) {
-          S.msg = '💾 동기화 내부 기록(그림자)을 IndexedDB 로 옮기고 localStorage ' +
-            Math.max(1, Math.round((r.bytesFreed || 0) / 1024)) + 'KB 를 비웠습니다 — 이제 저장공간이 부족해 멈추지 않습니다.';
-          S.msgKind = 'ok';
-        }
+      Promise.resolve(S.migrating).then(function () {
         if (S.cfg.mode === 'mock') { connectMock(); }
         else if (S.cfg.mode === 'firestore') { connectFirestore(); }
         else { renderAll(); }
-      }
-      var migrating = null;
-      try { migrating = FB.migrateShadowCache(localStorage); } catch (e) { migrating = null; }
-      Promise.resolve(migrating).then(function (r) { afterShadowMigrate(r); }, function () { afterShadowMigrate(null); });
+      });
       if (S.timer) { clearInterval(S.timer); }
       S.timer = setInterval(function () { renderStatus(); renderUsage(); renderQueue(); }, 2000);
     })();
