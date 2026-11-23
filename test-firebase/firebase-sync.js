@@ -9,6 +9,9 @@
        dojangs/{dojangId}/kioskStudents/{studentId}     출석 화면용 최소 정보 사본 (개인정보 없음 · 태블릿 읽기)
        dojangs/{dojangId}/attendanceEvents/{eventId}     출결 1건 = 문서 1개
                                                          eventId = {날짜}_{원생ID}_{in|out}
+                                                         칸: date·studentId·kind·time·eventId·source·manual·deviceId
+                                                             (+ _ver·_updatedAt·_updatedBy·_fieldMeta)
+                                                         ※ firestore.rules 의 eventFields() 와 정확히 같은 목록이어야 한다
        dojangs/{dojangId}/tuition/{YYYY-MM}_{studentId}  원생·월 원비 1건 = 문서 1개
        dojangs/{dojangId}/counsel|shuttle|coupons/{id}   기록 1건 = 문서 1개
        dojangs/{dojangId}/meta/{설정문서}                설정·단가표·문구·로그·계정
@@ -28,7 +31,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.1.0-test';
+  var VERSION = '1.2.0-test';
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -84,6 +87,21 @@
     return ('0000000' + h.toString(36)).slice(-8);
   }
   function contentHash(obj) { return hashStr(stableStringify(obj || {})); }
+
+  /* 출결 문서의 "내용이 같은가" 판단용 해시 — 기기마다 달라지는 칸(deviceId)과
+     수신할 때마다 바뀌는 칸(at)을 뺀다. 이걸 넣으면 다른 기기가 만든 출결을 받은 뒤
+     모든 출결을 다시 update 로 보내려 하게 되고(=태블릿은 규칙상 update 불가),
+     쓸데없는 쓰기로 무료 한도를 쓰게 된다. */
+  function eventHash(body) {
+    var b = body || {};
+    return contentHash({
+      date: b.date, studentId: b.studentId, kind: b.kind, time: b.time,
+      manual: !!b.manual, source: String(b.source || b.src || '')
+    });
+  }
+  function bodyHash(kind, body) {
+    return kind === 'events' ? eventHash(body) : contentHash(body);
+  }
 
   function p2(n) { return (n < 10 ? '0' : '') + n; }
   function isoOf(ms) {
@@ -481,8 +499,10 @@
     return { date: m[1], studentId: m[2], kind: m[3] };
   }
 
-  function docsForEntry(entry, value, base) {
+  function docsForEntry(entry, value, base, ctx) {
     var docs = [];
+    /* 기기 ID — 출결 문서의 deviceId 칸(규칙의 허용 목록 안)으로 들어간다 */
+    var did = String((ctx && ctx.deviceId) || '');
     if (!entry || entry.kind === 'local') { return docs; }
     var collPath = function (coll) { return base + '/' + coll; };
 
@@ -510,19 +530,28 @@
           var outT = att ? String(e.outTime || '').slice(0, 5) : String(e.out || '').slice(0, 5);
           var manual = !!e.manual;
           var src = String(e.src || (att ? '' : 'legacy'));
-          var updatedAt = String(e.updatedAt || '');
+          /* 문서에 넣는 칸은 firestore.rules 의 eventFields() 와 정확히 같아야 한다
+             (date · studentId · kind · time · eventId · source · manual · deviceId) */
           if (inT) {
+            var inId = eventIdOf(date, sid, 'in');
             docs.push({
-              id: eventIdOf(date, sid, 'in'),
-              path: collPath('attendanceEvents') + '/' + eventIdOf(date, sid, 'in'),
-              body: { date: date, studentId: sid, kind: 'in', time: inT, manual: manual, src: src, at: updatedAt }
+              id: inId,
+              path: collPath('attendanceEvents') + '/' + inId,
+              body: {
+                date: date, studentId: sid, kind: 'in', time: inT,
+                eventId: inId, source: src, manual: manual, deviceId: did
+              }
             });
           }
           if (outT) {
+            var outId = eventIdOf(date, sid, 'out');
             docs.push({
-              id: eventIdOf(date, sid, 'out'),
-              path: collPath('attendanceEvents') + '/' + eventIdOf(date, sid, 'out'),
-              body: { date: date, studentId: sid, kind: 'out', time: outT, manual: manual, src: src, at: updatedAt }
+              id: outId,
+              path: collPath('attendanceEvents') + '/' + outId,
+              body: {
+                date: date, studentId: sid, kind: 'out', time: outT,
+                eventId: outId, source: src, manual: manual, deviceId: did
+              }
             });
           }
         });
@@ -569,7 +598,7 @@
   }
 
   /* 출결은 attendance·records 두 키가 같은 문서를 만든다 → 항상 합쳐서 본다 */
-  function unionEventDocs(attValue, recValue, base) {
+  function unionEventDocs(attValue, recValue, base, ctx) {
     var map = {};
     var entries = [
       { name: 'attendance', kind: 'events' },
@@ -577,7 +606,7 @@
     ];
     entries.forEach(function (e) {
       var v = e.name === 'attendance' ? attValue : recValue;
-      docsForEntry({ name: e.name, kind: 'events' }, v, base).forEach(function (d) {
+      docsForEntry({ name: e.name, kind: 'events' }, v, base, ctx).forEach(function (d) {
         var prev = map[d.path];
         if (!prev) { map[d.path] = d; return; }
         /* attendance 쪽 정보가 더 자세하다 → 시간이 있으면 그것을 쓴다 */
@@ -791,7 +820,11 @@
     };
     var deviceId = opts.deviceId || 'dev_local';
     var dojangId = safeId(opts.dojangId || 'mta-tkd');
-    var role = opts.role === 'tablet' ? 'tablet' : 'admin';
+    /* 화면(드롭다운)에서 고른 역할 — 이 값만으로는 권한을 주지 않는다 */
+    var deviceRole = opts.role === 'tablet' ? 'tablet' : 'admin';
+    /* 서버(dojangs/{도장}/roles/{uid})에서 확인한 역할
+         null = 아직 확인 전 · '' = 로그인은 됐는데 roles 문서가 없음 · 'admin' | 'tablet' */
+    var verifiedRole = (opts.verifiedRole === 'admin' || opts.verifiedRole === 'tablet') ? opts.verifiedRole : null;
     var adapter = opts.adapter || null;
     var shadow = loadShadow();
     var prevValues = {};
@@ -808,6 +841,85 @@
     var hookTarget = null;
 
     function basePath() { return 'dojangs/' + dojangId; }
+
+    /* ---------- 유효 권한 (서버 roles 기준) ----------
+       ⚠️ 화면에서 「관리자 PC」를 골라도 그것만으로 관리자 권한이 생기지 않는다.
+          실제 Firebase 모드(requireServerRole)에서는 로그인한 uid 의 roles/{uid} 가
+          'admin' 일 때만, 그리고 화면 역할이 'admin' 일 때만 관리자로 동작한다.
+          (둘 중 하나라도 tablet/미확인이면 더 제한적인 쪽으로 잠긴다) */
+    function requireServerRole() {
+      return opts.requireServerRole === true || !!(adapter && adapter.mode === 'firestore');
+    }
+    function effectiveRole() {
+      var serverKnown = (verifiedRole === 'admin' || verifiedRole === 'tablet');
+      if (serverKnown) {
+        return (verifiedRole === 'tablet' || deviceRole === 'tablet') ? 'tablet' : 'admin';
+      }
+      /* 서버 역할을 확인하지 못했다 → 실제 Firebase 에서는 아무 권한도 주지 않는다 */
+      if (requireServerRole()) { return 'none'; }
+      /* 모의(연습) 모드: 서버가 없으니 화면에서 고른 역할로 연습한다 */
+      return deviceRole;
+    }
+    function isEffectiveAdmin() { return effectiveRole() === 'admin'; }
+    function isEffectiveTablet() { return effectiveRole() === 'tablet'; }
+
+    /* 화면 역할 변경 — 그래도 유효 권한은 서버 roles 기준 그대로다 */
+    function setDeviceRole(r) {
+      var next = r === 'tablet' ? 'tablet' : 'admin';
+      var before = effectiveRole();
+      deviceRole = next;
+      var after = effectiveRole();
+      if (after !== before) {
+        if (adapter && typeof adapter.setRole === 'function') { try { adapter.setRole(after); } catch (e) {} }
+        resubscribe();
+        emit('role', { role: after, deviceRole: deviceRole, verified: verifiedRole });
+      }
+      return after;
+    }
+
+    /* 서버 roles/{uid} 확인 결과 반영 */
+    function applyVerifiedRole(v) {
+      var next = (v === 'admin' || v === 'tablet') ? v : '';
+      var before = effectiveRole();
+      verifiedRole = next;
+      var after = effectiveRole();
+      if (after !== before) {
+        if (adapter && typeof adapter.setRole === 'function') { try { adapter.setRole(after); } catch (e) {} }
+        resubscribe();
+        emit('role', { role: after, deviceRole: deviceRole, verified: verifiedRole });
+      }
+      return after;
+    }
+
+    /* 로그인한 계정의 roles/{uid} 문서를 서버에서 직접 읽어 유효 권한을 잠근다 */
+    function verifyRole() {
+      if (!adapter || typeof adapter.getDoc !== 'function') {
+        return Promise.resolve({ role: effectiveRole(), verified: verifiedRole, reason: 'no-adapter' });
+      }
+      var cu = null;
+      try { cu = (typeof adapter.currentUser === 'function') ? adapter.currentUser() : null; } catch (e) { cu = null; }
+      if (!cu || !cu.uid) {
+        var r0 = applyVerifiedRole('');
+        return Promise.resolve({ role: r0, verified: '', reason: 'no-sign-in' });
+      }
+      var path = basePath() + '/roles/' + String(cu.uid);
+      return adapter.getDoc(path).then(function (res) {
+        var v = (res && res.exists && res.data) ? String(res.data.role || '') : '';
+        var role = applyVerifiedRole(v);
+        return { role: role, verified: v, uid: cu.uid, email: cu.email || '', path: path };
+      }, function (err) {
+        var role = applyVerifiedRole('');
+        return { role: role, verified: '', uid: cu.uid, error: errorText(err), path: path };
+      });
+    }
+
+    function resubscribe() {
+      if (!started || !adapter || typeof adapter.subscribe !== 'function') { return; }
+      if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+      unsub = adapter.subscribe(function (path, data, meta) {
+        try { onRemote(path, data, meta); } catch (e) { lastError = errorText(e); }
+      });
+    }
     function entryByName(n) {
       for (var i = 0; i < registry.length; i++) { if (registry[i].name === n) { return registry[i]; } }
       return null;
@@ -951,9 +1063,11 @@
       if (LOCAL_KEYS[key]) { return; }
       var entry = entryByKey(key);
       if (!entry || entry.kind === 'local') { return; }
-      /* 출석 태블릿은 출결 이벤트만 올린다 (원생·원비·상담 등은 관리자 기기에서만) */
-      if (role === 'tablet' && entry.kind !== 'events') {
-        emit('blocked-local', { key: entry.name, reason: 'tablet-role' });
+      /* 관리자로 확인된 기기만 원생·원비·상담·설정을 올린다.
+         태블릿(또는 서버 역할 미확인)은 출결 이벤트만 올린다. */
+      var er = effectiveRole();
+      if (er !== 'admin' && entry.kind !== 'events') {
+        emit('blocked-local', { key: entry.name, reason: er === 'tablet' ? 'tablet-role' : 'role-unverified' });
         return;
       }
       var value = null;
@@ -969,7 +1083,7 @@
     }
     function liveDocsOf(entry, base) {
       if (entry.kind === 'events') {
-        var map = unionEventDocs(readValue('attendance'), readValue('records'), base);
+        var map = unionEventDocs(readValue('attendance'), readValue('records'), base, { deviceId: deviceId });
         return Object.keys(map).map(function (p) { return map[p]; });
       }
       /* 파생 항목은 원본 키를 그대로 쓴다 — 방금 저장된 값이 있으면 그것으로 만든다 */
@@ -979,7 +1093,7 @@
       } else {
         value = prevValues[entry.name];
       }
-      return docsForEntry(entry, value, base);
+      return docsForEntry(entry, value, base, { deviceId: deviceId });
     }
 
     function capture(entry) {
@@ -997,7 +1111,7 @@
         var d = live[p].doc;
         var src = live[p].entry;
         var body = clone(d.body) || {};
-        var h = contentHash(body);
+        var h = bodyHash(src.kind, body);
         var sh = shadow[p];
         if (sh && !sh.d && sh.h === h) { return; }          /* 내용이 그대로 → 보내지 않음 */
         if (src.kind === 'events') {
@@ -1126,10 +1240,10 @@
 
       var needLocal;
       if (merged.deleted) { needLocal = !(localSh && localSh.d); }
-      else if (kind === 'events') { needLocal = String(mergedBody.time || '') !== String((localSh && localSh.t) || ''); }
+      else if (kind === 'events') { needLocal = eventHash(mergedBody) !== String((localSh && localSh.h) || ''); }
       else { needLocal = stableStringify(mergedBody) !== stableStringify(localBody); }
       /* kioskStudents/kioskConfig 사본은 태블릿 화면용이다 — 관리자 PC는 원본을 그대로 쓴다 */
-      if (kind === 'kiosk' && role !== 'tablet') { needLocal = false; }
+      if (kind === 'kiosk' && !isEffectiveTablet()) { needLocal = false; }
       var needRemote = merged.deleted ? !remoteDoc._deleted : stableStringify(mergedBody) !== stableStringify(remoteBody);
 
       if (needLocal) {
@@ -1186,7 +1300,7 @@
         u: (sentBody && sentBody._updatedAt) || merged.updatedAt || isoOf(now()),
         by: (sentBody && sentBody._updatedBy) || merged.updatedBy || deviceId,
         d: merged.deleted === true,
-        h: contentHash(body),
+        h: bodyHash(kind, body),
         b: merged.deleted ? null : (kind === 'events' ? null : mergeMetaBody(body, merged.meta)),
         t: merged.deleted ? undefined : body.time
       };
@@ -1203,7 +1317,7 @@
 
       /* kioskStudents 사본 — 태블릿 화면이 읽는 최소 정보만 이 기기의 원생 명단에 반영한다 */
       if (entry.kind === 'kiosk') {
-        if (role !== 'tablet') { return; }          /* 관리자 PC 는 원본 students 를 그대로 쓴다 */
+        if (!isEffectiveTablet()) { return; }          /* 관리자 PC 는 원본 students 를 그대로 쓴다 */
         var list = readValue('students');
         if (!Array.isArray(list)) { list = []; }
         var at = -1;
@@ -1253,7 +1367,8 @@
         if (m.kind === 'in') { if (time) { e.inTime = time; } else { delete e.inTime; } }
         else { if (time) { e.outTime = time; } else { delete e.outTime; } }
         if (!deleted && body.manual) { e.manual = true; }
-        if (body.src) { e.src = String(body.src); }
+        var srcVal = body.source || body.src;          /* source = v3 칸, src = v2 문서 호환 */
+        if (srcVal) { e.src = String(srcVal); }
         e.updatedAt = isoOf(now());
         if (e.inTime || e.outTime || e.manual) {
           day[m.studentId] = e;
@@ -1365,6 +1480,11 @@
 
     function flush() {
       if (!adapter) { return Promise.resolve({ ok: false, reason: 'no-adapter', queued: outbox.count() }); }
+      /* 서버 roles 로 역할이 확인되지 않은 상태(로그인 전·roles 문서 없음)에서는 서버로 아무것도 보내지 않는다 */
+      if (effectiveRole() === 'none') {
+        emit('role-blocked', { role: 'none', deviceRole: deviceRole, verified: verifiedRole, queued: outbox.count() });
+        return Promise.resolve({ ok: false, reason: 'role-unverified', queued: outbox.count() });
+      }
       if (!online()) {
         lastErrorKind = 'offline';
         emit('status', { state: 'offline', queued: outbox.count() });
@@ -1440,19 +1560,26 @@
       if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
       adapter = nextAdapter || null;
       if (!adapter) { return; }
+      if (typeof adapter.setRole === 'function') { try { adapter.setRole(effectiveRole()); } catch (e) {} }
       if (typeof adapter.subscribe === 'function') {
         unsub = adapter.subscribe(function (path, data, meta) {
           try { onRemote(path, data, meta); } catch (e) { lastError = errorText(e); }
         });
       }
+      try { verifyRole(); } catch (e) {}
       emit('status', status());
     }
 
     /* ---------- 상태 ---------- */
     function status() {
-      var s = { state: 'local', text: '⚪ 미연결(로컬 모드)', queued: outbox.count(), lastSyncAt: lastSyncAt, lastError: lastError, mode: adapter ? adapter.mode : 'local' };
+      var s = { state: 'local', text: '⚪ 미연결(로컬 모드)', queued: outbox.count(), lastSyncAt: lastSyncAt, lastError: lastError, mode: adapter ? adapter.mode : 'local', role: effectiveRole(), deviceRole: deviceRole, verifiedRole: verifiedRole };
       if (usage.blocked()) { s.state = 'blocked'; s.text = '🔴 한도 초과 · 동기화 멈춤'; return s; }
       if (!adapter) { return s; }
+      if (effectiveRole() === 'none') {
+        s.state = 'role';
+        s.text = (verifiedRole === '') ? '🔑 역할 미확인 · 로그인 필요' : '🔑 역할 확인 중';
+        return s;
+      }
       if (!online() || lastErrorKind === 'offline' || outbox.summary().failed > 0) { s.state = 'offline'; s.text = '🟡 오프라인 대기'; return s; }
       if (lastError) { s.state = 'error'; s.text = '🟠 연결 문제'; return s; }
       s.state = 'online';
@@ -1482,7 +1609,7 @@
         };
         if (!seenKeys[e.key]) { seenKeys[e.key] = 1; plan.keyCount++; }
         if (e.kind !== 'local') {
-          var docs = docsForEntry(e, readValue(e.name), base);
+          var docs = docsForEntry(e, readValue(e.name), base, { deviceId: deviceId });
           row.count = docs.length;
           docs.forEach(function (d) { all.push({ entry: e, doc: d }); });
         } else {
@@ -1516,7 +1643,7 @@
       var out = [];
       registry.forEach(function (e) {
         if (e.kind === 'local') { return; }
-        docsForEntry(e, readValue(e.name), base).forEach(function (d) {
+        docsForEntry(e, readValue(e.name), base, { deviceId: deviceId }).forEach(function (d) {
           var body = clone(d.body) || {};
           var sh = shadow[d.path];
           var prevBody = sh && sh.b ? sh.b : {};
@@ -1537,8 +1664,16 @@
 
     function runMigration(opts2) {
       opts2 = opts2 || {};
-      /* 이전은 관리자 기기에서만 — 태블릿은 원생 개인정보를 올릴 수도, 읽을 수도 없다 */
-      if (role === 'tablet') { return Promise.resolve({ ok: false, reason: 'tablet-role', message: '출석 태블릿 역할에서는 이전하지 않습니다 — 관리자 PC에서 해 주세요.' }); }
+      /* 이전은 관리자로 확인된 기기에서만 — 태블릿은 원생 개인정보를 올릴 수도, 읽을 수도 없다 */
+      if (!isEffectiveAdmin()) {
+        return Promise.resolve({
+          ok: false,
+          reason: (effectiveRole() === 'tablet') ? 'tablet-role' : 'role-unverified',
+          message: (effectiveRole() === 'tablet')
+            ? '출석 태블릿 역할에서는 이전하지 않습니다 — 관리자 PC에서 해 주세요.'
+            : '서버 roles 문서로 관리자 역할이 확인되지 않았습니다 — 관리자 계정으로 로그인한 뒤 다시 시도해 주세요.'
+        });
+      }
       if (!adapter) { return Promise.resolve({ ok: false, reason: 'no-adapter' }); }
       if (usage.blocked()) { return Promise.resolve({ ok: false, reason: 'quota', message: QUOTA_MESSAGE }); }
       var docs = buildMigrationDocs();
@@ -1614,11 +1749,11 @@
           Object.keys(map).forEach(function (p) {
             if (shadow[p]) { return; }
             var b = map[p].body;
-            shadow[p] = { v: 0, m: {}, u: '', by: '', d: false, h: contentHash(b), b: null, t: b.time };
+            shadow[p] = { v: 0, m: {}, u: '', by: '', d: false, h: eventHash(b), b: null, t: b.time };
           });
           return;
         }
-        docsForEntry(e, readValue(e.name), base).forEach(function (d) {
+        docsForEntry(e, readValue(e.name), base, { deviceId: deviceId }).forEach(function (d) {
           if (shadow[d.path]) { return; }
           var body = d.body;
           shadow[d.path] = { v: 0, m: {}, u: '', by: '', d: false, h: contentHash(body), b: mergeMetaBody(body, {}), t: body.time };
@@ -1667,8 +1802,9 @@
           try { onRemote(path, data, meta); } catch (e) { lastError = errorText(e); }
         });
       }
+      if (adapter) { try { verifyRole(); } catch (e) {} }
       /* 태블릿 역할인데 이 기기에 아직 개인정보가 남아 있으면 한 번 알린다 */
-      if (role === 'tablet') {
+      if (isEffectiveTablet()) {
         var privateCount = countPrivateStudents(readValue('students'));
         if (privateCount > 0) { emit('tablet-private-data', { count: privateCount }); }
       }
@@ -1698,8 +1834,15 @@
       registry: function () { return registry.map(function (e) { return clone(e); }); },
       basePath: basePath,
       setDevice: function (d) { deviceId = String(d || deviceId); },
-      setRole: function (r) { role = r === 'tablet' ? 'tablet' : 'admin'; },
-      role: function () { return role; },
+      /* 화면에서 고른 역할 — 유효 권한은 서버 roles 로 잠기므로 이 값만으로는 권한이 생기지 않는다 */
+      setRole: function (r) { return setDeviceRole(r); },
+      setDeviceRole: setDeviceRole,
+      role: function () { return effectiveRole(); },
+      effectiveRole: effectiveRole,
+      deviceRole: function () { return deviceRole; },
+      verifiedRole: function () { return verifiedRole; },
+      setVerifiedRole: applyVerifiedRole,
+      verifyRole: verifyRole,
       device: function () { return deviceId; },
       setDojang: function (d) { dojangId = safeId(d || 'mta-tkd'); },
       attachAdapter: attachAdapter,
@@ -1720,7 +1863,7 @@
       docsFor: function (name) {
         var e = entryByName(name);
         if (!e) { return []; }
-        return docsForEntry(e, readValue(name), basePath());
+        return docsForEntry(e, readValue(name), basePath(), { deviceId: deviceId });
       },
       shadow: function (path) {
         if (path) { return clone(shadow[path]) || null; }
@@ -1833,9 +1976,18 @@
   function createMockAdapter(server, opts) {
     opts = opts || {};
     var ackFails = false;
+    var current = null;      /* 모의 로그인 계정 — 실제 Firebase 와 같은 순서(uid → roles 조회)를 연습할 수 있게 */
     return {
       mode: 'mock',
       label: opts.label || '모의 Firestore',
+      setRole: function (r) { return r === 'admin' ? 'admin' : 'tablet'; },
+      signInEmail: function (email, pw) {
+        current = { uid: 'mock_' + hashStr(String(email || '')), email: String(email || ''), anonymous: false };
+        return Promise.resolve({ uid: current.uid, email: current.email });
+      },
+      currentUser: function () { return current ? { uid: current.uid, email: current.email, anonymous: false } : null; },
+      uid: function () { return current ? current.uid : ''; },
+      signOut: function () { current = null; return Promise.resolve(true); },
       writeBatch: function (ops) { return server.write(ops); },
       getDoc: function (path) {
         return Promise.resolve({ path: path, exists: !!server.get(path), data: server.get(path) });
@@ -1879,7 +2031,8 @@
     opts = opts || {};
     var mods = null, app = null, db = null, auth = null;
     var sdkVersion = (cfg && cfg.sdkVersion) || '11.0.2';
-    var role = opts.role === 'tablet' ? 'tablet' : 'admin';
+    /* 역할을 확인하기 전에는 가장 제한적인 쪽(태블릿 구독)으로 시작한다 */
+    var role = opts.role === 'admin' ? 'admin' : 'tablet';
     var unsubs = [];
 
     function connect() {
@@ -1903,6 +2056,9 @@
       mode: 'firestore',
       label: 'Firebase Firestore',
       connect: connect,
+      /* 서버 roles 로 확인된 유효 권한을 반영한다 (관리자 구독은 'admin' 일 때만) */
+      setRole: function (r) { role = r === 'admin' ? 'admin' : 'tablet'; return role; },
+      getRole: function () { return role; },
       raw: function () { return { mods: mods, app: app, db: db, auth: auth }; },
       signInEmail: function (email, pw) {
         return auth.signInWithEmailAndPassword(email, pw).then(function (cred) { return { uid: cred.user.uid, email: cred.user.email }; });
@@ -1950,15 +2106,18 @@
         var eventSpec = { path: basePath + '/attendanceEvents', where: { field: 'date', op: '>=', value: sinceIso } };
         /* 태블릿은 원생 개인정보(students)·원비·상담·설정을 아예 구독하지 않는다.
            이 역할이 읽을 수 있는 것은 kioskStudents(최소 정보)와 attendanceEvents 둘뿐이다. */
-        var specs = (role === 'tablet')
-          ? [{ path: basePath + '/kioskStudents' }, eventSpec]
-          : [
+        var specs = (role === 'admin')
+          ? [
             { path: basePath + '/students' },
             { path: basePath + '/counsel' },
             { path: basePath + '/shuttle' },
             { path: basePath + '/coupons' },
             { path: basePath + '/meta' },
             { path: basePath + '/tuition' },
+            eventSpec
+          ]
+          : [
+            { path: basePath + '/kioskStudents' },
             eventSpec
           ];
         specs.forEach(function (spec) {
@@ -1983,7 +2142,7 @@
         if (!db) { return Promise.resolve({ ok: false, message: '아직 연결되지 않았습니다' }); }
         /* 규칙상 읽기가 막혀 있어도 "연결 자체"는 확인된다 — 이 역할이 읽어도 되는 문서 1건 */
         var probe = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
-        probe += (role === 'tablet') ? '/meta/kioskConfig' : '/meta/settings';
+        probe += (role === 'admin') ? '/meta/settings' : '/meta/kioskConfig';
         return api.getDoc(probe)
           .then(function (r) { return { ok: true, message: r.exists ? '연결됨 · 설정 문서 있음' : '연결됨 · 아직 데이터 없음' }; },
             function (err) { return { ok: false, message: errorText(err) }; });
@@ -2062,6 +2221,8 @@
     unflatten: unflatten,
     stableStringify: stableStringify,
     contentHash: contentHash,
+    eventHash: eventHash,
+    bodyHash: bodyHash,
     docsForEntry: docsForEntry,
     docBody: docBody,
     unionEventDocs: unionEventDocs,

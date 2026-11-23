@@ -8,7 +8,7 @@
    · 이 테스트 버전을 지워도 운영 버전(mta-taekwondo-attendance/)에는 아무 영향이 없습니다.
    ============================================================= */
 
-var VERSION = 'v2-firebase-test';
+var VERSION = 'v3-firebase-test';
 var CACHE_NAME = 'mta-tkd-fb-test-' + VERSION;
 var HTML_TIMEOUT_MS = 6000;
 

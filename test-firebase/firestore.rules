@@ -1,7 +1,7 @@
 rules_version = '2';
 
 /* =============================================================================
-   경희대MTA태권도 — Firestore 보안 규칙 (Firebase 테스트 버전 · v2)
+   경희대MTA태권도 — Firestore 보안 규칙 (Firebase 테스트 버전 · v3)
    -----------------------------------------------------------------------------
    구조
      dojangs/{도장ID}/roles/{사용자UID}          role: "admin" | "tablet"
@@ -13,7 +13,7 @@ rules_version = '2';
      dojangs/{도장ID}/meta/{settings|feeTable|smsTemplates|couponTypes|logs|muted|admin}
      dojangs/{도장ID}/meta/kioskConfig            출석 화면 최소 설정 (태블릿 읽기 허용)
 
-   원칙 (v2 — 권한·개인정보 분리)
+   원칙 (v3 — v2 의 권한·개인정보 분리 위에 "칸(필드) 제한"과 "출결 위조 방지"를 더함)
      1) 로그인하지 않은 사람은 읽기도 쓰기도 전부 차단
      2) 관리자 계정(role=admin)만 개인정보·원비·상담·설정(meta)에 접근
      3) 출석 태블릿 계정(role=tablet)이 읽을 수 있는 것은 딱 세 가지
@@ -25,7 +25,12 @@ rules_version = '2';
         태블릿에 전면 차단 (읽기·쓰기 모두)
      5) 역할(roles) 문서는 관리자만 만들 수 있음
         ※ 첫 관리자는 Firebase 콘솔에서 직접 만들어야 합니다(SETUP_GUIDE 3장).
-        ※ 규칙의 get() 은 문서 읽기 1회로 계산됩니다. 한도 관리에 참고하세요.
+        ※ 규칙의 get()/exists() 는 문서 읽기로 계산됩니다. 한도 관리에 참고하세요.
+     6) v3 에서 더 엄격해진 것
+          · kioskStudents 쓰기: 허용 칸(hasOnly)만 — 개인정보 칸이 하나라도 있으면 거부
+          · attendanceEvents 쓰기: 허용 칸(hasOnly)만
+          · 태블릿의 출결 만들기: 그 도장에 실제로 있는 원생(kioskStudents 에 존재)만,
+            문서 ID 가 {날짜}_{원생ID}_{in|out} 와 정확히 같아야 함
    ============================================================================= */
 
 service cloud.firestore {
@@ -52,18 +57,48 @@ service cloud.firestore {
       return isAdmin(dojangId) || isTablet(dojangId);
     }
 
-    /* 출결 문서 한 건의 모양 검사 — 시간은 HH:MM, 종류는 in/out, 날짜는 YYYY-MM-DD */
+    /* ---------- kioskStudents 에 들어갈 수 있는 칸 (개인정보 칸은 목록에 없다) ---------- */
+    function kioskFields() {
+      return ['id', 'name', 'division', 'course', 'belt', 'status',
+              '_ver', '_updatedAt', '_updatedBy', '_fieldMeta', '_deleted'];
+    }
+
+    /* ---------- attendanceEvents 에 들어갈 수 있는 칸 ----------
+       firebase-sync.js 가 실제로 쓰는 칸과 100% 같아야 한다.
+       (다르면 실제 앱의 출석 저장이 규칙에서 거부된다 — tests/test_events_vs_rules.py 가 대조) */
+    function eventFields() {
+      return ['date', 'studentId', 'kind', 'time', 'eventId', 'source', 'manual', 'deviceId',
+              '_ver', '_updatedAt', '_updatedBy', '_fieldMeta'];
+    }
+
+    /* 출결 문서 한 건의 모양 검사
+         · 필수 칸: date · studentId · kind · time
+         · 허용 칸 밖의 칸이 하나라도 있으면 거부 (hasOnly)
+         · 시간 HH:MM, 종류 in/out, 날짜 YYYY-MM-DD, 원생 ID 문자열 길이 */
     function validEvent(data) {
       return data.keys().hasAll(['date', 'studentId', 'kind', 'time'])
+             && data.keys().hasOnly(eventFields())
              && data.kind in ['in', 'out']
              && data.date is string
              && data.date.size() == 10
              && data.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
              && data.time is string
+             && data.time.size() == 5
              && data.time.matches('[0-2][0-9]:[0-5][0-9]')
              && data.studentId is string
              && data.studentId.size() > 0
-             && data.studentId.size() <= 300;
+             && data.studentId.size() <= 120;
+    }
+
+    /* 태블릿이 만드는 출결은 한 단계 더 엄격하다
+         · studentId 는 Firestore 문서 ID 로 그대로 쓸 수 있는 글자만
+         · 그 도장에 실제로 있는 원생이어야 함 (kioskStudents 문서가 있어야 함)
+         · 문서 ID 가 {날짜}_{원생ID}_{in|out} 와 정확히 같아야 함 (엉뚱한 문서 ID 로 위조 불가) */
+    function validTabletEvent(data, eventId, dojangId) {
+      return validEvent(data)
+             && data.studentId.matches('[A-Za-z0-9_-]+')
+             && eventId == data.date + '_' + data.studentId + '_' + data.kind
+             && exists(/databases/$(database)/documents/dojangs/$(dojangId)/kioskStudents/$(data.studentId));
     }
 
     /* kioskStudents 한 건에 개인정보 칸이 절대 들어가지 않게 한다 (관리자 기기가 실수로 보내도 거부) */
@@ -88,16 +123,24 @@ service cloud.firestore {
         allow read, write: if isAdmin(dojangId);
       }
 
-      /* 출석 화면용 최소 정보 — 태블릿은 읽기만, 쓰기는 관리자만 */
+      /* 출석 화면용 최소 정보 — 태블릿은 읽기만, 쓰기는 관리자만
+         쓰기(create·update)는 허용 칸만 + 개인정보 칸 금지, 삭제는 관리자만 */
       match /kioskStudents/{studentId} {
         allow read: if isKioskReader(dojangId);
-        allow create, update, delete: if isAdmin(dojangId) && noPrivateFields(request.resource.data);
+        allow create, update: if isAdmin(dojangId)
+                              && noPrivateFields(request.resource.data)
+                              && request.resource.data.keys().hasOnly(kioskFields());
+        allow delete: if isAdmin(dojangId);
       }
 
-      /* 출결 이벤트 — 태블릿은 "새 이벤트 만들기"만, 고치고 지우는 것은 관리자만 */
+      /* 출결 이벤트
+           · 읽기: 관리자 · 태블릿
+           · 만들기: 관리자(형식·칸 검사) / 태블릿(형식·칸 + 실제 원생 + 문서 ID 일치)
+           · 고치기·지우기: 관리자만 (태블릿은 새로 만들기만) */
       match /attendanceEvents/{eventId} {
         allow read: if isKioskReader(dojangId);
-        allow create: if isKioskReader(dojangId) && validEvent(request.resource.data);
+        allow create: if (isAdmin(dojangId) && validEvent(request.resource.data))
+                      || (isTablet(dojangId) && validTabletEvent(request.resource.data, eventId, dojangId));
         allow update, delete: if isAdmin(dojangId);
       }
 

@@ -116,6 +116,8 @@
       deviceId: deviceId(),
       dojangId: S.cfg.dojangId,
       role: S.cfg.role,
+      /* 실제 Firebase 모드에서는 화면 선택값이 아니라 서버 roles/{uid} 로 권한을 잠근다 */
+      requireServerRole: S.cfg.mode === 'firestore',
       reload: function () {
         try {
           if (window.__tdk && window.__tdk.sync && typeof window.__tdk.sync.reload === 'function') {
@@ -132,7 +134,17 @@
           S.msgKind = 'warn';
         }
         if (type === 'blocked-local') {
-          S.msg = '이 기기는 「출석 태블릿」 역할이라 원생·원비·설정을 Firestore로 올리지 않습니다(출결만 올립니다).';
+          S.msg = (payload && payload.reason === 'role-unverified')
+            ? '🔒 서버에서 이 계정의 역할(roles 문서)을 확인하기 전에는 원생·원비·설정을 올리지 않습니다 — 역할에 맞는 계정으로 로그인해 주세요.'
+            : '이 기기는 「출석 태블릿」 역할이라 원생·원비·설정을 Firestore로 올리지 않습니다(출결만 올립니다).';
+          S.msgKind = 'warn';
+        }
+        if (type === 'role') {
+          S.msg = roleLockText();
+          S.msgKind = (payload && payload.role === 'none') ? 'warn' : 'ok';
+        }
+        if (type === 'role-blocked') {
+          S.msg = '🔒 ' + roleLockText();
           S.msgKind = 'warn';
         }
         if (type === 'usage' && payload && payload.level >= 1) {
@@ -155,7 +167,7 @@
     S.adapter = FB.createMockAdapter(S.server, { label: '모의 Firestore' });
     makeEngine(S.adapter);
     saveConfig({ mode: 'mock' });
-    S.msg = '🧪 모의 Firestore 로 켰습니다 · 같은 브라우저에서 이 주소를 탭으로 하나 더 열면 PC↔태블릿처럼 동기화됩니다.';
+    S.msg = '🧪 모의 Firestore 로 켰습니다 · 같은 브라우저에서 이 주소를 탭으로 하나 더 열면 PC↔태블릿처럼 동기화됩니다. (연습 모드는 로그인 없이 화면에서 고른 역할로 동작합니다)';
     S.msgKind = 'ok';
     renderAll();
   }
@@ -174,6 +186,7 @@
     renderAll();
     return FB.createFirestoreAdapter(Object.assign({ dojangId: S.cfg.dojangId }, v.config), {
       basePath: 'dojangs/' + S.cfg.dojangId,
+      /* 역할을 서버에서 확인하기 전에는 어댑터도 태블릿(최소) 구독으로 시작한다 */
       onError: function (err) {
         S.msg = '⚠️ 실시간 구독 오류: ' + FB.errorText(err);
         S.msgKind = 'warn';
@@ -181,12 +194,28 @@
       }
     }).then(function (adapter) {
       S.adapter = adapter;
-      makeEngine(adapter);
+      var engine = makeEngine(adapter);
       saveConfig({ mode: 'firestore', config: v.config });
-      S.msg = '🔥 Firebase 에 연결했습니다. 관리자 로그인 후 데이터를 이전해 주세요.';
+      S.msg = '🔥 Firebase 에 연결했습니다. 이제 역할에 맞는 계정으로 로그인하면 서버 roles 기준으로 권한이 정해집니다.';
       S.msgKind = 'ok';
       renderAll();
-      return true;
+      return engine.verifyRole().then(function (r) {
+        if (r && r.uid) {
+          S.auth = { uid: r.uid, email: r.email || '', role: r.verified || '', expect: S.cfg.role };
+        }
+        if (r && r.verified === 'admin') {
+          S.msg = '✅ 관리자 계정(' + (r.email || r.uid) + ')으로 확인되었습니다 — 데이터 이전을 진행할 수 있습니다.';
+          S.msgKind = 'ok';
+        } else if (r && r.verified === 'tablet') {
+          S.msg = '✅ 출석 태블릿 계정으로 확인되었습니다 — 출결만 올립니다. (화면의 「이 기기 역할」을 관리자로 바꿔도 관리자 권한은 생기지 않습니다)';
+          S.msgKind = 'ok';
+        } else {
+          S.msg = '🔒 역할 확인 전입니다 — 아래 「' + roleLabel(S.cfg.role) + ' 계정」으로 로그인해 주세요. (로그인 전에는 서버로 아무것도 보내지 않습니다)';
+          S.msgKind = 'warn';
+        }
+        renderAll();
+        return true;
+      });
     }, function (err) {
       S.adapter = null;
       S.msg = '⚠️ 연결하지 못했습니다: ' + FB.errorText(err) + ' — 인터넷과 firebaseConfig 를 확인해 주세요.';
@@ -223,7 +252,8 @@
     writeJSON(RELAY_KEY, log);
   }
   function relaySms(ev) {
-    if (!ev || S.cfg.role !== 'admin') { return; }
+    /* 관리자 권한이 서버 roles 로 확인된 기기만 대신 문자를 보낸다 */
+    if (!ev || engineRole() !== 'admin') { return; }
     if (!ev.studentId || !ev.time || !ev.date) { return; }
     var today = new Date();
     var todayKey = today.getFullYear() + '-' + ('0' + (today.getMonth() + 1)).slice(-2) + '-' + ('0' + today.getDate()).slice(-2);
@@ -381,11 +411,35 @@
       (S.plan.derivedKeys ? ' + 자동 생성 사본 ' + S.plan.derivedKeys + '종 ' + numText(S.plan.derived) + '건' : '') +
       (S.plan.localOnly ? ' · 로컬 전용 ' + S.plan.localOnly + '개 키 제외' : ''));
     var run = $('fb-mig-run');
-    if (run) { run.disabled = !(S.engine && S.engine.adapter && S.plan.total >= 0) || S.cfg.role === 'tablet' || S.busy; }
+    if (run) { run.disabled = !(S.engine && S.engine.adapter && S.plan.total >= 0) || engineRole() !== 'admin' || S.busy; }
   }
 
   function roleLabel(r) {
     return r === 'admin' ? '관리자 PC' : (r === 'tablet' ? '출석 태블릿' : String(r || '역할 없음'));
+  }
+
+  /* ---------- 유효 권한은 서버 roles 기준 ----------
+     화면에서 고른 역할(S.cfg.role)은 "어떤 계정으로 로그인할지"를 고르는 값일 뿐이고,
+     실제로 무엇을 할 수 있는지는 엔진이 서버 roles/{uid} 로 잠근 effectiveRole() 이 정한다. */
+  function engineRole() {
+    return (S.engine && typeof S.engine.effectiveRole === 'function') ? S.engine.effectiveRole() : null;
+  }
+  function verifiedRole() {
+    return (S.engine && typeof S.engine.verifiedRole === 'function') ? S.engine.verifiedRole() : null;
+  }
+  function roleLockText() {
+    var er = engineRole();
+    if (er === 'none') {
+      return '역할 확인 전이라 동기화를 잠갔습니다 — ' + roleLabel(S.cfg.role) +
+        ' 계정으로 로그인하면 서버 roles 기준으로 동기화가 시작됩니다. (로그인 전에는 서버로 아무것도 보내지 않습니다)';
+    }
+    if (er === 'tablet' && S.cfg.role !== 'tablet') {
+      return '서버 roles 문서의 역할이 「출석 태블릿」이므로 이 기기는 태블릿 권한으로만 동작합니다 — 화면에서 「관리자 PC」를 고르거나 저장해도 관리자 권한(원생 개인정보·원비·이전)은 생기지 않습니다.';
+    }
+    if (er === 'tablet') {
+      return '서버 역할 「출석 태블릿」으로 동작합니다 — 출결만 올리고, 원생 개인정보·원비·설정은 올리지도 읽지도 않습니다.';
+    }
+    return '서버 역할 「관리자 PC」로 동작합니다.';
   }
 
   function renderAuth() {
@@ -420,19 +474,18 @@
     }
     if (!a.role) {
       note.textContent = '⚠️ 이 계정에는 roles 문서가 없습니다 — dojangs/' + S.cfg.dojangId + '/roles/' + a.uid +
-        ' 에 role: "' + (a.expect || dev) + '" 을 만들어 주세요.';
-      return;
+        ' 에 role: "' + (a.expect || dev) + '" 을 만들어 주세요. (만들기 전까지는 역할 미확인 상태라 동기화를 하지 않습니다)'; return;
     }
     if (a.role !== dev) {
       note.textContent = '⚠️ 이 계정의 역할은 「' + roleLabel(a.role) + '」인데 이 기기는 「' + roleLabel(dev) + '」입니다. ' +
-        '위 「이 기기 역할」을 맞추거나 ' + roleLabel(dev) + ' 계정으로 다시 로그인하세요.' +
+        '위 「이 기기 역할」을 맞추거나 ' + roleLabel(dev) + ' 계정으로 다시 로그인하세요. ' +
         (dev === 'tablet' && a.role === 'admin'
-          ? ' (관리자 계정으로 로그인되어 이 태블릿이 규칙상 개인정보를 읽을 수 있는 상태입니다 — 태블릿 전용 계정을 꼭 쓰세요.)'
-          : '');
+          ? '관리자 계정으로 로그인했지만 이 기기는 더 제한적인 「출석 태블릿」 권한으로 잠깁니다 — 태블릿 전용 계정을 꼭 쓰세요.'
+          : '지금은 더 제한적인 「' + (engineRole() === 'admin' ? '관리자 PC' : '출석 태블릿') + '」 권한으로만 동작합니다.');
       return;
     }
     note.textContent = a.role === 'admin'
-      ? '✅ 관리자 PC 계정입니다 — 모든 데이터를 읽고 쓸 수 있습니다.'
+      ? '✅ 관리자 PC 계정입니다 — 서버 roles 기준으로 관리자 권한이 확인되어 모든 데이터를 읽고 쓸 수 있습니다.'
       : '✅ 출석 태블릿 계정입니다 — 출석 화면 최소 정보(kioskStudents)와 출결만 읽고, 출결 새로 만들기만 할 수 있습니다.';
   }
 
@@ -558,23 +611,34 @@
       if (expect === 'tablet') { saveConfig({ tabletEmail: email }); } else { saveConfig({ adminEmail: email }); }
       return S.adapter.getDoc('dojangs/' + S.cfg.dojangId + '/roles/' + u.uid).then(function (r) {
         S.auth.role = r && r.exists && r.data ? String(r.data.role || '') : '';
+        /* 서버 roles 로 유효 권한을 잠근다 — 화면 드롭다운과 달라도 서버 기준 */
+        if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
+          try { S.engine.setVerifiedRole(S.auth.role); } catch (e) {}
+        }
         if (!S.auth.role) {
           S.msg = '⚠️ 로그인은 됐지만 roles 문서가 없습니다 — dojangs/' + S.cfg.dojangId + '/roles/' + u.uid +
-            ' 문서에 role: "' + expect + '" 을 만들어 주세요.';
+            ' 문서에 role: "' + expect + '" 을 만들어 주세요. (만들기 전까지는 동기화를 하지 않습니다)';
           S.msgKind = 'warn';
         } else if (S.auth.role !== expect) {
-          S.msg = '⚠️ 이 계정의 역할은 「' + roleLabel(S.auth.role) + '」입니다 — 「' + roleLabel(expect) + '」 계정으로 로그인해 주세요.';
+          S.msg = '⚠️ 이 계정의 역할은 「' + roleLabel(S.auth.role) + '」입니다 — 「' + roleLabel(expect) + '」 계정으로 로그인해 주세요. ' +
+            '권한은 서버 역할 기준으로 잠겨 있으니, 이 계정으로는 「' + roleLabel(S.auth.role) + '」 권한까지만 동작합니다.';
           S.msgKind = 'warn';
         } else if (S.auth.role !== S.cfg.role) {
           S.msg = '✅ ' + roleLabel(expect) + ' 계정으로 로그인했습니다. 다만 이 기기의 역할 설정은 「' + roleLabel(S.cfg.role) +
-            '」입니다 — 위 「이 기기 역할」을 「' + roleLabel(expect) + '」로 맞춰 주세요.';
+            '」입니다 — 서버 역할 기준으로 더 제한적인 「' + roleLabel(S.auth.role) + '」 권한으로 동작합니다. ' +
+            '위 「이 기기 역할」을 「' + roleLabel(expect) + '」로 맞춰 주세요.';
           S.msgKind = 'warn';
         } else {
-          S.msg = '✅ ' + roleLabel(expect) + ' 계정으로 로그인했습니다.';
+          S.msg = '✅ ' + roleLabel(expect) + ' 계정으로 로그인했습니다. (서버 roles 기준으로 권한이 확인되었습니다)';
           S.msgKind = 'ok';
         }
         renderAll();
-      }, function () { renderAll(); });
+      }, function () {
+        if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
+          try { S.engine.setVerifiedRole(''); } catch (e) {}
+        }
+        renderAll();
+      });
     }, function (err) {
       S.msg = '⚠️ 로그인 실패: ' + FB.errorText(err) +
         ' (Firebase Authentication 에서 이메일/비밀번호 로그인을 켜고 「' + roleLabel(expect) + '」 계정을 만들어 주세요)';
@@ -593,6 +657,8 @@
     }
     if (S.adapter && S.adapter.signOut) { S.adapter.signOut().then(function () {}, function () {}); }
     S.auth = null;
+    /* 로그아웃하면 역할 확인도 지운다 — 다시 잠금(역할 미확인) 상태로 */
+    if (S.engine && typeof S.engine.setVerifiedRole === 'function') { try { S.engine.setVerifiedRole(''); } catch (e) {} }
     S.msg = '로그아웃했습니다.';
     renderAll();
   }
@@ -614,8 +680,10 @@
 
   function onMigrate() {
     if (!S.engine || !S.plan) { return; }
-    if (S.cfg.role === 'tablet') {
-      S.msg = '출석 태블릿 역할에서는 이전하지 않습니다 — 관리자 PC에서 해 주세요.';
+    if (engineRole() !== 'admin') {
+      S.msg = (engineRole() === 'tablet')
+        ? '출석 태블릿 권한으로는 이전하지 않습니다 — 관리자 PC에서 해 주세요.'
+        : '🔒 서버 roles 문서로 관리자 역할이 확인되지 않았습니다 — 「👨‍💼 관리자 PC 계정」으로 로그인한 뒤 다시 시도해 주세요.';
       S.msgKind = 'warn';
       renderAll();
       return;
@@ -777,8 +845,17 @@
   }
 
   window.TDKFB = {
-    /* 이 기기의 역할(admin|tablet) — 앱의 문자 발송이 태블릿에서 직접 나가지 않게 하는 데 쓴다 */
-    deviceRole: function () { return S.cfg.role; },
+    /* 이 기기의 역할 — 화면에서 고른 값이 아니라 서버 roles 로 확인된 유효 권한.
+       역할을 아직 확인하지 못한 상태에서는 화면 선택값으로 되돌아간다
+       (권한은 엔진·규칙이 잠그므로 안전하고, 문자 발송 같은 기기 안쪽 동작은 예전처럼 유지). */
+    deviceRole: function () {
+      var er = engineRole();
+      if (er === 'admin' || er === 'tablet') { return er; }
+      return S.cfg.role === 'tablet' ? 'tablet' : 'admin';
+    },
+    requestedRole: function () { return S.cfg.role; },
+    effectiveRole: engineRole,
+    verifiedRole: verifiedRole,
     roleLabel: function (r) { return roleLabel(r); },
     loginAs: loginAs,
     auth: function () { return S.auth ? { uid: S.auth.uid, email: S.auth.email, role: S.auth.role } : null; },
