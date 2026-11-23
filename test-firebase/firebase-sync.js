@@ -2049,22 +2049,38 @@
     opts = opts || {};
     var mods = null, app = null, db = null, auth = null;
     var sdkVersion = (cfg && cfg.sdkVersion) || '11.0.2';
+    /* 테스트에서 가짜 모듈을 넣을 수 있는 자리 — 실제 동작은 loadFirebaseModules 그대로 */
+    var loadModules = (typeof opts.loadModules === 'function') ? opts.loadModules : loadFirebaseModules;
+    /* 연결 테스트가 오프라인·권한 지연으로 무한 대기하지 않게 하는 시간(기본 8초) */
+    var testTimeoutMs = Number(opts.testTimeoutMs) > 0 ? Number(opts.testTimeoutMs) : 8000;
     /* 역할을 확인하기 전에는 가장 제한적인 쪽(태블릿 구독)으로 시작한다 */
     var role = opts.role === 'admin' ? 'admin' : 'tablet';
     var unsubs = [];
 
     function connect() {
-      return loadFirebaseModules(sdkVersion).then(function (m) {
+      return loadModules(sdkVersion).then(function (m) {
         mods = m;
         var fs = m.firestore;
-        app = m.app.initializeApp({
+        var appName = 'tdk-fb-' + (cfg.dojangId || 'mta');
+        /* 같은 탭에서 「설정 저장 · 연결」을 다시 눌러도 앱을 새로 만들지 않는다
+           (duplicate-app 으로 연결이 실패하던 문제 방지) */
+        var existing = (typeof m.app.getApps === 'function' ? m.app.getApps() : []).filter(function (a) {
+          return a && a.name === appName;
+        })[0];
+        app = existing || m.app.initializeApp({
           apiKey: cfg.apiKey, authDomain: cfg.authDomain, projectId: cfg.projectId,
           storageBucket: cfg.storageBucket, messagingSenderId: cfg.messagingSenderId, appId: cfg.appId
-        }, 'tdk-fb-' + (cfg.dojangId || 'mta'));
-        /* 오프라인 임시 저장 + 여러 탭 동시 사용 */
-        db = fs.initializeFirestore(app, {
-          localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() })
-        });
+        }, appName);
+        /* 오프라인 임시 저장 + 여러 탭 동시 사용.
+           이미 이 앱의 Firestore 가 초기화돼 있으면 initializeFirestore 가
+           "already been called with different options" 로 실패하므로 기존 인스턴스를 쓴다. */
+        try {
+          db = fs.initializeFirestore(app, {
+            localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() })
+          });
+        } catch (e) {
+          db = fs.getFirestore(app);
+        }
         auth = m.auth.getAuth(app);
         return api;
       });
@@ -2078,13 +2094,29 @@
       setRole: function (r) { role = r === 'admin' ? 'admin' : 'tablet'; return role; },
       getRole: function () { return role; },
       raw: function () { return { mods: mods, app: app, db: db, auth: auth }; },
+      /* Firebase v11 은 모듈 함수에 auth 인스턴스를 넘기는 방식이다.
+         auth.signInWithEmailAndPassword(...) 처럼 v8 메서드로 부르면
+         "... is not a function" 으로 실패한다. */
       signInEmail: function (email, pw) {
-        return auth.signInWithEmailAndPassword(email, pw).then(function (cred) { return { uid: cred.user.uid, email: cred.user.email }; });
+        if (!mods || !mods.auth || typeof mods.auth.signInWithEmailAndPassword !== 'function') {
+          return Promise.reject(new Error('Firebase Auth 모듈이 준비되지 않았습니다 — 연결을 다시 눌러 주세요'));
+        }
+        return mods.auth.signInWithEmailAndPassword(auth, email, pw).then(function (cred) {
+          return { uid: cred.user.uid, email: cred.user.email || '' };
+        });
       },
       signInAnonymously: function () {
-        return auth.signInAnonymously().then(function (cred) { return { uid: cred.user.uid }; });
+        if (!mods || !mods.auth || typeof mods.auth.signInAnonymously !== 'function') {
+          return Promise.reject(new Error('Firebase Auth 모듈이 준비되지 않았습니다 — 연결을 다시 눌러 주세요'));
+        }
+        return mods.auth.signInAnonymously(auth).then(function (cred) { return { uid: cred.user.uid }; });
       },
-      signOut: function () { return auth.signOut(); },
+      signOut: function () {
+        if (!mods || !mods.auth || typeof mods.auth.signOut !== 'function') {
+          return Promise.reject(new Error('Firebase Auth 모듈이 준비되지 않았습니다 — 연결을 다시 눌러 주세요'));
+        }
+        return mods.auth.signOut(auth);
+      },
       currentUser: function () { return auth && auth.currentUser ? { uid: auth.currentUser.uid, email: auth.currentUser.email || '', anonymous: !!auth.currentUser.isAnonymous } : null; },
       uid: function () { return auth && auth.currentUser ? auth.currentUser.uid : ''; },
       writeBatch: function (ops) {
@@ -2161,9 +2193,26 @@
         /* 규칙상 읽기가 막혀 있어도 "연결 자체"는 확인된다 — 이 역할이 읽어도 되는 문서 1건 */
         var probe = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
         probe += (role === 'admin') ? '/meta/settings' : '/meta/kioskConfig';
-        return api.getDoc(probe)
-          .then(function (r) { return { ok: true, message: r.exists ? '연결됨 · 설정 문서 있음' : '연결됨 · 아직 데이터 없음' }; },
-            function (err) { return { ok: false, message: errorText(err) }; });
+        var docCall;
+        try {
+          docCall = api.getDoc(probe);
+        } catch (err) {
+          return Promise.resolve({ ok: false, message: errorText(err) });
+        }
+        var sec = Math.max(1, Math.round(testTimeoutMs / 1000));
+        var timer = null;
+        var timeout = new Promise(function (resolve) {
+          timer = setTimeout(function () {
+            resolve({ ok: false, timeout: true, message: '⏱ ' + sec + '초 안에 응답이 없습니다 — 오프라인·네트워크 또는 Firestore 규칙(권한)을 확인해 주세요' });
+          }, testTimeoutMs);
+        });
+        var probeRead = docCall.then(
+          function (r) { return { ok: true, message: r.exists ? '연결됨 · 설정 문서 있음' : '연결됨 · 아직 데이터 없음' }; },
+          function (err) { return { ok: false, message: errorText(err) + ' (' + probe + ')' }; });
+        return Promise.race([probeRead, timeout]).then(function (r) {
+          if (timer) { clearTimeout(timer); timer = null; }
+          return r;
+        });
       },
       disconnect: function () { unsubs.forEach(function (u) { try { u(); } catch (e) {} }); unsubs = []; }
     };

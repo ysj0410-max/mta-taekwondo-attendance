@@ -39,6 +39,13 @@
   function setHtml(id, html) { var e = $(id); if (e) { e.innerHTML = html; } }
   function show(id, on) { var e = $(id); if (e) { e.style.display = on ? '' : 'none'; } }
 
+  /* 예외가 나도 화면에 반드시 남긴다 — 로그인·연결이 조용히 멈추지 않게 */
+  function showError(prefix, err) {
+    S.msg = prefix + FB.errorText(err);
+    S.msgKind = 'warn';
+    try { renderAll(); } catch (e) {}
+  }
+
   function readJSON(key, fallback) {
     try {
       var raw = localStorage.getItem(key);
@@ -184,38 +191,67 @@
     S.msg = '🔥 Firebase 에 연결하는 중…';
     S.msgKind = '';
     renderAll();
-    return FB.createFirestoreAdapter(Object.assign({ dojangId: S.cfg.dojangId }, v.config), {
-      basePath: 'dojangs/' + S.cfg.dojangId,
-      /* 역할을 서버에서 확인하기 전에는 어댑터도 태블릿(최소) 구독으로 시작한다 */
-      onError: function (err) {
-        S.msg = '⚠️ 실시간 구독 오류: ' + FB.errorText(err);
-        S.msgKind = 'warn';
-        renderAll();
-      }
-    }).then(function (adapter) {
-      S.adapter = adapter;
-      var engine = makeEngine(adapter);
-      saveConfig({ mode: 'firestore', config: v.config });
-      S.msg = '🔥 Firebase 에 연결했습니다. 이제 역할에 맞는 계정으로 로그인하면 서버 roles 기준으로 권한이 정해집니다.';
-      S.msgKind = 'ok';
-      renderAll();
-      return engine.verifyRole().then(function (r) {
-        if (r && r.uid) {
-          S.auth = { uid: r.uid, email: r.email || '', role: r.verified || '', expect: S.cfg.role };
-        }
-        if (r && r.verified === 'admin') {
-          S.msg = '✅ 관리자 계정(' + (r.email || r.uid) + ')으로 확인되었습니다 — 데이터 이전을 진행할 수 있습니다.';
-          S.msgKind = 'ok';
-        } else if (r && r.verified === 'tablet') {
-          S.msg = '✅ 출석 태블릿 계정으로 확인되었습니다 — 출결만 올립니다. (화면의 「이 기기 역할」을 관리자로 바꿔도 관리자 권한은 생기지 않습니다)';
-          S.msgKind = 'ok';
-        } else {
-          S.msg = '🔒 역할 확인 전입니다 — 아래 「' + roleLabel(S.cfg.role) + ' 계정」으로 로그인해 주세요. (로그인 전에는 서버로 아무것도 보내지 않습니다)';
+    var connecting;
+    try {
+      connecting = FB.createFirestoreAdapter(Object.assign({ dojangId: S.cfg.dojangId }, v.config), {
+        basePath: 'dojangs/' + S.cfg.dojangId,
+        /* 역할을 서버에서 확인하기 전에는 어댑터도 태블릿(최소) 구독으로 시작한다 */
+        onError: function (err) {
+          S.msg = '⚠️ 실시간 구독 오류: ' + FB.errorText(err);
           S.msgKind = 'warn';
+          renderAll();
+        }
+      });
+    } catch (err) {
+      showError('⚠️ 연결하지 못했습니다: ', err);
+      return Promise.resolve(false);
+    }
+    return connecting.then(function (adapter) {
+      try {
+        S.adapter = adapter;
+        var engine = makeEngine(adapter);
+        saveConfig({ mode: 'firestore', config: v.config });
+        S.msg = '🔥 Firebase 에 연결했습니다. 이제 역할에 맞는 계정으로 로그인하면 서버 roles 기준으로 권한이 정해집니다.';
+        S.msgKind = 'ok';
+        /* 이전에 로그인한 세션이 남아 있으면 바로 역할을 확인해 연결 상태를 갱신한다 */
+        var cu = null;
+        try { cu = (typeof adapter.currentUser === 'function') ? adapter.currentUser() : null; } catch (e) { cu = null; }
+        if (cu && cu.uid) {
+          S.auth = { uid: cu.uid, email: cu.email || '', role: '', expect: S.cfg.role };
+          S.msg = '🔎 이전에 로그인한 계정(' + (cu.email || cu.uid) + ')의 역할을 서버에서 확인하는 중…';
+          S.msgKind = '';
         }
         renderAll();
-        return true;
-      });
+        var verifying;
+        try { verifying = engine.verifyRole(); } catch (err) { verifying = Promise.reject(err); }
+        return Promise.resolve(verifying).then(function (r) {
+          try {
+            if (r && r.uid) {
+              S.auth = { uid: r.uid, email: r.email || '', role: r.verified || '', expect: S.cfg.role };
+            }
+            if (r && r.verified === 'admin') {
+              S.msg = '✅ 관리자 계정(' + (r.email || r.uid) + ')으로 확인되었습니다 — 데이터 이전을 진행할 수 있습니다.';
+              S.msgKind = 'ok';
+            } else if (r && r.verified === 'tablet') {
+              S.msg = '✅ 출석 태블릿 계정으로 확인되었습니다 — 출결만 올립니다. (화면의 「이 기기 역할」을 관리자로 바꿔도 관리자 권한은 생기지 않습니다)';
+              S.msgKind = 'ok';
+            } else {
+              S.msg = '🔒 역할 확인 전입니다 — 아래 「' + roleLabel(S.cfg.role) + ' 계정」으로 로그인해 주세요. (로그인 전에는 서버로 아무것도 보내지 않습니다)';
+              S.msgKind = 'warn';
+            }
+            renderAll();
+          } catch (err) {
+            showError('⚠️ 연결 상태를 화면에 표시하지 못했습니다: ', err);
+          }
+          return true;
+        }, function (err) {
+          showError('⚠️ 역할 확인에 실패했습니다: ', err);
+          return true;
+        });
+      } catch (err) {
+        showError('⚠️ 연결하지 못했습니다: ', err);
+        return false;
+      }
     }, function (err) {
       S.adapter = null;
       S.msg = '⚠️ 연결하지 못했습니다: ' + FB.errorText(err) + ' — 인터넷과 firebaseConfig 를 확인해 주세요.';
@@ -573,14 +609,19 @@
     }
     S.msg = '연결 확인 중…';
     renderAll();
-    S.adapter.test().then(function (r) {
-      S.msg = (r && r.ok ? '✅ ' : '⚠️ ') + ((r && r.message) || '');
+    var call;
+    try {
+      call = S.adapter.test();
+    } catch (err) {
+      showError('⚠️ 연결 실패: ', err);
+      return;
+    }
+    Promise.resolve(call).then(function (r) {
+      S.msg = (r && r.ok ? '✅ ' : '⚠️ ') + ((r && r.message) || '응답이 없습니다 — 다시 시도해 주세요.');
       S.msgKind = r && r.ok ? 'ok' : 'warn';
       renderAll();
     }, function (err) {
-      S.msg = '⚠️ 연결 실패: ' + FB.errorText(err);
-      S.msgKind = 'warn';
-      renderAll();
+      showError('⚠️ 연결 실패: ', err);
     });
   }
 
@@ -604,12 +645,35 @@
     }
     S.msg = roleLabel(expect) + ' 계정으로 로그인 중…';
     renderAll();
-    S.adapter.signInEmail(email, pw).then(function (u) {
+    var signing;
+    try {
+      signing = S.adapter.signInEmail(email, pw);
+    } catch (err) {
+      showError('⚠️ 로그인 실패: ', err);
+      return;
+    }
+    Promise.resolve(signing).then(function (u) {
+      if (!u || !u.uid) {
+        S.msg = '⚠️ 로그인 응답에 사용자 정보가 없습니다 — 다시 시도해 주세요.';
+        S.msgKind = 'warn';
+        renderAll();
+        return;
+      }
       var pwEl = $(pwId);
       if (pwEl) { pwEl.value = ''; }
       S.auth = { uid: u.uid, email: u.email, role: '', expect: expect };
       if (expect === 'tablet') { saveConfig({ tabletEmail: email }); } else { saveConfig({ adminEmail: email }); }
-      return S.adapter.getDoc('dojangs/' + S.cfg.dojangId + '/roles/' + u.uid).then(function (r) {
+      var roleCall;
+      try {
+        roleCall = S.adapter.getDoc('dojangs/' + S.cfg.dojangId + '/roles/' + u.uid);
+      } catch (err) {
+        if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
+          try { S.engine.setVerifiedRole(''); } catch (e) {}
+        }
+        showError('⚠️ 로그인은 됐지만 역할을 확인하지 못했습니다: ', err);
+        return;
+      }
+      return Promise.resolve(roleCall).then(function (r) {
         S.auth.role = r && r.exists && r.data ? String(r.data.role || '') : '';
         /* 서버 roles 로 유효 권한을 잠근다 — 화면 드롭다운과 달라도 서버 기준 */
         if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
@@ -633,11 +697,11 @@
           S.msgKind = 'ok';
         }
         renderAll();
-      }, function () {
+      }, function (err) {
         if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
           try { S.engine.setVerifiedRole(''); } catch (e) {}
         }
-        renderAll();
+        showError('⚠️ 로그인은 됐지만 역할을 확인하지 못했습니다: ', err);
       });
     }, function (err) {
       S.msg = '⚠️ 로그인 실패: ' + FB.errorText(err) +
@@ -655,7 +719,9 @@
         return;
       }
     }
-    if (S.adapter && S.adapter.signOut) { S.adapter.signOut().then(function () {}, function () {}); }
+    if (S.adapter && typeof S.adapter.signOut === 'function') {
+      try { Promise.resolve(S.adapter.signOut()).then(function () {}, function () {}); } catch (e) {}
+    }
     S.auth = null;
     /* 로그아웃하면 역할 확인도 지운다 — 다시 잠금(역할 미확인) 상태로 */
     if (S.engine && typeof S.engine.setVerifiedRole === 'function') { try { S.engine.setVerifiedRole(''); } catch (e) {} }
