@@ -1658,14 +1658,22 @@
                     <button class="btn" id="btn-drive-backup">☁️ 지금 드라이브에 백업</button>
                     <button class="btn" id="btn-drive-restore">📥 드라이브에서 불러오기</button>
                     <button class="btn" id="btn-drive-auto" aria-pressed="false">매일 자동 백업: 꺼짐</button>
+                    <button class="btn btn-mint" id="btn-drive-autosync" aria-pressed="true">앱 열 때 자동 동기화: 켜짐</button>
                     <button class="btn" id="btn-drive-guide">📋 Apps Script 코드 보기/복사</button>
                   </div>
                   <div class="tiny-note" id="drive-last" style="margin-top:8px">마지막 드라이브 백업: 아직 없음</div>
+                  <div class="tiny-note" id="drive-local">이 기기 마지막 수정: 아직 없음</div>
                   <div class="help" style="margin-top:10px">
                     관장님 구글 드라이브 안의 <b>「경희대MTA태권도 백업」</b> 폴더에 관원 명단 · 얼굴 · 출석 이력 · 원비를 <b>mta-taekwondo-backup-latest.json</b>으로 저장하고, 날짜별 사본도 함께 남깁니다.
                     태블릿을 바꾸거나 브라우저 저장소를 지워도 <b>📥 드라이브에서 불러오기</b>로 그대로 이어 쓸 수 있어요(새 도장폰·PC에서 이어쓰기).
                     처음 한 번만 <b>📋 Apps Script 코드 보기/복사</b>의 <b>4단계</b>(약 2분)를 따라 웹 앱 주소를 만들면 됩니다.
                     웹 앱 주소는 관장님 드라이브에만 연결되는 긴 비밀 주소라, 화면을 다른 사람과 공유하거나 주소를 메신저에 그대로 붙여넣지 마세요.
+                  </div>
+                  <div class="help" style="margin-top:8px">
+                    <b>앱 열 때 자동 동기화</b>를 켜 두면 앱을 열 때마다 드라이브 최신 백업과 이 기기를 자동으로 맞춥니다 —
+                    드라이브가 더 최신이면 <b>확인 없이 이 기기에 자동 적용</b>, 이 기기가 더 최신이면 <b>드라이브로 자동 백업</b>합니다.
+                    바꿔 쓴 기기가 비어 있으면 드라이브 백업을 그대로 받아오고, 빈 데이터로 드라이브 백업을 덮어쓰지는 않습니다.
+                    인터넷이 없을 때는 아무것도 바꾸지 않고 다음에 열 때 다시 확인합니다.
                   </div>
                 </div>
               </div>
@@ -2711,7 +2719,7 @@
     face: { threshold: 0.48, cooldown: 20, auto: true },
     sms: { webhookUrl: '', method: 'query', autoSend: true, testPhone: '' },
     tuition: { defaultFee: 150000, dueDay: 5, bankAccount: '' },
-    drive: { webhookUrl: '', autoBackup: false, lastBackupAt: '' },
+    drive: { webhookUrl: '', autoBackup: false, autoSyncOnBoot: true, localUpdatedAt: '', lastBackupAt: '' },
     messages: {}
   };
 
@@ -3028,11 +3036,13 @@
     // 수업별 원비 단가표 (수업·입시반 부서별 기본 원비 · 형제할인 금액)
     app.feeTable = loadFeeTable();
 
-    // 구글 드라이브 백업 설정 (Apps Script 웹 앱 URL · 매일 자동 백업 · 마지막 백업 시각)
+    // 구글 드라이브 백업 설정 (Apps Script 웹 앱 URL · 매일 자동 백업 · 앱 열 때 자동 동기화 · 이 기기 마지막 수정 · 마지막 백업 시각)
     var rawDrive = (settings && settings.drive && typeof settings.drive === 'object' && !Array.isArray(settings.drive)) ? settings.drive : {};
     app.settings.drive = {
       webhookUrl: String(rawDrive.webhookUrl || '').trim().slice(0, 500),
       autoBackup: rawDrive.autoBackup === true,
+      autoSyncOnBoot: rawDrive.autoSyncOnBoot !== false,
+      localUpdatedAt: /^\d{4}-\d{2}-\d{2}T/.test(String(rawDrive.localUpdatedAt || '')) ? String(rawDrive.localUpdatedAt) : '',
       lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(String(rawDrive.lastBackupAt || '')) ? String(rawDrive.lastBackupAt) : ''
     };
 
@@ -3082,9 +3092,9 @@
   function saveRecords() { writeJSON(LS.records, app.records); driveTouchData(); }
   function saveLogs() { writeJSON(LS.logs, app.logs.slice(0, 200)); }
   function saveAttendance() { writeJSON(LS.attendance, app.attendance); driveTouchData(); }
-  function saveFaces() { writeJSON(LS.faces, app.faces); }
+  function saveFaces() { writeJSON(LS.faces, app.faces); driveTouchData(); }
   function saveTuition() { writeJSON(LS.tuition, app.tuition); driveTouchData(); }
-  function saveBulkTemplates() { writeJSON(LS.smsTemplates, app.smsTemplates || []); }
+  function saveBulkTemplates() { writeJSON(LS.smsTemplates, app.smsTemplates || []); driveTouchData(); }
 
   /* =========================================================
      3-A. 얼굴 특징값 저장소 (온디바이스 전용)
@@ -3127,6 +3137,7 @@
   function saveAdminFaceData() {
     if (app.adminFace) { writeJSON(LS.adminFace, app.adminFace); }
     else { try { localStorage.removeItem(LS.adminFace); } catch (e) {} }
+    driveTouchData();
   }
 
   /* =========================================================
@@ -5655,6 +5666,7 @@
     acc.autoLock = value !== 'off';
     acc.updatedAt = new Date().toISOString();
     saveAdminAccount();
+    driveTouchData();
     renderAdminAccountState();
     toast(acc.autoLock ? '출석 화면으로 나가면 자동으로 잠그도록 했어요' : '자동 잠금을 껐어요 · 필요할 땐 「🔒 잠금」 버튼을 눌러 주세요');
   }
@@ -5682,6 +5694,7 @@
           autoLock: acc.autoLock !== false, updatedAt: new Date().toISOString()
         };
         saveAdminAccount();
+        driveTouchData();
         clearAdminForm();
         renderAdminAccountState();
         toast('관리자 계정을 바꿨어요 · 아이디 ' + newId + ' (SHA-256 해시 저장)');
@@ -6407,6 +6420,7 @@
     }
     app.settings.belts = list;
     saveSettings();
+    driveTouchData();
     app.beltDraft = null;
     app.beltPicker = null;
     renderAll();
@@ -9271,6 +9285,7 @@
     }
     msgStore()[u.kind] = text.slice(0, 1200);
     saveSettings();
+    driveTouchData();
     renderMsgSettings(true);
     toast('「' + msgKindLabel(u.kind) + '」 문구를 저장했어요 · 이제 이 문구로 문자가 나가요');
     return msgStore()[u.kind];
@@ -9289,6 +9304,7 @@
   function resetAllMsgTemplates() {
     app.settings.messages = {};
     saveSettings();
+    driveTouchData();
     renderMsgSettings(true);
     toast('모든 문자 문구를 기본값으로 되돌렸어요');
     return true;
@@ -12056,6 +12072,7 @@
       messages: (app.settings && app.settings.messages) || {},
       driveWebhookUrl: driveConf().webhookUrl,
       driveAutoBackup: driveConf().autoBackup === true,
+      driveAutoSyncOnBoot: driveConf().autoSyncOnBoot !== false,
       lastDriveBackupAt: driveConf().lastBackupAt || ''
     };
   }
@@ -12141,6 +12158,21 @@
   }
 
   function applyBackup(data) {
+    // 복원 중에는 저장 함수가 '이 기기 데이터 수정'으로 기록하지 않게 막는다
+    driveApplying = true;
+    try {
+      applyBackupData(data);
+      // 방금 복원한 백업 시각으로 이 기기 수정 시각을 맞춘다 (복원 직후 드라이브로 다시 올리지 않게)
+      var stamp = /^\d{4}-\d{2}-\d{2}T/.test(String((data && data.exportedAt) || ''))
+        ? String(data.exportedAt) : new Date().toISOString();
+      driveConf().localUpdatedAt = stamp;
+      saveSettings();
+    } finally {
+      driveApplying = false;
+    }
+  }
+
+  function applyBackupData(data) {
     var faces = {};
     if (data.faces && typeof data.faces === 'object') {
       Object.keys(data.faces).forEach(function (sid) {
@@ -12199,11 +12231,16 @@
       var inAuto = (inDrive.autoBackup != null)
         ? inDrive.autoBackup === true
         : (data.driveAutoBackup != null ? data.driveAutoBackup === true : prevDrive.autoBackup === true);
+      var inSync = (inDrive.autoSyncOnBoot != null)
+        ? inDrive.autoSyncOnBoot !== false
+        : (data.driveAutoSyncOnBoot != null ? data.driveAutoSyncOnBoot !== false : prevDrive.autoSyncOnBoot !== false);
       inSettings.drive = {
         // 복원 파일에 드라이브 주소가 없으면 이 기기의 연동 주소를 지우지 않습니다.
         webhookUrl: inUrl || String(prevDrive.webhookUrl || '').trim(),
         autoBackup: inAuto,
-        lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(inLast) ? inLast : String(prevDrive.lastBackupAt || '')
+        autoSyncOnBoot: inSync,
+        localUpdatedAt: /^\d{4}-\d{2}-\d{2}T/.test(String(inDrive.localUpdatedAt || '')) ? String(inDrive.localUpdatedAt) : '',
+        lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(String(inLast)) ? inLast : String(prevDrive.lastBackupAt || '')
       };
       writeJSON(LS.settings, inSettings);
     }
@@ -12315,6 +12352,52 @@
   }
   function driveConfigured() { return /^https:\/\/.+/i.test(String(driveConf().webhookUrl || '').trim()); }
   function driveAutoOn() { return driveConfigured() && driveConf().autoBackup === true; }
+
+  /* 앱 열 때 자동 동기화: 열자마자 드라이브 최신본과 이 기기를 자동으로 맞춘다 */
+  var DRIVE_SYNC_DELAY_MS = 1800;
+  var DRIVE_SYNC_SAME_MS = 3000;
+  var driveBootTimer = null;
+  var driveApplying = false;
+  var driveSyncRunning = false;
+
+  function driveAutoSyncOn() { return driveConf().autoSyncOnBoot !== false; }
+  function driveSyncEnabled() { return driveConfigured() && driveAutoSyncOn(); }
+  function driveAutoBackupOn() { return driveConf().autoBackup === true || driveAutoSyncOn(); }
+  function driveParseAt(v) {
+    var t = Date.parse(String(v || ''));
+    return isNaN(t) ? 0 : t;
+  }
+  /* 이 기기 데이터의 마지막 수정 시각 (기록이 없으면 마지막 백업 시각으로 대신) */
+  function driveLocalAt() {
+    var t = driveParseAt(driveConf().localUpdatedAt);
+    if (!t) { t = driveParseAt(driveConf().lastBackupAt); }
+    return t;
+  }
+  function driveLocalEmpty() {
+    if (Object.keys(app.attendance || {}).length > 0) { return false; }
+    if (!app.students || app.students.length === 0) { return true; }
+    return driveSampleOnly();
+  }
+  /* 새 기기에 처음 깔리면 들어 있는 "예시 관원"만 있는 상태 = 아직 진짜 데이터 없음 */
+  function driveSampleOnly() {
+    var list = app.students || [];
+    if (list.length !== SAMPLE_STUDENTS.length) { return false; }
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].name || '') !== String(SAMPLE_STUDENTS[i].name || '')) { return false; }
+      if (String(list[i].id || '') !== String(SAMPLE_STUDENTS[i].id || '')) { return false; }
+    }
+    return true;
+  }
+  function driveHasLocalData() {
+    if (driveLocalEmpty()) { return false; }
+    return !!(app.students && app.students.length) || Object.keys(app.attendance || {}).length > 0;
+  }
+  /* 이 기기 데이터가 바뀐 시각을 기록 (자동 동기화의 비교 기준) */
+  function driveMarkLocalChange() {
+    if (driveApplying) { return; }
+    driveConf().localUpdatedAt = new Date().toISOString();
+    saveSettings();
+  }
   function driveEndpoint(action) {
     var base = String(driveConf().webhookUrl || '').trim();
     if (!base) { return ''; }
@@ -12335,15 +12418,25 @@
       if (!driveConfigured()) { chip.textContent = '미연동'; chip.className = 'chip wait'; }
       else if (driveInFlight) { chip.textContent = '백업 중…'; chip.className = 'chip wait'; }
       else if (c.autoBackup) { chip.textContent = '연동됨 · 매일 자동'; chip.className = 'chip ok'; }
+      else if (c.autoSyncOnBoot !== false) { chip.textContent = '연동됨 · 앱 열 때 동기화'; chip.className = 'chip ok'; }
       else { chip.textContent = '연동됨'; chip.className = 'chip ok'; }
     }
     var last = el('drive-last');
     if (last) { last.textContent = '마지막 드라이브 백업: ' + driveFmtAt(c.lastBackupAt); }
+    var local = el('drive-local');
+    if (local) { local.textContent = '이 기기 마지막 수정: ' + driveFmtAt(c.localUpdatedAt); }
     var btn = el('btn-drive-auto');
     if (btn) {
       btn.textContent = '매일 자동 백업: ' + (c.autoBackup ? '켜짐' : '꺼짐');
       btn.setAttribute('aria-pressed', c.autoBackup ? 'true' : 'false');
       btn.classList.toggle('btn-mint', c.autoBackup === true);
+    }
+    var syncBtn = el('btn-drive-autosync');
+    if (syncBtn) {
+      var on = c.autoSyncOnBoot !== false;
+      syncBtn.textContent = '앱 열 때 자동 동기화: ' + (on ? '켜짐' : '꺼짐');
+      syncBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      syncBtn.classList.toggle('btn-mint', on);
     }
   }
   function fillDriveForm() {
@@ -12373,6 +12466,7 @@
     var data = buildBackup();
     data.driveWebhookUrl = conf.webhookUrl;
     data.driveAutoBackup = conf.autoBackup === true;
+    data.driveAutoSyncOnBoot = conf.autoSyncOnBoot !== false;
     data.lastDriveBackupAt = conf.lastBackupAt || '';
     return {
       action: 'backup',
@@ -12419,6 +12513,11 @@
         if (j && j.ok === false) { throw new Error(j.error || '웹 앱이 백업을 저장하지 못했어요'); }
         var at = new Date().toISOString();
         driveConf().lastBackupAt = at;
+        // 올린 백업의 시각과 이 기기 수정 시각을 맞춰, 다음에 열 때 같은 내용을 또 올리지 않게 한다
+        var exp = String(payload.exportedAt || '');
+        if (!driveConf().localUpdatedAt || String(driveConf().localUpdatedAt) <= exp) {
+          driveConf().localUpdatedAt = exp || at;
+        }
         driveDirty = false;
         saveSettings();
         if (manual) { toast('☁️ 드라이브에 백업했어요 · 관원 ' + app.students.length + '명'); }
@@ -12486,21 +12585,40 @@
     });
   }
 
-  /* 출석·원비·명단이 바뀌면 2분 뒤(묶어서) 자동 백업 */
+  /* 출석·원비·명단이 바뀌면 이 기기 수정 시각을 기록하고, 2분 뒤(묶어서) 자동 백업 */
   function driveTouchData() {
-    if (!driveAutoOn() || driveInFlight) { return; }
+    if (driveApplying) { return; }
+    driveMarkLocalChange();
+    if (!driveAutoBackupOn()) { return; }
     driveDirty = true;
+    if (driveInFlight) { return; }
     if (driveTimer) { clearTimeout(driveTimer); }
     driveTimer = setTimeout(function () {
       driveTimer = null;
-      if (!driveDirty || !driveAutoOn()) { return; }
+      if (!driveDirty || !driveAutoBackupOn()) { return; }
       driveBackupNow(false);
     }, 120000);
   }
 
-  /* 앱을 열었을 때: 오늘 백업이 아직 없으면 20초 뒤 한 번 */
-  function driveAutoBoot() {
-    if (!driveAutoOn()) { return; }
+  /* 앱을 열었을 때: 1.8초 뒤(화면·카메라를 막지 않게) 드라이브 최신본과 이 기기를 자동으로 맞춘다 */
+  function driveAutoBoot(opts) {
+    opts = opts || {};
+    if (driveBootTimer) { clearTimeout(driveBootTimer); driveBootTimer = null; }
+    if (!driveSyncEnabled()) {
+      driveDailyBoot();
+      return Promise.resolve({ ok: false, reason: 'auto-sync-off' });
+    }
+    if (opts.now) { return driveSyncRun(); }
+    driveBootTimer = setTimeout(function () {
+      driveBootTimer = null;
+      driveSyncRun();
+    }, opts.delay != null ? opts.delay : DRIVE_SYNC_DELAY_MS);
+    return Promise.resolve({ ok: false, reason: 'scheduled' });
+  }
+
+  /* 예전 방식: 「매일 자동 백업」만 켜 둔 기기 — 오늘 백업이 아직 없으면 20초 뒤 한 번 */
+  function driveDailyBoot() {
+    if (!driveAutoOn() || driveSyncEnabled()) { return; }
     var last = driveConf().lastBackupAt;
     var lastDay = '';
     if (last) {
@@ -12513,6 +12631,82 @@
       driveTimer = null;
       driveBackupNow(false);
     }, 20000);
+  }
+
+  /* 자동 동기화 실행 — 드라이브 조회 → 최신 쪽으로 맞춘다 (오프라인이면 조용히 넘어감) */
+  function driveSyncRun() {
+    if (!driveSyncEnabled()) { return Promise.resolve({ ok: false, reason: 'auto-sync-off' }); }
+    if (driveInFlight || driveSyncRunning) { return Promise.resolve({ ok: false, reason: 'busy' }); }
+    driveSyncRunning = true;
+    driveInFlight = true;
+    renderDriveState();
+    return driveFetchLatest().then(function (j) {
+      driveInFlight = false;
+      renderDriveState();
+      if (!j || j.ok === false) { return driveSyncNoBackup(); }
+      var data = j.data || j.backup;
+      if (!data || typeof data !== 'object') { return { ok: false, reason: 'no-data' }; }
+      var check = validateBackup(data);
+      if (!check.ok) { return { ok: false, reason: check.reason }; }
+      return driveSyncCompare(data, j);
+    }, function (err) {
+      // 오프라인·네트워크 오류: 이 기기 데이터는 그대로 두고 조용히 넘어간다
+      driveInFlight = false;
+      renderDriveState();
+      return { ok: false, reason: errText(err), offline: true };
+    }).then(function (r) {
+      driveSyncRunning = false;
+      return r;
+    }, function (err) {
+      driveSyncRunning = false;
+      return { ok: false, reason: errText(err) };
+    });
+  }
+
+  /* 드라이브에 아직 백업 파일이 없을 때: 이 기기에 데이터가 있으면 첫 백업만 올린다 */
+  function driveSyncNoBackup() {
+    if (!driveHasLocalData()) { return { ok: true, action: 'none', reason: 'no-backup-empty' }; }
+    return driveBackupNow(false).then(function (r) {
+      if (r && r.ok) {
+        toast('☁️ 첫 드라이브 백업을 자동으로 올렸어요 · 관원 ' + app.students.length + '명');
+        return { ok: true, action: 'backup', first: true, at: r.at };
+      }
+      return { ok: false, reason: (r && r.reason) || 'backup-failed' };
+    });
+  }
+
+  /* 드라이브 최신본과 이 기기 중 어느 쪽이 최신인지 비교해 자동 적용 / 자동 백업 */
+  function driveSyncCompare(data, j) {
+    var driveAt = driveParseAt(data.exportedAt) || driveParseAt(j && j.modifiedTime);
+    var localAt = driveLocalAt();
+    // 빈 기기 보호: 이 기기가 비어 있으면 드라이브 백업을 그대로 받는다 (빈 데이터로 덮어쓰지 않음)
+    if (driveLocalEmpty()) { return driveSyncApply(data, driveAt, 'empty-device'); }
+    if (driveAt && (!localAt || (driveAt - localAt) >= DRIVE_SYNC_SAME_MS)) {
+      return driveSyncApply(data, driveAt, 'drive-newer');
+    }
+    if (localAt && driveAt && (localAt - driveAt) >= DRIVE_SYNC_SAME_MS && driveHasLocalData()) {
+      return driveBackupNow(false).then(function (r) {
+        if (r && r.ok) {
+          toast('☁️ 이 기기 최신 데이터를 드라이브에 자동 백업했어요');
+          return { ok: true, action: 'backup', at: r.at };
+        }
+        return { ok: false, reason: (r && r.reason) || 'backup-failed' };
+      });
+    }
+    // 시각 차이가 3초 이내면 같은 내용으로 보고 아무것도 하지 않는다
+    return { ok: true, action: 'none', driveAt: driveAt, localAt: localAt };
+  }
+
+  function driveSyncApply(data, driveAt, why) {
+    var count = Array.isArray(data.students) ? data.students.length : 0;
+    applyBackup(data);
+    var c = driveConf();
+    if (driveAt) { c.localUpdatedAt = new Date(driveAt).toISOString(); }
+    else if (!c.localUpdatedAt) { c.localUpdatedAt = new Date().toISOString(); }
+    saveSettings();
+    renderDriveState();
+    toast('☁️ 드라이브 최신 백업을 자동 적용했어요 · 관원 ' + count + '명');
+    return { ok: true, action: 'restore', why: why, students: app.students.length };
   }
 
   function copyPlainText(text) {
@@ -13649,6 +13843,25 @@
     if (el('btn-drive-guide')) {
       el('btn-drive-guide').addEventListener('click', openDriveGuide);
     }
+    if (el('btn-drive-autosync')) {
+      el('btn-drive-autosync').addEventListener('click', function () {
+        if (!saveDriveSettings(true)) { return; }
+        var c = driveConf();
+        c.autoSyncOnBoot = (c.autoSyncOnBoot === false);
+        saveSettings();
+        renderDriveState();
+        if (c.autoSyncOnBoot) {
+          if (!driveConfigured()) {
+            toast('앱 열 때 자동 동기화를 켰어요 · Apps Script 웹 앱 URL을 저장하면 작동합니다');
+          } else {
+            toast('앱 열 때 자동 동기화를 켰어요 · 앱을 열 때마다 드라이브와 맞춥니다');
+            driveAutoBoot();
+          }
+        } else {
+          toast('앱 열 때 자동 동기화를 껐어요 · 「지금 백업」·「불러오기」는 그대로 됩니다');
+        }
+      });
+    }
 
     // JSON 내려받기
     el('btn-export-json').addEventListener('click', function () {
@@ -13839,6 +14052,11 @@
       restore: driveRestoreFromDrive,
       touch: driveTouchData,
       boot: driveAutoBoot,
+      sync: driveSyncRun,
+      autoSyncOn: driveAutoSyncOn,
+      syncEnabled: driveSyncEnabled,
+      mark: driveMarkLocalChange,
+      localAt: driveLocalAt,
       render: renderDriveState,
       fill: fillDriveForm,
       code: appsScriptCode,
