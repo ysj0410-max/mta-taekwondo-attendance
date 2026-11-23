@@ -1469,13 +1469,13 @@
               <h3>📋 재원생 전체 명단</h3>
               <div class="spacer"></div>
               <span class="tiny-note" id="stu-count">0명</span>
-              <button class="btn btn-sm" id="btn-stu-csv" title="지금 고른 필터(전체·재원생·휴관생)의 관원 명단을 엑셀에서 바로 여는 CSV로 내려받습니다">📤 명단 CSV</button>
+              <button class="btn btn-sm" id="btn-stu-csv" title="지금 고른 필터(재원생·휴관생·전체)의 관원 명단을 엑셀에서 바로 여는 CSV로 내려받습니다">📤 명단 CSV</button>
             </div>
             <div class="panel-body">
               <div class="promo-filters" id="stu-filters" style="margin:-2px 0 9px">
-                <button class="pchip active" data-sfilter="all" id="sf-all">전체</button>
-                <button class="pchip" data-sfilter="active" id="sf-active">재원생</button>
+                <button class="pchip active" data-sfilter="active" id="sf-active">재원생</button>
                 <button class="pchip" data-sfilter="paused" id="sf-paused">휴관생</button>
+                <button class="pchip" data-sfilter="all" id="sf-all">전체</button>
                 <div class="spacer"></div>
                 <span class="tiny-note" id="stu-filter-note"></span>
               </div>
@@ -2838,7 +2838,7 @@
     bulkSms: null,
     msgUI: null,
     smsTemplates: [],
-    stuFilter: 'all',
+    stuFilter: 'active',   // 기본은 재원생만 — 휴관생은 「🛌 휴관생 관리」·「휴관생」 칩에서 따로 본다
     attFilter: 'all',
     attQuery: '',
     feeTable: null,
@@ -3090,7 +3090,7 @@
     app.tuitionUI = null;
     app.bulkSms = null;
     app.pausedUI = null;
-    app.stuFilter = 'all';
+    app.stuFilter = 'active';   // 화면을 다시 열어도 재원생 명단이 휴관생과 섞이지 않게
     app.smsTemplates = loadBulkTemplates();
     app.counsel = loadCounsel();
     app.counselUI = null;
@@ -5195,7 +5195,7 @@
   }
 
   function renderStudentsTable() {
-    var filter = app.stuFilter || 'all';
+    var filter = app.stuFilter || 'active';
     var counts2 = { all: app.students.length, active: activeStudents().length, paused: pausedStudents().length };
     el('stu-count').textContent = counts2.active + '명 재원' + (counts2.paused ? ' · ' + counts2.paused + '명 휴관' : '');
     if (el('stu-filter-note')) {
@@ -5217,8 +5217,14 @@
 
     var tbody = el('stu-table');
     if (!list.length) {
+      var emptyMsg = '이 상태의 관원이 없어요.';
+      if (app.students.length && filter === 'active' && pausedStudents().length) {
+        emptyMsg = '재원생이 없어요. 휴관생 ' + pausedStudents().length + '명은 「🛌 휴관생 관리」에서 볼 수 있어요.';
+      } else if (app.students.length && filter === 'paused' && activeStudents().length) {
+        emptyMsg = '휴관생이 없어요. 재원생 ' + activeStudents().length + '명은 「재원생」 칩에서 볼 수 있어요.';
+      }
       tbody.innerHTML = '<tr class="empty-row"><td colspan="11">' +
-        (app.students.length ? '이 상태의 관원이 없어요.' : '관원이 없습니다') + '</td></tr>';
+        (app.students.length ? emptyMsg : '관원이 없습니다') + '</td></tr>';
       return;
     }
     tbody.innerHTML = list.map(function (s) {
@@ -5532,7 +5538,7 @@
         delete s.tuitionDate;
         if (prevTuitionDay !== tuitionDay) { syncTuitionFromStudentDay(s.id, prevTuitionDay, tuitionDay); }
       }
-      toast(name + ' 관원 정보를 수정했어요.' + (status === 'paused' ? ' (휴관생)' : ''));
+      toast(name + ' 관원 정보를 수정했어요.' + (status === 'paused' ? ' · 휴관생은 「🛌 휴관생 관리」에 모입니다' : ''));
     } else {
       var fresh = {
         id: uid('stu'), name: name, phone: phone, className: '', belt: belt,
@@ -5545,7 +5551,7 @@
       };
       app.students.push(fresh);
       if (tuitionDay) { syncTuitionFromStudentDay(fresh.id, 0, tuitionDay); }
-      toast(name + ' 관원을 추가했어요.' + (status === 'paused' ? ' (휴관생)' : ''));
+      toast(name + ' 관원을 추가했어요.' + (status === 'paused' ? ' · 휴관생은 「🛌 휴관생 관리」에 모입니다' : ''));
     }
     saveStudents();
     resetStudentForm();
@@ -6588,7 +6594,7 @@
     }).then(function (ok) {
       if (!ok) { return; }
       setStudentStatus(id, 'paused', { pausedDate: isDateKey(draft.date) ? draft.date : todayKey(), pauseReason: draft.reason });
-      toast(s.name + ' 관원을 휴관생으로 바꿨어요 · 복귀하면 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로 이어집니다');
+      toast(s.name + ' 관원을 휴관생으로 바꿨어요 · 「🛌 휴관생 관리」로 옮겼어요 · 복귀하면 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로 이어집니다');
     });
   }
   function resumeStudentPrompt(id) {
@@ -6608,7 +6614,7 @@
     }).then(function (ok) {
       if (!ok) { return; }
       setStudentStatus(id, 'active');
-      toast(s.name + ' 관원을 재원으로 복귀했어요 · 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로');
+      toast(s.name + ' 관원을 재원으로 복귀했어요 · 「🥋 원생 관리」로 돌아갔어요 · 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로');
     });
   }
 
@@ -9899,9 +9905,17 @@
     }).join('');
   }
 
+  /* 앞의 몇 명만 이름으로 보여 주는 도우미 — '(김민준, 이서준 외 2명)' */
+  function nameListTxt(list, max) {
+    var arr = Array.isArray(list) ? list.filter(function (n) { return String(n || '').trim(); }) : [];
+    if (!arr.length) { return ''; }
+    var n = max || 3;
+    return '(' + arr.slice(0, n).join(', ') + (arr.length > n ? ' 외 ' + (arr.length - n) + '명' : '') + ')';
+  }
+
   /* 휴관생 엑셀/CSV 반영 — 순수 계산(모달 없이 테스트 가능) */
   function applyPausedRows(rows, mode) {
-    var out = { converted: 0, added: 0, removed: 0, kept: 0, updated: 0 };
+    var out = { converted: 0, added: 0, removed: 0, kept: 0, updated: 0, convertedNames: [], nameOnlyNames: [] };
     var list = Array.isArray(rows) ? rows.slice() : [];
     var byKey = {}, byName = {};
     app.students.forEach(function (s) {
@@ -9914,13 +9928,20 @@
       if (!r || !String(r.name || '').trim()) { return; }
       var key = r.name + '|' + digitsOnly(r.phone);
       var target = byKey[key] || null;
+      var nameOnly = false;
       if (!target && !digitsOnly(r.phone)) {
         var cands = byName[r.name] || [];
-        if (cands.length === 1) { target = cands[0]; }
+        if (cands.length === 1) { target = cands[0]; nameOnly = true; }
       }
       if (target) {
         seen[target.id] = true;
-        if (isPaused(target)) { out.kept++; } else { out.converted++; }
+        if (isPaused(target)) { out.kept++; }
+        else {
+          // 파일에 있던 재원생을 휴관으로 바꾼다 — 바꾼 사람을 돌려줘 화면에서 바로 알 수 있게 한다
+          out.converted++;
+          out.convertedNames.push(target.name);
+          if (nameOnly) { out.nameOnlyNames.push(target.name); }
+        }
         target.status = 'paused';
         if (isDateKey(r.pausedDate)) { target.pausedDate = String(r.pausedDate); }
         else if (!isDateKey(target.pausedDate)) { target.pausedDate = todayKey(); }
@@ -9996,6 +10017,9 @@
         (mode2 === 'replace'
           ? '파일에 <b>없는 휴관생 ' + pausedNow + '명은 명단에서 빠집니다</b>(재원생·얼굴·출석 자료는 그대로). 파일에 있는 관원이 이미 <b>재원생</b>이면 휴관생으로 바뀌고, 새 관원이면 휴관생으로 추가됩니다.'
           : '기존 명단에 <b>합칩니다</b>. 이름+보호자 연락처가 같은 관원은 <b>휴관생으로 상태만 바뀌고</b>(누적 출석·띠·얼굴 유지), 새 관원이면 휴관생으로 추가됩니다.') +
+        (mode2 === 'sync'
+          ? '<br><span class="muted">연락처가 비어 있으면 이름이 같은 관원 한 명을 찾아 바뀝니다. 가져온 뒤 「🛌 휴관생 관리」에서 한 번만 확인해 주세요.</span>'
+          : '') +
         '</div>',
       actions: [
         { label: '취소', value: null, kind: 'btn-ghost' },
@@ -10004,11 +10028,14 @@
     }).then(function (ok) {
       if (!ok) { el('pz-file-name').textContent = ''; return; }
       var r = applyPausedRows(students, mode2);
-      app.stuFilter = 'all';
+      // 가져온 휴관생은 「🛌 휴관생 관리」에만 모이게 두고, 「원생 관리」는 재원생만 보이게 유지한다
+      app.stuFilter = 'active';
       app.pausedUI = null;
       renderAll();
-      toast('휴관생 가져오기 완료 · 전환 ' + r.converted + '명 · 추가 ' + r.added + '명' +
-        (r.removed ? ' · 제외 ' + r.removed + '명' : '') + ' · 유지 ' + r.kept + '명');
+      toast('휴관생 가져오기 완료 · 전환 ' + r.converted + '명' + nameListTxt(r.convertedNames) +
+        ' · 추가 ' + r.added + '명' +
+        (r.removed ? ' · 제외 ' + r.removed + '명' : '') + ' · 유지 ' + r.kept + '명' +
+        (r.nameOnlyNames && r.nameOnlyNames.length ? ' · 이름만 같아 전환: ' + r.nameOnlyNames.slice(0, 2).join(', ') + ' — 명단에서 확인' : ''));
       el('pz-file-name').textContent = '✅ ' + fileName + ' 반영 완료';
     });
   }
@@ -12356,7 +12383,7 @@
   }
   /* 지금 고른 필터(전체·재원생·휴관생)에 보이는 관원을 CSV로 내려받는다 */
   function studentsRosterList() {
-    var filter = app.stuFilter || 'all';
+    var filter = app.stuFilter || 'active';
     return app.students.filter(function (s) {
       if (filter === 'active') { return isActive(s); }
       if (filter === 'paused') { return isPaused(s); }
