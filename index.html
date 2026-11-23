@@ -188,6 +188,9 @@
   }
   .btn:active{transform:translateY(1px)}
   .btn:hover{background:#f4f7fe}
+  .btn:disabled,.btn[disabled]{opacity:.45; cursor:not-allowed; filter:grayscale(.25)}
+  .btn:disabled:hover,.btn[disabled]:hover{background:#fff}
+  .btn-mint:disabled:hover,.btn-mint[disabled]:hover{background:var(--mint)}
   .btn-primary{background:var(--navy); border-color:var(--navy); color:#fff}
   .btn-primary:hover{background:var(--navy-3)}
   .btn-red{background:var(--red); border-color:var(--red); color:#fff}
@@ -594,8 +597,18 @@
   .admin-face-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:9px}
   .admin-face-head b{font-size:12.5px; color:var(--navy); letter-spacing:-.2px}
   .admin-face-body{display:flex; align-items:center; gap:11px; margin-bottom:10px; flex-wrap:wrap}
-  .admin-face-thumb{width:58px; height:58px; border-radius:14px; border:1px solid #dbe3f0; background:#f4f7fc; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:23px; color:#9aa6bb; flex:0 0 auto}
-  .admin-face-thumb img{width:100%; height:100%; object-fit:cover; display:block}
+  /* 관리자 얼굴 목록 (최대 5개) — 썸네일 카드 */
+  .adm-face-list{display:flex; flex-direction:column; gap:7px; margin:0 0 11px}
+  .adm-face-card{display:flex; align-items:center; gap:9px; border:1px solid #e7edf7; background:#fbfcff; border-radius:12px; padding:7px 9px; min-width:0}
+  .adm-face-card-thumb{width:44px; height:44px; border-radius:11px; border:1px solid #dbe3f0; background:#f4f7fc; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:19px; color:#9aa6bb; flex:0 0 auto}
+  .adm-face-card-thumb img{width:100%; height:100%; object-fit:cover; display:block}
+  .adm-face-card-txt{flex:1 1 auto; min-width:0}
+  .adm-face-card-name{display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:12px; color:var(--navy); line-height:1.35}
+  .adm-face-card-name b{font-size:12.5px; letter-spacing:-.2px; overflow-wrap:anywhere}
+  .adm-face-card-num{font-size:10px; font-weight:800; color:#8a94a6; background:#f0f3f9; border-radius:999px; padding:2px 7px; flex:0 0 auto}
+  .adm-face-card-when{font-size:10.5px; font-weight:700; color:#8a94a6; margin-top:2px; line-height:1.4}
+  .adm-face-card-del{flex:0 0 auto; padding:6px 10px; font-size:12px; line-height:1}
+  .afr-name{margin-bottom:11px}
   .admin-face-meta{flex:1 1 190px; min-width:0; font-size:11px; font-weight:700; color:#667085; line-height:1.6}
   .admin-face-meta b{color:var(--navy)}
   .adm-face-login{border-bottom:1px dashed #e3e8f2; padding-bottom:13px; margin-bottom:13px}
@@ -1100,7 +1113,6 @@
     .help{font-size:11px; padding:10px 11px}
     .modal{padding:18px 16px 14px; border-radius:16px; width:min(520px,92vw); max-height:88dvh; overflow-y:auto}
     .face-cam.sm{max-width:230px}
-    .admin-face-thumb{width:52px; height:52px; border-radius:12px; font-size:21px}
     .admin-face-body{gap:9px}
     .stu-wide-panel{margin-bottom:10px}
     .stu-tablewrap{max-height:min(56vh,440px); border-radius:10px}
@@ -1590,14 +1602,15 @@
                     <div class="admin-face-head">
                       <b>📷 관장님(관리자) 얼굴 등록</b>
                       <span class="face-badge" id="admin-face-badge">미등록</span>
+                      <span class="tiny-note">최대 5개</span>
                     </div>
                     <div class="admin-face-body">
-                      <div class="admin-face-thumb" id="admin-face-thumb">👤</div>
                       <div class="admin-face-meta" id="admin-face-meta">아직 등록된 얼굴이 없어요. 등록하면 아이디·비밀번호 없이 <b>얼굴로</b> 관리자 화면에 들어올 수 있어요.</div>
                     </div>
+                    <div class="adm-face-list" id="admin-face-list" style="display:none"></div>
                     <div class="form-actions" style="flex-wrap:wrap">
-                      <button class="btn btn-mint" id="btn-admin-face-open">📷 얼굴 등록</button>
-                      <button class="btn btn-sm" id="btn-admin-face-del" disabled>🗑️ 얼굴 등록 삭제</button>
+                      <button class="btn btn-mint" id="btn-admin-face-open">📷 얼굴 추가 등록 (0/5)</button>
+                      <button class="btn btn-sm" id="btn-admin-face-del" style="display:none" disabled>🗑️ 전체 삭제</button>
                       <div class="spacer"></div>
                       <span class="tiny-note">얼굴 특징값(128개 숫자)은 이 기기 안에만 저장돼요.</span>
                     </div>
@@ -2817,6 +2830,7 @@
     shuttle: [],
     shuttleUI: null,
     admin: null,
+    adminFaces: [],
     adminFace: null,
     adminAuthed: false
   };
@@ -3070,7 +3084,8 @@
     app.coupons = loadCoupons();
     app.couponUI = null;
     app.admin = loadAdminAccount();
-    app.adminFace = loadAdminFace();
+    app.adminFaces = loadAdminFace();
+    syncAdminFaceAlias();
     app.adminAuthed = false;
 
     var logs = readJSON(LS.logs, []);
@@ -3127,15 +3142,44 @@
   }
 
   /* 관리자(관장님) 얼굴 특징값 — 관원 얼굴과 분리해 tdk.adminFace.v1 에 저장
-     구조: { descriptor:[128 floats], thumb:'data:image/jpeg;…', at:ISO } */
-  function sanitizeAdminFace(f) {
-    return sanitizeFace(f);
+     구조: [ { id, label, descriptor:[128 floats], thumb:'data:image/jpeg;…', at:ISO }, … ] 최대 5개
+     예전 버전이 저장한 단일 객체 { descriptor, thumb, at } 도 그대로 읽어 길이 1 배열로 바꾼다 */
+  function sanitizeAdminFaceItem(f) {
+    var base = sanitizeFace(f);
+    if (!base) { return null; }
+    var item = {
+      id: (f && typeof f.id === 'string') ? f.id.slice(0, 40) : '',
+      label: cleanAdminFaceLabel(f && f.label),
+      descriptor: base.descriptor,
+      thumb: base.thumb || '',
+      at: base.at || ''
+    };
+    if (!item.id) { item.id = adminFaceNewId(); }
+    return item;
+  }
+  /* 배열 · 예전 단일 객체 · null/없음 → 최대 5개 배열 */
+  function sanitizeAdminFaces(raw) {
+    var src = [];
+    if (Array.isArray(raw)) { src = raw; }
+    else if (raw && typeof raw === 'object') { src = [raw]; }
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < src.length && out.length < ADMIN_FACE_MAX; i++) {
+      var item = sanitizeAdminFaceItem(src[i]);
+      if (!item) { continue; }
+      if (seen[item.id]) { item.id = adminFaceNewId(); }
+      seen[item.id] = true;
+      out.push(item);
+    }
+    return out;
   }
   function loadAdminFace() {
-    return sanitizeAdminFace(readJSON(LS.adminFace, null));
+    return sanitizeAdminFaces(readJSON(LS.adminFace, null));
   }
   function saveAdminFaceData() {
-    if (app.adminFace) { writeJSON(LS.adminFace, app.adminFace); }
+    syncAdminFaceAlias();
+    var list = adminFaceList();
+    if (list.length) { writeJSON(LS.adminFace, list); }
     else { try { localStorage.removeItem(LS.adminFace); } catch (e) {} }
     driveTouchData();
   }
@@ -5573,7 +5617,7 @@
       '<div class="adm-face-login">' +
       '<button class="btn btn-mint" id="adm-face-login"' + (hasFace ? '' : ' disabled') + '>📷 얼굴 인식으로 로그인</button>' +
       '<div class="tiny-note">' + (hasFace
-        ? '등록된 관장님 얼굴(' + esc(adminFaceAtText()) + ')을 비추면 바로 들어갈 수 있어요.'
+        ? '등록된 관리자 얼굴 ' + adminFaceCount() + '개 중 하나를 비추면 바로 들어갈 수 있어요. (가장 가까운 얼굴로 확인)'
         : '아직 등록된 얼굴이 없어요 · 「🔐 관리자 계정」에서 관장님 얼굴을 먼저 등록해 주세요.') +
       '</div>' +
       '<div class="tiny-note" id="adm-face-stopped" style="display:none">얼굴 로그인을 멈췄습니다.</div>' +
@@ -5703,41 +5747,114 @@
   }
 
   /* =========================================================
-     3-E. 관리자(관장님) 얼굴 등록 · 얼굴 로그인
-     · 저장: tdk.adminFace.v1 = { descriptor:[128], thumb, at } — 이 기기 안에만
+     3-E. 관리자(관장님) 얼굴 등록 · 얼굴 로그인 (최대 5개)
+     · 저장: tdk.adminFace.v1 = [ { id, label, descriptor:[128], thumb, at }, … ] — 이 기기 안에만
+       (예전 단일 객체 { descriptor, thumb, at } 도 그대로 읽어 길이 1 배열로 바꾼다)
      · 로그인 판정 거리: 관원 출석(기본 0.48)보다 엄격한 0.42
+       등록된 얼굴(1~5개) 중 가장 가까운 거리로 판정한다
      · 아이디·비밀번호 로그인은 백업으로 항상 남긴다
      ========================================================= */
+  var ADMIN_FACE_MAX = 5;
   var ADMIN_FACE_THRESHOLD = 0.42;
+  var adminFaceSeq = 0;
+  function adminFaceMax() { return ADMIN_FACE_MAX; }
   function adminFaceThreshold() { return ADMIN_FACE_THRESHOLD; }
-  function adminFaceRegistered() {
-    return !!(app.adminFace && app.adminFace.descriptor && app.adminFace.descriptor.length === 128);
+  function adminFaceList() { return Array.isArray(app.adminFaces) ? app.adminFaces : []; }
+  function adminFaceCount() { return adminFaceList().length; }
+  function adminFaceRegistered() { return adminFaceCount() > 0; }
+  function adminFaceNewId() {
+    adminFaceSeq++;
+    return 'af' + Date.now().toString(36) + adminFaceSeq.toString(36);
   }
-  function adminFaceAtText() {
-    if (!adminFaceRegistered()) { return ''; }
-    var at = app.adminFace.at ? new Date(app.adminFace.at) : null;
+  function cleanAdminFaceLabel(label) {
+    return String(label == null ? '' : label).replace(/\s+/g, ' ').trim().slice(0, 20);
+  }
+  /* 이름표가 비어 있으면 순번으로 '얼굴 1' 처럼 보여 준다 */
+  function adminFaceLabel(item, index) {
+    var label = item && item.label ? String(item.label) : '';
+    return label || ('얼굴 ' + ((index || 0) + 1));
+  }
+  function adminFaceAtTextOf(item) {
+    var at = item && item.at ? new Date(item.at) : null;
     if (!at || isNaN(at.getTime())) { return '시각 미기록'; }
     return fmtDateKorean(at) + ' ' + fmtKoreanTime(at);
   }
-  function saveAdminFace(descriptor, thumb) {
-    var clean = sanitizeAdminFace({ descriptor: descriptor, thumb: thumb, at: new Date().toISOString() });
-    if (!clean) { return false; }
-    app.adminFace = clean;
+  function adminFaceAtText() {
+    return adminFaceRegistered() ? adminFaceAtTextOf(adminFaceList()[0]) : '';
+  }
+  function syncAdminFaceAlias() {
+    // 예전 코드·백업과의 호환: app.adminFace 는 첫 번째 얼굴을 가리킨다
+    var list = adminFaceList();
+    app.adminFace = list.length ? list[0] : null;
+  }
+
+  /* 얼굴 하나 추가 (최대 5개) */
+  function saveAdminFace(descriptor, thumb, label) {
+    var list = adminFaceList();
+    if (list.length >= ADMIN_FACE_MAX) { return false; }
+    var item = sanitizeAdminFaceItem({
+      id: adminFaceNewId(),
+      label: cleanAdminFaceLabel(label),
+      descriptor: descriptor,
+      thumb: thumb,
+      at: new Date().toISOString()
+    });
+    if (!item) { return false; }
+    app.adminFaces = list.concat([item]);
     saveAdminFaceData();
     renderAdminFaceState();
     return true;
   }
+  function removeAdminFaceById(id) {
+    var list = adminFaceList();
+    var out = [];
+    var hit = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) { hit = true; }
+      else { out.push(list[i]); }
+    }
+    if (!hit) { return false; }
+    app.adminFaces = out;
+    saveAdminFaceData();
+    renderAdminFaceState();
+    return true;
+  }
+  /* 전체 삭제 (예전 API 이름 유지) */
   function removeAdminFace() {
     if (!adminFaceRegistered()) { return false; }
-    app.adminFace = null;
+    app.adminFaces = [];
     saveAdminFaceData();
     renderAdminFaceState();
     return true;
   }
-  function confirmRemoveAdminFace() {
-    if (!adminFaceRegistered()) { toast('등록된 관리자 얼굴이 없어요.'); return; }
+  function confirmRemoveAdminFaceOne(id) {
+    var list = adminFaceList();
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) { if (list[i].id === id) { idx = i; } }
+    if (idx === -1) { toast('이미 삭제된 얼굴이에요.'); renderAdminFaceState(); return; }
+    var name = adminFaceLabel(list[idx], idx);
+    var left = list.length - 1;
     openModal({
-      title: '관장님 얼굴 등록을 삭제할까요?',
+      title: '「' + name + '」 얼굴 등록을 삭제할까요?',
+      sub: left
+        ? '남은 얼굴 ' + left + '개로 계속 얼굴 로그인을 할 수 있어요.'
+        : '삭제하면 얼굴로는 로그인할 수 없고, 아이디·비밀번호로만 들어갈 수 있어요.',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: '삭제', value: true, kind: 'btn-danger' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return; }
+      if (!removeAdminFaceById(id)) { return; }
+      toast('「' + name + '」 얼굴 등록을 삭제했어요 · 남은 얼굴 ' + adminFaceCount() + '개');
+    });
+  }
+  function confirmRemoveAdminFace() {
+    var n = adminFaceCount();
+    if (!n) { toast('등록된 관리자 얼굴이 없어요.'); return; }
+    if (n < 2) { confirmRemoveAdminFaceOne(adminFaceList()[0].id); return; }
+    openModal({
+      title: '등록된 관리자 얼굴 ' + n + '개를 모두 삭제할까요?',
       sub: '삭제하면 얼굴로는 로그인할 수 없고, 아이디·비밀번호로만 들어갈 수 있어요.',
       actions: [
         { label: '취소', value: false, kind: 'btn-ghost' },
@@ -5746,37 +5863,87 @@
     }).then(function (ok) {
       if (!ok) { return; }
       removeAdminFace();
-      toast('관리자 얼굴 등록을 삭제했어요 · 아이디·비밀번호로 로그인할 수 있어요.');
+      toast('관리자 얼굴 등록 ' + n + '개를 모두 삭제했어요 · 아이디·비밀번호로 로그인할 수 있어요.');
     });
   }
+
+  function adminFaceCardHtml(item, index) {
+    var name = adminFaceLabel(item, index);
+    var thumb = (item && item.thumb)
+      ? '<img src="' + esc(item.thumb) + '" alt="' + esc(name) + '">'
+      : '<span class="adm-face-noimg">👤</span>';
+    return '<div class="adm-face-card" data-face-card="' + esc(item.id) + '">' +
+      '<div class="adm-face-card-thumb">' + thumb + '</div>' +
+      '<div class="adm-face-card-txt">' +
+      '<div class="adm-face-card-name"><b>' + esc(name) + '</b>' +
+      '<span class="adm-face-card-num">' + (index + 1) + '/' + ADMIN_FACE_MAX + '</span></div>' +
+      '<div class="adm-face-card-when">' + esc(adminFaceAtTextOf(item)) + ' 등록</div>' +
+      '</div>' +
+      '<button class="btn btn-sm adm-face-card-del" data-face-del="' + esc(item.id) + '"' +
+      ' aria-label="' + esc(name) + ' 얼굴 등록 삭제" title="이 얼굴 삭제">🗑️</button>' +
+      '</div>';
+  }
+
   function renderAdminFaceState() {
-    var reg = adminFaceRegistered();
+    var list = adminFaceList();
+    var n = list.length;
+    var max = ADMIN_FACE_MAX;
     var badge = el('admin-face-badge');
     if (badge) {
-      badge.className = 'face-badge' + (reg ? ' on' : '');
-      badge.textContent = reg ? '✅ 등록됨' : '미등록';
+      badge.className = 'face-badge' + (n ? ' on' : '');
+      badge.textContent = n ? ('✅ ' + n + '/' + max + ' 등록') : '미등록';
     }
-    var thumb = el('admin-face-thumb');
-    if (thumb) {
-      thumb.innerHTML = (reg && app.adminFace.thumb)
-        ? '<img src="' + esc(app.adminFace.thumb) + '" alt="등록된 관리자 얼굴">'
-        : '👤';
+    var box = el('admin-face-list');
+    if (box) {
+      var html = [];
+      for (var i = 0; i < n; i++) { html.push(adminFaceCardHtml(list[i], i)); }
+      box.innerHTML = html.join('');
+      if (box.style) { box.style.display = n ? 'flex' : 'none'; }
     }
     var meta = el('admin-face-meta');
     if (meta) {
-      meta.innerHTML = reg
-        ? '등록 시각 <b>' + esc(adminFaceAtText()) + '</b> · 이 기기에서 얼굴로 관리자 로그인<br>판정 거리 <b>' + adminFaceThreshold().toFixed(2) + '</b> 이하일 때만 통과해요.'
-        : '아직 등록된 얼굴이 없어요. 등록하면 아이디·비밀번호 없이 <b>얼굴로</b> 관리자 화면에 들어올 수 있어요.';
+      if (!n) {
+        meta.innerHTML = '아직 등록된 얼굴이 없어요. 등록하면 아이디·비밀번호 없이 <b>얼굴로</b> 관리자 화면에 들어올 수 있어요.';
+      } else if (n >= max) {
+        meta.innerHTML = '최대 <b>' + max + '개</b>까지 등록했어요 · 하나를 삭제한 뒤 다시 추가할 수 있어요.<br>' +
+          '판정 거리 <b>' + adminFaceThreshold().toFixed(2) + '</b> 이하일 때만 통과해요.';
+      } else {
+        meta.innerHTML = '등록 <b>' + n + '/' + max + '개</b> · 가장 최근 등록 <b>' + esc(adminFaceAtTextOf(list[n - 1])) + '</b><br>' +
+          '판정 거리 <b>' + adminFaceThreshold().toFixed(2) + '</b> 이하이면 등록된 얼굴 중 하나로 로그인돼요.';
+      }
+    }
+    var openBtn = el('btn-admin-face-open');
+    if (openBtn) {
+      openBtn.textContent = (n >= max)
+        ? ('📷 최대 ' + max + '개까지 등록됨')
+        : ('📷 얼굴 추가 등록 (' + n + '/' + max + ')');
+      openBtn.disabled = (n >= max);
     }
     var delBtn = el('btn-admin-face-del');
-    if (delBtn) { delBtn.disabled = !reg; }
-    var openBtn = el('btn-admin-face-open');
-    if (openBtn) { openBtn.textContent = reg ? '📷 얼굴 다시 등록' : '📷 얼굴 등록'; }
+    if (delBtn) {
+      delBtn.disabled = (n < 2);
+      if (delBtn.style) { delBtn.style.display = (n >= 2) ? '' : 'none'; }
+      delBtn.textContent = (n >= 2) ? ('🗑️ 전체 삭제 (' + n + '개)') : '🗑️ 전체 삭제';
+    }
   }
 
-  /* 촬영·업로드한 사진 한 장에서 정확히 얼굴 1명을 찾아 관리자 특징값으로 저장 */
-  function registerAdminFaceFromCanvas(canvas, onStatus) {
+  /* 얼굴 카드의 개별 삭제 버튼 */
+  function onAdminFaceListClick(e) {
+    var t = e && e.target;
+    var btn = t && t.closest ? t.closest('[data-face-del]') : null;
+    if (!btn) { return; }
+    var id = btn.getAttribute('data-face-del');
+    if (!id) { return; }
+    confirmRemoveAdminFaceOne(id);
+  }
+
+  /* 촬영·업로드한 사진 한 장에서 정확히 얼굴 1명을 찾아 관리자 얼굴로 저장 (최대 5개) */
+  function registerAdminFaceFromCanvas(canvas, onStatus, label) {
     var setStatus = onStatus || function () {};
+    if (adminFaceCount() >= ADMIN_FACE_MAX) {
+      setStatus('err', '관리자 얼굴은 최대 ' + ADMIN_FACE_MAX + '개까지 등록할 수 있어요. 하나를 삭제한 뒤 다시 추가해 주세요.');
+      return Promise.resolve(false);
+    }
     if (!ai.ready) {
       setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
       return Promise.resolve(false);
@@ -5793,13 +5960,16 @@
       }
       var r = results[0];
       var thumb = makeFaceThumb(canvas, r.detection.box);
-      if (!saveAdminFace(Array.prototype.slice.call(r.descriptor), thumb)) {
-        setStatus('err', '얼굴 특징값을 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.');
+      if (!saveAdminFace(Array.prototype.slice.call(r.descriptor), thumb, label)) {
+        setStatus('err', '얼굴 특징값을 저장하지 못했어요. 최대 ' + ADMIN_FACE_MAX + '개까지 등록할 수 있어요.');
         return false;
       }
-      setStatus('ok', '✅ 관장님 얼굴을 등록했어요. 이제 로그인 화면의 📷 얼굴 인식으로 들어올 수 있어요.');
+      var list = adminFaceList();
+      var saved = list[list.length - 1];
+      var shown = adminFaceLabel(saved, list.length - 1);
+      setStatus('ok', '✅ 「' + shown + '」 얼굴을 등록했어요 (' + list.length + '/' + ADMIN_FACE_MAX + '). 이제 로그인 화면의 📷 얼굴 인식으로 들어올 수 있어요.');
       playSuccess();
-      toast('관리자 얼굴을 등록했어요 (판정 거리 ' + adminFaceThreshold().toFixed(2) + ' 이하).');
+      toast('관리자 얼굴을 등록했어요 · ' + shown + ' (' + list.length + '/' + ADMIN_FACE_MAX + ')');
       return true;
     }).catch(function (err) {
       setStatus('err', '얼굴 분석에 실패했어요 (' + ((err && err.message) || 'error') + '). 다시 시도해 주세요.');
@@ -5808,8 +5978,13 @@
   }
 
   function openAdminFaceRegister() {
-    var existing = app.adminFace;
+    if (adminFaceCount() >= ADMIN_FACE_MAX) {
+      toast('관리자 얼굴은 최대 ' + ADMIN_FACE_MAX + '개까지 등록할 수 있어요. 하나를 삭제한 뒤 다시 추가해 주세요.');
+      return;
+    }
     var body = '' +
+      '<div class="field afr-name"><label>이름표 (선택 · 20자까지)</label>' +
+      '<input class="input" id="afr-label" maxlength="20" placeholder="예: 관장님 · 안경 쓴 얼굴 · 사범님"></div>' +
       '<div class="face-cam"><video id="afr-video" autoplay muted playsinline></video>' +
       '<div class="face-frame"></div></div>' +
       '<div class="face-status" id="afr-status">카메라를 준비하고 있어요…</div>' +
@@ -5820,10 +5995,11 @@
       '</div>' +
       '<div class="face-preview" id="afr-preview"></div>' +
       '<div class="face-tip">관리자 얼굴은 이 기기 안에서만 분석되고, 저장되는 것은 128개 숫자(특징값)와 작은 썸네일뿐이에요. 외부 서버로 보내지 않습니다.<br>' +
+      '이름표를 비워 두면 「얼굴 ' + (adminFaceCount() + 1) + '」로 저장돼요. 최대 <b>' + ADMIN_FACE_MAX + '개</b>까지 등록할 수 있고, ' +
       '관원 출석(기본 0.48)보다 엄격한 판정 거리 <b>' + adminFaceThreshold().toFixed(2) + '</b>를 써서 다른 사람 얼굴로는 통과하지 않도록 했어요. 아이디·비밀번호 로그인은 그대로 쓸 수 있습니다.</div>';
 
     var done = openModal({
-      title: '📷 관장님 얼굴 ' + (existing ? '다시 등록' : '등록'),
+      title: '📷 관리자 얼굴 추가 등록 (' + adminFaceCount() + '/' + ADMIN_FACE_MAX + ')',
       sub: '정면 얼굴이 정확히 1명 검출되면 바로 저장됩니다.',
       body: body,
       actions: [{ label: '닫기', value: null, kind: 'btn-ghost' }],
@@ -5840,13 +6016,20 @@
       box.textContent = text;
     }
 
+    function currentLabel() {
+      var f = el('afr-label');
+      return f ? String(f.value || '') : '';
+    }
+
     function showPreview() {
       var box = el('afr-preview');
       if (!box) { return; }
-      var f = app.adminFace;
-      if (!f) { box.innerHTML = ''; return; }
-      box.innerHTML = (f.thumb ? '<img src="' + esc(f.thumb) + '" alt="등록된 관리자 얼굴">' : '') +
-        '<div class="face-preview-txt">등록 시각 ' + esc(adminFaceAtText()) + '</div>';
+      var list = adminFaceList();
+      if (!list.length) { box.innerHTML = ''; return; }
+      var last = list[list.length - 1];
+      box.innerHTML = (last.thumb ? '<img src="' + esc(last.thumb) + '" alt="등록된 관리자 얼굴">' : '') +
+        '<div class="face-preview-txt">등록된 얼굴 <b>' + list.length + '/' + ADMIN_FACE_MAX + '</b>개<br>' +
+        '최근: ' + esc(adminFaceLabel(last, list.length - 1)) + ' · ' + esc(adminFaceAtTextOf(last)) + '</div>';
     }
 
     function attachCamera() {
@@ -5894,10 +6077,11 @@
       var ctx = canvas.getContext ? canvas.getContext('2d') : null;
       if (!ctx) { setStatus('err', '이 브라우저에서는 사진을 만들 수 없어요.'); return; }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var label = currentLabel();
       registerAdminFaceFromCanvas(canvas, function (kind, text) {
         setStatus(kind, text);
         if (kind === 'ok') { showPreview(); }
-      });
+      }, label);
     }
 
     function handleUpload(file) {
@@ -5907,13 +6091,14 @@
         return;
       }
       setStatus('wait', '사진에서 얼굴을 찾는 중…');
+      var label = currentLabel();
       readImageFile(file).then(function (img) {
         var canvas = imageToCanvas(img, 900);
         if (!canvas) { throw new Error('canvas'); }
         return registerAdminFaceFromCanvas(canvas, function (kind, text) {
           setStatus(kind, text);
           if (kind === 'ok') { showPreview(); }
-        });
+        }, label);
       }).catch(function () {
         setStatus('err', '사진 파일을 읽지 못했어요. JPG·PNG 파일로 다시 시도해 주세요.');
       });
@@ -6036,7 +6221,7 @@
           if (p && p.catch) { p.catch(function () {}); }
         }
       }
-      adminFaceLoginStatus('wait', '얼굴을 비춰 주세요 · 등록된 관장님 얼굴과 맞는지 확인합니다.');
+      adminFaceLoginStatus('wait', '얼굴을 비춰 주세요 · 등록된 관리자 얼굴 ' + adminFaceCount() + '개와 맞는지 확인합니다.');
       scheduleAdminFaceLoginTick(500);
     }).catch(function (err) {
       adminFaceLogin.running = false;
@@ -6097,16 +6282,22 @@
       return;
     }
     var desc = Array.prototype.slice.call(results[0].descriptor);
-    var dist = euclideanDistance(desc, app.adminFace.descriptor);
-    if (dist <= adminFaceThreshold()) {
-      adminFaceLoginSuccess(dist);
+    var list = adminFaceList();
+    var best = null;
+    for (var i = 0; i < list.length; i++) {
+      var d = euclideanDistance(desc, list[i].descriptor);
+      if (!best || d < best.dist) { best = { dist: d, face: list[i], index: i }; }
+    }
+    if (best && best.dist <= adminFaceThreshold()) {
+      adminFaceLoginSuccess(best.dist, best.face, best.index);
       return;
     }
-    adminFaceLoginStatus('err', '등록된 관장님 얼굴과 맞지 않아요 (거리 ' + dist.toFixed(2) + ' > ' + adminFaceThreshold().toFixed(2) + '). 아이디·비밀번호로 로그인해 주세요.');
+    var nearest = best ? best.dist : 0;
+    adminFaceLoginStatus('err', '등록된 관리자 얼굴과 맞지 않아요 (가장 가까운 거리 ' + nearest.toFixed(2) + ' > ' + adminFaceThreshold().toFixed(2) + '). 아이디·비밀번호로 로그인해 주세요.');
     scheduleAdminFaceLoginTick(800);
   }
 
-  function adminFaceLoginSuccess(dist) {
+  function adminFaceLoginSuccess(dist, face, index) {
     stopAdminFaceLoginCamera();
     app.adminAuthed = true;
     renderAdminAccountState();
@@ -6115,7 +6306,10 @@
     setAdminTab('overview');
     closeActiveModal('face');
     playSuccess();
-    toast('📷 얼굴 인식으로 관리자로 들어왔어요' + (typeof dist === 'number' ? ' · 거리 ' + dist.toFixed(2) : ''));
+    var name = face ? adminFaceLabel(face, index || 0) : '';
+    toast('📷 얼굴 인식으로 관리자로 들어왔어요' +
+      (name ? ' · ' + name : '') +
+      (typeof dist === 'number' ? ' · 거리 ' + dist.toFixed(2) : ''));
   }
 
   /* =========================================================
@@ -12062,11 +12256,15 @@
         autoLock: app.admin.autoLock !== false,
         updatedAt: app.admin.updatedAt || ''
       } : null,
-      adminFace: app.adminFace ? {
-        descriptor: app.adminFace.descriptor.slice(0, 128),
-        thumb: app.adminFace.thumb || '',
-        at: app.adminFace.at || ''
-      } : null,
+      adminFace: adminFaceList().map(function (f) {
+        return {
+          id: f.id,
+          label: f.label || '',
+          descriptor: f.descriptor.slice(0, 128),
+          thumb: f.thumb || '',
+          at: f.at || ''
+        };
+      }),
       logs: app.logs,
       settings: app.settings,
       messages: (app.settings && app.settings.messages) || {},
@@ -12141,11 +12339,17 @@
       return { ok: false, reason: '관리자 계정 설정 형식이 올바르지 않아요.' };
     }
     if (data.adminFace != null) {
-      if (typeof data.adminFace !== 'object' || Array.isArray(data.adminFace)) {
+      if (typeof data.adminFace !== 'object') {
         return { ok: false, reason: '관리자 얼굴 데이터 형식이 올바르지 않아요.' };
       }
-      if (!sanitizeAdminFace(data.adminFace)) {
-        return { ok: false, reason: '관리자 얼굴 데이터가 손상되어 복원할 수 없어요.' };
+      var afSrc = Array.isArray(data.adminFace) ? data.adminFace : [data.adminFace];
+      if (afSrc.length > ADMIN_FACE_MAX) {
+        return { ok: false, reason: '관리자 얼굴은 최대 ' + ADMIN_FACE_MAX + '개까지만 복원할 수 있어요.' };
+      }
+      for (var afi = 0; afi < afSrc.length; afi++) {
+        if (!sanitizeAdminFaceItem(afSrc[afi])) {
+          return { ok: false, reason: '관리자 얼굴 데이터가 손상되어 복원할 수 없어요.' };
+        }
       }
     }
     if (data.feeTable != null && (typeof data.feeTable !== 'object' || Array.isArray(data.feeTable))) {
@@ -12211,10 +12415,10 @@
         updatedAt: String(data.admin.updatedAt || '')
       });
     }
-    // 관리자 얼굴: 백업에 항목이 있을 때만 손대고(없는 예전 백업은 이 기기 등록을 유지), null이면 지운다
+    // 관리자 얼굴: 백업에 항목이 있을 때만 손대고(없는 예전 백업은 이 기기 등록을 유지), null/[]이면 지운다
     if (Object.prototype.hasOwnProperty.call(data, 'adminFace')) {
-      var af = sanitizeAdminFace(data.adminFace);
-      app.adminFace = af;
+      app.adminFaces = sanitizeAdminFaces(data.adminFace);
+      syncAdminFaceAlias();
       saveAdminFaceData();
     }
     if (data.logs) { writeJSON(LS.logs, data.logs); }
@@ -12290,11 +12494,16 @@
     var shCount = Array.isArray(data.shuttle) ? data.shuttle.length : 0;
     var cpCount = Array.isArray(data.coupons) ? data.coupons.length : 0;
     var hasAdmin = !!(data.admin && data.admin.hash);
-    var hasAdminFace = !!(data.adminFace && data.adminFace.descriptor);
+    var afCount = 0;
+    if (Array.isArray(data.adminFace)) {
+      data.adminFace.forEach(function (f) { if (sanitizeAdminFaceItem(f)) { afCount++; } });
+    } else if (sanitizeAdminFaceItem(data.adminFace)) {
+      afCount = 1;
+    }
     return '<div class="help" style="margin-top:0">' +
       '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 상담 기록 <b>' + csCount + '건</b> · 차량 운행 <b>' + shCount + '건</b> · 쿠폰 <b>' + cpCount + '장</b>' +
       (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') +
-      (hasAdminFace ? ' · 관리자 얼굴 <b>등록됨</b>' : ' · 관리자 얼굴 미등록') +
+      (afCount ? ' · 관리자 얼굴 <b>' + afCount + '/' + ADMIN_FACE_MAX + '개 등록됨</b>' : ' · 관리자 얼굴 미등록') +
       ' · 띠 체계·문자·원비·수업별 단가표 설정 포함<br>' +
       (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
       '</div>';
@@ -13908,6 +14117,7 @@
     });
     el('btn-admin-face-open').addEventListener('click', openAdminFaceRegister);
     el('btn-admin-face-del').addEventListener('click', confirmRemoveAdminFace);
+    el('admin-face-list').addEventListener('click', onAdminFaceListClick);
     el('btn-goto-account').addEventListener('click', function () {
       setAdminTab('settings');
       var p = el('admin-account-panel');
@@ -14417,10 +14627,17 @@
       face: {
         registered: adminFaceRegistered,
         threshold: adminFaceThreshold,
-        sanitize: sanitizeAdminFace,
+        max: adminFaceMax,
+        list: adminFaceList,
+        count: adminFaceCount,
+        labelOf: adminFaceLabel,
+        sanitize: sanitizeAdminFaces,
+        load: function () { app.adminFaces = loadAdminFace(); syncAdminFaceAlias(); renderAdminFaceState(); return adminFaceCount(); },
         save: saveAdminFace,
         remove: removeAdminFace,
+        removeById: removeAdminFaceById,
         confirmRemove: confirmRemoveAdminFace,
+        confirmRemoveOne: confirmRemoveAdminFaceOne,
         registerFromCanvas: registerAdminFaceFromCanvas,
         openRegister: openAdminFaceRegister,
         render: renderAdminFaceState,
