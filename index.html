@@ -640,6 +640,11 @@
   .stu-tablewrap{max-height:min(62vh,680px); overflow:auto; border:1px solid #eef2f8; border-radius:12px; -webkit-overflow-scrolling:touch}
   .stu-tablehint{display:none; margin:0 0 6px; font-size:11px; font-weight:800; color:#8a94a6}
   .stu-tablehint.on{display:block}
+  #stu-filters .input{height:34px; flex:0 1 300px; min-width:170px; padding:0 11px; font-size:12px; border-radius:10px; font-weight:600}
+  #stu-filters .input::-webkit-search-cancel-button{cursor:pointer}
+  @media (max-width:760px){
+    #stu-filters .input{height:36px; flex:1 1 100%; min-width:0}
+  }
   table.stu-tb{min-width:1420px}
   table.stu-tb .belt-chip-cell{white-space:nowrap}
   table.stu-tb td.nm{white-space:nowrap}
@@ -1513,13 +1518,14 @@
               <h3>📋 재원생 전체 명단</h3>
               <div class="spacer"></div>
               <span class="tiny-note" id="stu-count">0명</span>
-              <button class="btn btn-sm" id="btn-stu-csv" title="지금 고른 필터(재원생·휴관생·전체)의 관원 명단을 엑셀에서 바로 여는 CSV로 내려받습니다">📤 명단 CSV</button>
+              <button class="btn btn-sm" id="btn-stu-csv" title="지금 고른 필터(재원생·휴관생·전체)와 검색어에 맞는 관원 명단을 엑셀에서 바로 여는 CSV로 내려받습니다">📤 명단 CSV</button>
             </div>
             <div class="panel-body">
               <div class="promo-filters" id="stu-filters" style="margin:-2px 0 9px">
                 <button class="pchip active" data-sfilter="active" id="sf-active">재원생</button>
                 <button class="pchip" data-sfilter="paused" id="sf-paused">휴관생</button>
                 <button class="pchip" data-sfilter="all" id="sf-all">전체</button>
+                <input class="input" id="stu-q" type="search" placeholder="🔍 이름·초성·전화 뒷자리 검색" autocomplete="off" spellcheck="false" aria-label="재원생 명단 이름·초성·전화 뒷자리 검색">
                 <div class="spacer"></div>
                 <span class="tiny-note" id="stu-filter-note"></span>
               </div>
@@ -2896,6 +2902,7 @@
     msgUI: null,
     smsTemplates: [],
     stuFilter: 'active',   // 기본은 재원생만 — 휴관생은 「🛌 휴관생 관리」·「휴관생」 칩에서 따로 본다
+    stuQuery: '',          // 「📋 재원생 전체 명단」 실시간 검색어(이름·초성·전화 뒷자리)
     attFilter: 'all',
     attQuery: '',
     feeTable: null,
@@ -2992,6 +2999,30 @@
     var hay = [divisionOf(student), courseLabel(student.division, student.course), String(student.className || '')]
       .join(' ').replace(/\s+/g, '');
     if (hay.indexOf(q) !== -1) { return true; }
+    return false;
+  }
+  /* 「📋 재원생 전체 명단」 검색 — 이름·초성·부서·수업(matchSearch) + 전화 뒷자리·티콘 ID·특이사항 */
+  function matchRosterQuery(student, rawQuery) {
+    var q = String(rawQuery == null ? '' : rawQuery).replace(/\s+/g, '');
+    if (!q) { return true; }
+    if (matchSearch(student, q)) { return true; }
+    var qd = digitsOnly(q);
+    if (qd && qd.length >= 3) {
+      var rawPhone = String(student.phone || '');
+      var pd = digitsOnly(rawPhone);
+      /* 뒷자리 우선 — 010-2345-6789를 「6789」·「2345-6789」·전체 번호 어느 쪽으로 쳐도 찾는다 */
+      if (pd.length >= qd.length && pd.slice(pd.length - qd.length) === qd) { return true; }
+      if (qd.length >= 4) {
+        /* 010-2345-6789에서 기억나는 가운데 묶음(2345)으로도 */
+        if (rawPhone.split(/\D+/).indexOf(qd) !== -1) { return true; }
+        if (qd.length >= 7 && pd.indexOf(qd) !== -1) { return true; }
+      }
+    }
+    var lq = q.toLowerCase();
+    var tcon = String(tconOf(student) || '').replace(/\s+/g, '').toLowerCase();
+    if (tcon && tcon.indexOf(lq) !== -1) { return true; }
+    var note = String(noteOf(student) || '').replace(/\s+/g, '').toLowerCase();
+    if (note && note.indexOf(lq) !== -1) { return true; }
     return false;
   }
 
@@ -5254,16 +5285,12 @@
   function renderStudentsTable() {
     var filter = app.stuFilter || 'active';
     var counts2 = { all: app.students.length, active: activeStudents().length, paused: pausedStudents().length };
-    el('stu-count').textContent = counts2.active + '명 재원' + (counts2.paused ? ' · ' + counts2.paused + '명 휴관' : '');
-    if (el('stu-filter-note')) {
-      el('stu-filter-note').textContent = filter === 'all' ? '전체 ' + counts2.all + '명'
-        : filter === 'active' ? '재원생 ' + counts2.active + '명'
-        : '휴관생 ' + counts2.paused + '명';
+    var q = String(app.stuQuery || '').trim();
+    var qbox = el('stu-q');
+    if (qbox && document.activeElement !== qbox && String(qbox.value || '') !== String(app.stuQuery || '')) {
+      qbox.value = String(app.stuQuery || '');
     }
-    ['all', 'active', 'paused'].forEach(function (k) {
-      var b = el('sf-' + k);
-      if (b) { b.classList.toggle('active', filter === k); }
-    });
+    el('stu-count').textContent = counts2.active + '명 재원' + (counts2.paused ? ' · ' + counts2.paused + '명 휴관' : '');
     var list = app.students.filter(function (s) {
       if (filter === 'active') { return isActive(s); }
       if (filter === 'paused') { return isPaused(s); }
@@ -5271,11 +5298,27 @@
     }).slice().sort(function (a, b) {
       return a.name.localeCompare(b.name, 'ko');
     });
+    /* 검색어가 있으면 이름순을 그대로 둔 채 걸러낸다 */
+    if (q) {
+      list = list.filter(function (s) { return matchRosterQuery(s, q); });
+    }
+    if (el('stu-filter-note')) {
+      el('stu-filter-note').textContent = (q ? '검색 ' + list.length + '명 / ' : '') +
+        (filter === 'all' ? '전체 ' + counts2.all + '명'
+        : filter === 'active' ? '재원생 ' + counts2.active + '명'
+        : '휴관생 ' + counts2.paused + '명');
+    }
+    ['all', 'active', 'paused'].forEach(function (k) {
+      var b = el('sf-' + k);
+      if (b) { b.classList.toggle('active', filter === k); }
+    });
 
     var tbody = el('stu-table');
     if (!list.length) {
       var emptyMsg = '이 상태의 관원이 없어요.';
-      if (app.students.length && filter === 'active' && pausedStudents().length) {
+      if (q) {
+        emptyMsg = '조건에 맞는 원생이 없어요. 검색어를 지워 보세요.';
+      } else if (app.students.length && filter === 'active' && pausedStudents().length) {
         emptyMsg = '재원생이 없어요. 휴관생 ' + pausedStudents().length + '명은 「🛌 휴관생 관리」에서 볼 수 있어요.';
       } else if (app.students.length && filter === 'paused' && activeStudents().length) {
         emptyMsg = '휴관생이 없어요. 재원생 ' + activeStudents().length + '명은 「재원생」 칩에서 볼 수 있어요.';
@@ -13853,13 +13896,16 @@
     });
     return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
   }
-  /* 지금 고른 필터(전체·재원생·휴관생)에 보이는 관원을 CSV로 내려받는다 */
+  /* 지금 고른 필터(전체·재원생·휴관생)와 검색어에 보이는 관원을 CSV로 내려받는다 */
   function studentsRosterList() {
     var filter = app.stuFilter || 'active';
+    var q = String(app.stuQuery || '').trim();
     return app.students.filter(function (s) {
       if (filter === 'active') { return isActive(s); }
       if (filter === 'paused') { return isPaused(s); }
       return true;
+    }).filter(function (s) {
+      return !q || matchRosterQuery(s, q);
     }).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
   }
   function downloadStudentsCSV() {
@@ -14962,6 +15008,17 @@
         if (!b) { return; }
         var v = b.getAttribute('data-sfilter');
         app.stuFilter = (v === 'active' || v === 'paused') ? v : 'all';
+        renderStudentsTable();
+      });
+    }
+    if (el('stu-q')) {
+      el('stu-q').addEventListener('input', function () {
+        app.stuQuery = String(el('stu-q').value || '');
+        renderStudentsTable();
+      });
+      /* type=search의 ✕·Esc로 지웠을 때도 바로 전체 명단으로 돌아오게 */
+      el('stu-q').addEventListener('search', function () {
+        app.stuQuery = String(el('stu-q').value || '');
         renderStudentsTable();
       });
     }
@@ -16145,6 +16202,13 @@
       csv: studentsCSVText,
       downloadCsv: downloadStudentsCSV,
       list: function () { return studentsRosterList(); },
+      query: function (v) {
+        app.stuQuery = (v == null ? '' : String(v));
+        if (el('stu-q')) { el('stu-q').value = app.stuQuery; }
+        renderStudentsTable();
+        return app.stuQuery;
+      },
+      matches: matchRosterQuery,
       normalizeBirth: normalizeBirthDate,
       normalizeTcon: normalizeTconId,
       tuitionDay: tuitionDayOf,
