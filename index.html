@@ -11404,6 +11404,7 @@
     });
     var out = [];
     out.skippedContacts = 0;
+    out.unmarkedKind = 0;
     out.headerRow = -1;
     if (!clean.length) { return out; }
     var header = null, map = null, start = 0;
@@ -11451,7 +11452,10 @@
       var riders = shuttleRidersFromCell(cellOf('riders'));
       var kindCell = cellOf('kind');
       var kind = kindCell ? shuttleKindFromText(kindCell) : shuttleKindOfDest(dest + ' ' + cellOf('dest'));
+      // 승차/하차 열도 표시도 없는 줄은 승차로 넣되, 몇 건인지 알려 준다
+      var unmarked = !kindCell && !/승차|하차|등원|하원|픽업|드랍/.test(cellOf('dest'));
       if (!time && !dest && !memo && !riders.length) { continue; }
+      if (unmarked) { out.unmarkedKind++; }
       out.push({
         id: uid('sh'),
         part: part,
@@ -11477,6 +11481,7 @@
       (unknown ? ' (명단에서 못 찾은 이름 ' + unknown + '개는 이름 그대로 들어갑니다)' : '') +
       (noTime ? '<br>시간이 비어 있는 줄 <b>' + noTime + '건</b>은 시간 없이 들어갑니다.' : '') +
       (rows.skippedContacts ? '<br>돌봄교실 연락처 <b>' + rows.skippedContacts + '줄</b>은 운행이 아니라서 건너뛰었어요.' : '') +
+      (rows.unmarkedKind ? '<br>승차/하차 표시가 없던 <b>' + rows.unmarkedKind + '건</b>은 <b>승차</b>로 넣었어요. 표에서 버튼 한 번이면 바꿀 수 있어요.' : '') +
       '</div>';
     var body = rows.slice(0, 6).map(function (r) {
       return '<tr>' +
