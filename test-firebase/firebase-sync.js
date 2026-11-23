@@ -1,0 +1,1914 @@
+/* =============================================================================
+   경희대MTA태권도 — 🔥 Firebase Firestore 실시간 동기화 엔진 (테스트 버전 전용)
+   =============================================================================
+   · 이 파일은 `test-firebase/` 테스트 버전에서만 쓰입니다.
+     운영 버전(index.html v28)은 이 파일을 읽지 않으며, 이 파일이 운영 데이터에
+     영향을 주는 경로는 전혀 없습니다.
+   · 저장 구조
+       dojangs/{dojangId}/students/{studentId}          원생 1명 = 문서 1개
+       dojangs/{dojangId}/attendanceEvents/{eventId}     출결 1건 = 문서 1개
+                                                         eventId = {날짜}_{원생ID}_{in|out}
+       dojangs/{dojangId}/tuition/{YYYY-MM}_{studentId}  원생·월 원비 1건 = 문서 1개
+       dojangs/{dojangId}/counsel|shuttle|coupons/{id}   기록 1건 = 문서 1개
+       dojangs/{dojangId}/meta/{설정문서}                설정·단가표·문구·로그·계정
+       dojangs/{dojangId}/roles/{uid}                    권한(관리자/출석 태블릿)
+     · 기기 로컬 전용(절대 업로드하지 않음)
+       tdk.faces.v1(원생 얼굴 128차원), tdk.adminFace.v1(관리자 얼굴),
+       그리고 이 엔진의 상태 키(tdk.fb*.v1)
+   · 문서마다 `_ver`(문서 버전) · `_updatedAt` · `_updatedBy`(기기 ID) ·
+     `_fieldMeta`(필드별 버전/수정시각/수정기기)를 붙여,
+     PC와 태블릿이 같은 관원의 서로 다른 칸을 동시에 고쳐도 두 변경이 모두 살아남습니다.
+   · 무료(Spark) 한도: 읽기 5만/일, 쓰기 2만/일, 삭제 2만/일 — 80% 경고, 100%에서
+     자동 유료 전환 없이 동기화만 멈추고 로컬 큐에 보관합니다.
+   ============================================================================= */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) { module.exports = factory(root); }
+  else { root.TDKFirebaseSync = factory(root); }
+})(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
+  'use strict';
+
+  var VERSION = '1.0.0-test';
+
+  /* ---------- 무료(Spark) 한도 ---------- */
+  var SPARK = {
+    reads: 50000,     /* 문서 읽기 / 일 */
+    writes: 20000,    /* 문서 쓰기 / 일 */
+    deletes: 20000,   /* 문서 삭제 / 일 */
+    warnRatio: 0.8,   /* 80% 경고 */
+    maxBatch: 500     /* Firestore 배치 1회 최대 쓰기 수 */
+  };
+
+  var REFRESH_MS = 150;        /* 원격 변경을 모아서 한 번에 화면에 반영 */
+  var DUPLICATE_WINDOW_MS = 6000;  /* 같은 출결 이벤트 중복 차단 창(보조 안전장치) */
+  var QUOTA_MESSAGE = '무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다. 지금 찍은 기록은 이 기기에 임시 보관 중이며, 한도가 풀리면(태평양 시간 자정) 자동으로 다시 보냅니다. 그동안 Google Drive 백업을 받아 두시길 권합니다.';
+
+  /* =========================================================================
+     1. 작은 도구들
+     ========================================================================= */
+  function hasOwn(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+  function isPlain(v) {
+    return !!v && typeof v === 'object' && !Array.isArray(v) &&
+      (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
+  }
+  function clone(v) { try { return JSON.parse(JSON.stringify(v)); } catch (e) { return null; } }
+
+  /* 키 순서에 흔들리지 않는 문자열 — 내용 비교·해시에 쓴다 */
+  function stableStringify(v) {
+    if (v === null || v === undefined) { return 'null'; }
+    var t = typeof v;
+    if (t === 'number') { return isFinite(v) ? String(v) : 'null'; }
+    if (t === 'string') { return JSON.stringify(v); }
+    if (t === 'boolean') { return v ? 'true' : 'false'; }
+    if (t !== 'object') { return JSON.stringify(String(v)); }
+    if (Array.isArray(v)) {
+      var parts = [];
+      for (var i = 0; i < v.length; i++) { parts.push(stableStringify(v[i])); }
+      return '[' + parts.join(',') + ']';
+    }
+    var keys = Object.keys(v).sort();
+    var out = [];
+    for (var j = 0; j < keys.length; j++) {
+      if (v[keys[j]] === undefined) { continue; }
+      out.push(JSON.stringify(keys[j]) + ':' + stableStringify(v[keys[j]]));
+    }
+    return '{' + out.join(',') + '}';
+  }
+  function hashStr(s) {
+    var h = 0x811c9dc5;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return ('0000000' + h.toString(36)).slice(-8);
+  }
+  function contentHash(obj) { return hashStr(stableStringify(obj || {})); }
+
+  function p2(n) { return (n < 10 ? '0' : '') + n; }
+  function isoOf(ms) {
+    var d = new Date(ms == null ? Date.now() : ms);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + 'T' +
+      p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()) + '.' +
+      ('00' + d.getMilliseconds()).slice(-3) + 'Z';
+  }
+  function dayOf(ms) { return isoOf(ms).slice(0, 10); }
+
+  /* Firestore 문서 ID로 쓸 수 없는 문자 정리 ( '/' '.' '#' '$' '[' ']' 등 ) */
+  function safeId(v) {
+    var s = String(v == null ? '' : v)
+      .replace(/[\/\\#\$\[\]\*\?\.\s]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    if (!s) { s = '_'; }
+    return s.slice(0, 300);
+  }
+
+  /* 중첩 객체를 "a.b.c" 점 표기 필드로 펼친다 (배열은 통째로 한 필드) */
+  function flatten(obj, depth) {
+    var out = {};
+    (function walk(cur, prefix, d) {
+      if (!isPlain(cur)) { if (prefix) { out[prefix] = cur; } return; }
+      var keys = Object.keys(cur);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        var v = cur[k];
+        if (k.charAt(0) === '_') { continue; }          /* 메타 필드는 제외 */
+        var path = prefix ? (prefix + '.' + k) : k;
+        if (isPlain(v) && d < 5 && Object.keys(v).length) { walk(v, path, d + 1); }
+        else { out[path] = v; }
+      }
+    })(obj || {}, '', 0);
+    return out;
+  }
+  function unflatten(flat) {
+    var out = {};
+    Object.keys(flat || {}).forEach(function (path) {
+      var segs = path.split('.');
+      var cur = out;
+      for (var i = 0; i < segs.length - 1; i++) {
+        if (!isPlain(cur[segs[i]])) { cur[segs[i]] = {}; }
+        cur = cur[segs[i]];
+      }
+      cur[segs[segs.length - 1]] = flat[path];
+    });
+    return out;
+  }
+
+  function normalizeError(err) {
+    if (!err) { return { message: '알 수 없는 오류' }; }
+    return {
+      code: String(err.code || ''),
+      message: String(err.message || err.detail || err || ''),
+      name: String(err.name || '')
+    };
+  }
+  function errorText(err) {
+    var e = normalizeError(err);
+    if (e.code === 'permission-denied' || /permission/i.test(e.message)) {
+      return '권한이 없습니다 — firestore.rules 와 roles 문서를 확인해 주세요';
+    }
+    if (isQuotaError(err)) { return '무료 한도를 다 썼습니다'; }
+    if (e.code === 'unavailable' || /offline|network|Failed to fetch/i.test(e.message)) {
+      return '인터넷 연결이 없습니다 — 연결되면 자동으로 다시 보냅니다';
+    }
+    if (e.code === 'unauthenticated') { return '로그인이 필요합니다'; }
+    return (e.code ? ('[' + e.code + '] ') : '') + (e.message || '오류');
+  }
+  function isQuotaError(err) {
+    var e = normalizeError(err);
+    return e.code === 'resource-exhausted' || /resource[- ]exhausted|quota|daily limit/i.test(e.message);
+  }
+
+  /* =========================================================================
+     2. 필드 단위 병합 (Field-level merge)
+     -------------------------------------------------------------------------
+     문서마다 필드별 _fieldMeta = { "필드": { v:버전, at:수정시각, by:기기 } } 를 둔다.
+     두 기기의 문서를 합칠 때 필드마다 (v → at → by) 순으로 새 것을 고르므로,
+     PC가 note 를, 태블릿이 belt 를 동시에 고쳐도 두 변경이 모두 남는다.
+     _fieldMeta 가 없는 옛 문서(다른 앱·수동 입력)는 문서 단위(ver·시각·기기)로 비교한다.
+     ========================================================================= */
+  function metaOf(doc) {
+    var m = doc && doc._fieldMeta;
+    return isPlain(m) ? m : null;
+  }
+  /* 문서에서 값 필드만 (메타 필드 _로 시작하는 것은 제외, _value 는 값) */
+  /* 문서에 담을 값 필드 — _value 는 값이므로 남긴다 */
+  function valueFields(obj) {
+    var out = {};
+    Object.keys(obj || {}).forEach(function (k) {
+      if (k === '_value' || k.charAt(0) !== '_') { out[k] = obj[k]; }
+    });
+    return out;
+  }
+  function docBody(doc) {
+    var out = {};
+    if (!isPlain(doc)) { return out; }
+    if (hasOwn(doc, '_value')) { return { _value: doc._value }; }
+    Object.keys(doc).forEach(function (k) { if (k.charAt(0) !== '_') { out[k] = doc[k]; } });
+    return out;
+  }
+  function cmpMeta(a, b) {
+    if (!a && !b) { return 0; }
+    if (!a) { return -1; }
+    if (!b) { return 1; }
+    var av = num(a.v), bv = num(b.v);
+    if (av !== bv) { return av > bv ? 1 : -1; }
+    var aa = String(a.at || ''), ba = String(b.at || '');
+    if (aa !== ba) { return aa > ba ? 1 : -1; }
+    var ab = String(a.by || ''), bb = String(b.by || '');
+    if (ab !== bb) { return ab > bb ? 1 : -1; }
+    return 0;
+  }
+  /* 문서 단위 비교 — 완전 동률이면 내용으로 결정해 양쪽이 같은 결론을 내게 한다 */
+  function docCmp(a, b) {
+    var av = num(a && a._ver), bv = num(b && b._ver);
+    if (av !== bv) { return av > bv ? 1 : -1; }
+    var aa = String((a && a._updatedAt) || ''), ba = String((b && b._updatedAt) || '');
+    if (aa !== ba) { return aa > ba ? 1 : -1; }
+    var ab = String((a && a._updatedBy) || ''), bb = String((b && b._updatedBy) || '');
+    if (ab !== bb) { return ab > bb ? 1 : -1; }
+    var as = stableStringify(a || {}), bs = stableStringify(b || {});
+    if (as !== bs) { return as > bs ? 1 : -1; }
+    return 0;
+  }
+
+  /* 로컬 값이 바뀌었을 때 필드별 버전을 올린다 (바뀌지 않은 필드는 이전 메타 유지) */
+  function stampFields(prevBody, prevMeta, nextBody, ctx) {
+    var pf = flatten(prevBody || {}), nf = flatten(nextBody || {});
+    var meta = {};
+    Object.keys(nf).forEach(function (f) {
+      var same = hasOwn(pf, f) && stableStringify(pf[f]) === stableStringify(nf[f]);
+      if (same) {
+        /* 값이 그대로면 이전 메타를 그대로 둔다 (없던 필드는 메타도 만들지 않음) */
+        if (prevMeta && prevMeta[f]) { meta[f] = prevMeta[f]; }
+        return;
+      }
+      meta[f] = {
+        v: ((prevMeta && prevMeta[f] && num(prevMeta[f].v)) || 0) + 1,
+        at: ctx.at,
+        by: ctx.by
+      };
+    });
+    return meta;
+  }
+
+  /* 배열(로그·문구·쿠폰종류)은 id 기준 합집합 — 양쪽에서 추가한 항목이 모두 남는다 */
+  function unionArrays(localArr, remoteArr, preferRemoteOrder) {
+    var out = [], seen = {};
+    function idOf(item, i) {
+      if (isPlain(item) && item.id != null) { return 'id:' + String(item.id); }
+      return 'raw:' + stableStringify(item);
+    }
+    var first = preferRemoteOrder ? remoteArr : localArr;
+    var second = preferRemoteOrder ? localArr : remoteArr;
+    (Array.isArray(first) ? first : []).forEach(function (item, i) {
+      var k = idOf(item, i);
+      if (seen[k]) { return; }
+      seen[k] = 1;
+      out.push(item);
+    });
+    (Array.isArray(second) ? second : []).forEach(function (item, i) {
+      var k = idOf(item, i);
+      if (seen[k]) { return; }
+      seen[k] = 1;
+      out.push(item);
+    });
+    return out;
+  }
+
+  /* 로컬 문서(또는 없음)와 원격 문서를 필드 단위로 합친다 */
+  function mergeDocs(localDoc, remoteDoc, opts) {
+    opts = opts || {};
+    var l = localDoc || {};
+    var r = remoteDoc || {};
+    var lBody = docBody(l);
+    var rBody = docBody(r);
+    var lMeta = metaOf(l), rMeta = metaOf(r);
+
+    var result = { body: {}, meta: {}, ver: Math.max(num(l._ver), num(r._ver)), deleted: false, conflict: false };
+
+    /* --- 1) 삭제(툼스톤) --- */
+    var lDel = l._deleted === true, rDel = r._deleted === true;
+    if (lDel || rDel) {
+      var c = docCmp(l, r);
+      var winner = c < 0 ? 'r' : (c > 0 ? 'l' : (rDel ? 'r' : 'l'));
+      if (winner === 'r' && rDel) {
+        result.deleted = true;
+        result.ver = Math.max(num(l._ver), num(r._ver));
+        return result;
+      }
+      if (winner === 'l' && lDel) {
+        result.deleted = true;
+        result.ver = Math.max(num(l._ver), num(r._ver));
+        return result;
+      }
+      /* 진 쪽(삭제)은 무시하고 살아 있는 쪽 내용으로 이어 간다 */
+    }
+
+    /* --- 2) 단일 값(_value) 문서 — 효과음 끔·로그·문구·쿠폰종류 --- */
+    if (hasOwn(lBody, '_value') || hasOwn(rBody, '_value')) {
+      var lv0 = hasOwn(lBody, '_value') ? lBody._value : undefined;
+      var rv0 = hasOwn(rBody, '_value') ? rBody._value : undefined;
+      if (opts.arrayUnion && Array.isArray(lv0) && Array.isArray(rv0)) {
+        var union = unionArrays(lv0, rv0, true);
+        result.body = { _value: union };
+        result.meta = { _value: cmpMeta(lMeta && lMeta._value, rMeta && rMeta._value) >= 0
+          ? (lMeta && lMeta._value) : (rMeta && rMeta._value) };
+        result.conflict = stableStringify(lv0) !== stableStringify(union);
+        return result;
+      }
+      var pickV;
+      if (!lMeta || !rMeta) {
+        pickV = docCmp(l, r) >= 0 ? 'l' : 'r';
+      } else {
+        var c3 = cmpMeta(lMeta._value, rMeta._value);
+        if (c3 > 0) { pickV = 'l'; }
+        else if (c3 < 0) { pickV = 'r'; }
+        else { pickV = stableStringify(lv0) > stableStringify(rv0) ? 'l' : 'r'; }
+      }
+      result.body = { _value: pickV === 'l' ? lv0 : rv0 };
+      if (pickV === 'l' && lMeta && lMeta._value) { result.meta = { _value: lMeta._value }; }
+      else if (pickV === 'r' && rMeta && rMeta._value) { result.meta = { _value: rMeta._value }; }
+      result.conflict = hasOwn(lBody, '_value') && hasOwn(rBody, '_value') &&
+        stableStringify(lv0) !== stableStringify(rv0);
+      return result;
+    }
+
+    /* --- 3) 필드 단위 병합 --- */
+    var lf = flatten(lBody), rf = flatten(rBody);
+    var fields = {};
+    Object.keys(lf).forEach(function (f) { fields[f] = 1; });
+    Object.keys(rf).forEach(function (f) { fields[f] = 1; });
+    Object.keys(fields).sort().forEach(function (f) {
+      var inL = hasOwn(lf, f), inR = hasOwn(rf, f);
+      var pick;
+      if (inL && !inR) { pick = 'l'; }
+      else if (!inL && inR) { pick = 'r'; }
+      else if (stableStringify(lf[f]) === stableStringify(rf[f])) { pick = 'l'; }
+      else if (!lMeta || !rMeta) {
+        /* 옛 문서(필드 메타 없음) → 문서 단위 비교 */
+        pick = docCmp(l, r) >= 0 ? 'l' : 'r';
+      } else {
+        var c2 = cmpMeta(lMeta[f], rMeta[f]);
+        if (c2 > 0) { pick = 'l'; }
+        else if (c2 < 0) { pick = 'r'; }
+        else {
+          /* 메타까지 같으면 내용으로 결정 — 양쪽이 같은 결론(수렴) */
+          pick = stableStringify(lf[f]) > stableStringify(rf[f]) ? 'l' : 'r';
+        }
+      }
+      if (pick === 'l') {
+        result.body[f] = lf[f];
+        if (lMeta && lMeta[f]) { result.meta[f] = lMeta[f]; }
+      } else {
+        result.body[f] = rf[f];
+        if (rMeta && rMeta[f]) { result.meta[f] = rMeta[f]; }
+      }
+      if (inL && inR && stableStringify(lf[f]) !== stableStringify(rf[f])) {
+        /* 양쪽이 서로 다르게 고친 필드가 있으면 conflict 로 표시 (양쪽 필드는 그대로 살아남는다) */
+        var lv = lMeta && lMeta[f] ? num(lMeta[f].v) : num(l._ver);
+        var rv = rMeta && rMeta[f] ? num(rMeta[f].v) : num(r._ver);
+        if (lv === rv) { result.conflict = true; }
+      }
+    });
+    result.body = unflatten(result.body);
+    return result;
+  }
+
+  /* =========================================================================
+     3. 저장 키 분류 (기존 localStorage 17개 키 전수)
+     -------------------------------------------------------------------------
+     · faces/adminFace → 기기 로컬 전용 (업로드 금지)
+     · 나머지 전부 → Firestore 문서로 이전
+     · 앱의 실제 LS 객체(__tdk.LS)에 새 키가 생기면 자동으로 meta/{키} 문서로 포함된다
+     ========================================================================= */
+  var KEY_TABLE = [
+    { name: 'students', key: 'tdk.students.v1', label: '원생 명단', icon: '👥', kind: 'docs', coll: 'students', desc: '원생 1명 = 문서 1개' },
+    { name: 'attendance', key: 'tdk.attendance.v1', label: '출결 기록', icon: '🕒', kind: 'events', coll: 'attendanceEvents', desc: '출결 1건 = 문서 1개 (eventId)' },
+    { name: 'records', key: 'tdk.records.v1', label: '출결 기록(구버전)', icon: '🗂', kind: 'events', coll: 'attendanceEvents', desc: '같은 출결 문서로 합쳐 저장' },
+    { name: 'tuition', key: 'tdk.tuition.v1', label: '원비 내역', icon: '💰', kind: 'tuition', coll: 'tuition', desc: '원생·월 1건 = 문서 1개' },
+    { name: 'counsel', key: 'tdk.counsel.v1', label: '상담 기록', icon: '💬', kind: 'docs', coll: 'counsel', desc: '상담 1건 = 문서 1개' },
+    { name: 'shuttle', key: 'tdk.shuttle.v1', label: '차량 운행', icon: '🚐', kind: 'docs', coll: 'shuttle', desc: '운행 1건 = 문서 1개' },
+    { name: 'coupons', key: 'tdk.coupons.v1', label: '쿠폰 지급 현황', icon: '🎟', kind: 'docs', coll: 'coupons', desc: '쿠폰 1건 = 문서 1개' },
+    { name: 'settings', key: 'tdk.settings.v1', label: '도장 설정', icon: '⚙️', kind: 'object', meta: 'settings', desc: 'meta/settings · 필드 단위 병합' },
+    { name: 'feeTable', key: 'tdk.feeTable.v1', label: '수업 단가표', icon: '🏷', kind: 'object', meta: 'feeTable', desc: 'meta/feeTable · 필드 단위 병합' },
+    { name: 'admin', key: 'tdk.admin.v1', label: '관리자 계정(해시)', icon: '🔐', kind: 'object', meta: 'admin', desc: 'meta/admin · 관리자만 읽기' },
+    { name: 'smsTemplates', key: 'tdk.smsTemplates.v1', label: '단체문자 문구', icon: '📝', kind: 'value', meta: 'smsTemplates', union: true, desc: 'meta/smsTemplates · 항목 합집합' },
+    { name: 'couponTypes', key: 'tdk.couponTypes.v1', label: '쿠폰 종류', icon: '🧾', kind: 'value', meta: 'couponTypes', union: true, desc: 'meta/couponTypes · 항목 합집합' },
+    { name: 'logs', key: 'tdk.logs.v1', label: '문자 발송 로그(최근 200)', icon: '📨', kind: 'value', meta: 'logs', union: true, desc: 'meta/logs · 항목 합집합' },
+    { name: 'muted', key: 'tdk.muted.v1', label: '효과음 끔', icon: '🔇', kind: 'value', meta: 'muted', desc: 'meta/muted' },
+    { name: 'faces', key: 'tdk.faces.v1', label: '원생 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' },
+    { name: 'adminFace', key: 'tdk.adminFace.v1', label: '관리자 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' }
+  ];
+
+  /* 엔진이 스스로 저장하는 기기 로컬 키 (동기화 대상 아님) */
+  var LOCAL_KEYS = {
+    'tdk.fbConfig.v1': 1, 'tdk.fbDevice.v1': 1, 'tdk.fbUsage.v1': 1,
+    'tdk.fbOutbox.v1': 1, 'tdk.fbShadow.v1': 1, 'tdk.fbMock.v1': 1,
+    'tdk.fbState.v1': 1
+  };
+
+  function buildRegistry(extraKeys) {
+    var out = KEY_TABLE.map(function (e) { return clone(e); });
+    var known = {};
+    out.forEach(function (e) { known[e.key] = 1; });
+    /* 앱의 실제 LS 객체에 있는데 표에 없는 키도 빠뜨리지 않고 포함한다 */
+    if (isPlain(extraKeys)) {
+      Object.keys(extraKeys).forEach(function (name) {
+        var key = String(extraKeys[name]);
+        if (known[key]) { return; }
+        known[key] = 1;
+        out.push({
+          name: name, key: key, label: name, icon: '📦', kind: 'object',
+          meta: safeId(name), desc: 'meta/' + safeId(name) + ' (자동 포함)', auto: true
+        });
+      });
+    }
+    return out;
+  }
+
+  /* =========================================================================
+     4. 로컬 값 → Firestore 문서
+     ========================================================================= */
+  function eventIdOf(date, studentId, kind) {
+    return safeId(date) + '_' + safeId(studentId) + '_' + (kind === 'out' ? 'out' : 'in');
+  }
+  function parseEventId(id) {
+    var s = String(id || '');
+    var m = /^(.+?)_(.+)_(in|out)$/.exec(s);
+    if (!m) { return null; }
+    return { date: m[1], studentId: m[2], kind: m[3] };
+  }
+
+  function docsForEntry(entry, value, base) {
+    var docs = [];
+    if (!entry || entry.kind === 'local') { return docs; }
+    var collPath = function (coll) { return base + '/' + coll; };
+
+    if (entry.kind === 'docs') {
+      var list = Array.isArray(value) ? value : [];
+      list.forEach(function (item, i) {
+        if (!isPlain(item)) { return; }
+        var id = item.id != null && String(item.id) ? String(item.id) : ('auto_' + hashStr(stableStringify(item)) + '_' + i);
+        docs.push({ id: id, path: collPath(entry.coll) + '/' + safeId(id), body: item });
+      });
+      return docs;
+    }
+
+    if (entry.kind === 'events') {
+      var att = (entry.name === 'attendance') ? value : null;
+      var rec = (entry.name === 'records') ? value : null;
+      var days = isPlain(value) ? value : {};
+      Object.keys(days).forEach(function (date) {
+        var day = days[date];
+        if (!isPlain(day)) { return; }
+        Object.keys(day).forEach(function (sid) {
+          var e = day[sid];
+          if (!isPlain(e)) { return; }
+          var inT = att ? String(e.inTime || '').slice(0, 5) : String(e.in || '').slice(0, 5);
+          var outT = att ? String(e.outTime || '').slice(0, 5) : String(e.out || '').slice(0, 5);
+          var manual = !!e.manual;
+          var src = String(e.src || (att ? '' : 'legacy'));
+          var updatedAt = String(e.updatedAt || '');
+          if (inT) {
+            docs.push({
+              id: eventIdOf(date, sid, 'in'),
+              path: collPath('attendanceEvents') + '/' + eventIdOf(date, sid, 'in'),
+              body: { date: date, studentId: sid, kind: 'in', time: inT, manual: manual, src: src, at: updatedAt }
+            });
+          }
+          if (outT) {
+            docs.push({
+              id: eventIdOf(date, sid, 'out'),
+              path: collPath('attendanceEvents') + '/' + eventIdOf(date, sid, 'out'),
+              body: { date: date, studentId: sid, kind: 'out', time: outT, manual: manual, src: src, at: updatedAt }
+            });
+          }
+        });
+      });
+      return docs;
+    }
+
+    if (entry.kind === 'tuition') {
+      var months = isPlain(value) ? value : {};
+      Object.keys(months).forEach(function (mk) {
+        var month = months[mk];
+        if (!isPlain(month)) { return; }
+        Object.keys(month).forEach(function (sid) {
+          var rec2 = month[sid];
+          if (!isPlain(rec2)) { return; }
+          var id2 = safeId(mk) + '_' + safeId(sid);
+          docs.push({ id: id2, path: collPath('tuition') + '/' + id2, body: rec2 });
+        });
+      });
+      return docs;
+    }
+
+    if (entry.kind === 'object') {
+      var body = isPlain(value) ? value : {};
+      docs.push({ id: entry.meta, path: base + '/meta/' + safeId(entry.meta), body: body });
+      return docs;
+    }
+
+    if (entry.kind === 'value') {
+      docs.push({ id: entry.meta, path: base + '/meta/' + safeId(entry.meta), body: { _value: value === undefined ? null : value } });
+      return docs;
+    }
+    return docs;
+  }
+
+  /* 출결은 attendance·records 두 키가 같은 문서를 만든다 → 항상 합쳐서 본다 */
+  function unionEventDocs(attValue, recValue, base) {
+    var map = {};
+    var entries = [
+      { name: 'attendance', kind: 'events' },
+      { name: 'records', kind: 'events' }
+    ];
+    entries.forEach(function (e) {
+      var v = e.name === 'attendance' ? attValue : recValue;
+      docsForEntry({ name: e.name, kind: 'events' }, v, base).forEach(function (d) {
+        var prev = map[d.path];
+        if (!prev) { map[d.path] = d; return; }
+        /* attendance 쪽 정보가 더 자세하다 → 시간이 있으면 그것을 쓴다 */
+        if (!prev.body.time && d.body.time) { map[d.path] = d; }
+        else if (prev.body.time === d.body.time && d.body.manual) { prev.body.manual = true; }
+      });
+    });
+    return map;
+  }
+
+  /* =========================================================================
+     5. 사용량 계량기 (Spark 무료 한도)
+     ========================================================================= */
+  function createUsage(storage, opts) {
+    opts = opts || {};
+    var key = opts.key || 'tdk.fbUsage.v1';
+    var now = opts.now || function () { return Date.now(); };
+    var limits = {
+      reads: num(opts.limits && opts.limits.reads) || SPARK.reads,
+      writes: num(opts.limits && opts.limits.writes) || SPARK.writes,
+      deletes: num(opts.limits && opts.limits.deletes) || SPARK.deletes
+    };
+    var state = read();
+    function read() {
+      var raw = null;
+      try { raw = storage.getItem(key); } catch (e) { raw = null; }
+      var s = null;
+      try { s = raw ? JSON.parse(raw) : null; } catch (e) { s = null; }
+      var today = dayOf(now());
+      if (!isPlain(s) || s.date !== today) {
+        s = { date: today, reads: 0, writes: 0, deletes: 0, blocked: null, history: isPlain(s) && s.date === today ? s.history : null };
+      }
+      if (!isPlain(s.history)) { s.history = {}; }
+      /* 날짜가 바뀌면 이전 날 합계를 남겨 두어 추세를 볼 수 있게 */
+      var keys = Object.keys(s.history);
+      if (keys.length > 7) {
+        keys.sort();
+        while (keys.length > 7) { delete s.history[keys.shift()]; }
+      }
+      return s;
+    }
+    function resetIfNeeded() {
+      var today = dayOf(now());
+      if (state.date !== today) {
+        state.history[state.date] = { reads: num(state.reads), writes: num(state.writes), deletes: num(state.deletes) };
+        state = { date: today, reads: 0, writes: 0, deletes: 0, blocked: null, history: state.history };
+        persist();
+        return true;
+      }
+      return false;
+    }
+    function persist() { try { storage.setItem(key, JSON.stringify(state)); } catch (e) {} }
+
+    return {
+      record: function (kind, n) {
+        resetIfNeeded();
+        var add = Math.max(0, num(n == null ? 1 : n));
+        if (kind === 'reads') { state.reads += add; }
+        else if (kind === 'writes') { state.writes += add; }
+        else if (kind === 'deletes') { state.deletes += add; }
+        else { return; }
+        persist();
+      },
+      snapshot: function () {
+        resetIfNeeded();
+        var pct = {
+          reads: state.reads / limits.reads,
+          writes: state.writes / limits.writes,
+          deletes: state.deletes / limits.deletes
+        };
+        var max = Math.max(pct.reads, pct.writes, pct.deletes);
+        var level = state.blocked ? 2 : (max >= 1 ? 2 : (max >= SPARK.warnRatio ? 1 : 0));
+        return {
+          date: state.date,
+          reads: state.reads, writes: state.writes, deletes: state.deletes,
+          limits: { reads: limits.reads, writes: limits.writes, deletes: limits.deletes },
+          pct: pct, level: level, maxPct: max,
+          blocked: state.blocked || null,
+          history: clone(state.history) || {}
+        };
+      },
+      blocked: function () {
+        resetIfNeeded();
+        if (state.blocked) { return true; }
+        var s = this.snapshot();
+        return s.level >= 2;
+      },
+      blockByError: function (err) {
+        resetIfNeeded();
+        state.blocked = { at: isoOf(now()), reason: 'resource-exhausted', text: errorText(err || { code: 'resource-exhausted' }) };
+        persist();
+      },
+      clearBlock: function () { state.blocked = null; persist(); },
+      reset: function () {
+        state = { date: dayOf(now()), reads: 0, writes: 0, deletes: 0, blocked: null, history: state.history };
+        persist();
+      },
+      limits: limits
+    };
+  }
+
+  /* =========================================================================
+     6. 전송 큐 (Outbox) — 서버 저장 확인(ACK) 전에는 절대 지우지 않는다
+     ========================================================================= */
+  function createOutbox(storage, opts) {
+    opts = opts || {};
+    var key = opts.key || 'tdk.fbOutbox.v1';
+    var now = opts.now || function () { return Date.now(); };
+    var seq = 0;
+    var state = read();
+    function read() {
+      var raw = null;
+      try { raw = storage.getItem(key); } catch (e) { raw = null; }
+      var s = null;
+      try { s = raw ? JSON.parse(raw) : null; } catch (e) { s = null; }
+      if (!isPlain(s) || !Array.isArray(s.items)) { s = { items: [] }; }
+      return s;
+    }
+    function persist() { try { storage.setItem(key, JSON.stringify(state)); } catch (e) {} }
+
+    return {
+      list: function () { return clone(state.items) || []; },
+      pending: function () {
+        return state.items.filter(function (it) { return it.state !== 'sent'; });
+      },
+      count: function () {
+        var n = 0;
+        state.items.forEach(function (it) { if (it.state !== 'sent') { n++; } });
+        return n;
+      },
+      summary: function () {
+        var s = { pending: 0, failed: 0, unacked: 0, sent: 0, oldestAt: '' };
+        state.items.forEach(function (it) {
+          if (it.state === 'sent') { s.sent++; return; }
+          if (it.state === 'failed') { s.failed++; }
+          else if (it.state === 'sent-unacked') { s.unacked++; }
+          else { s.pending++; }
+          if (!s.oldestAt || it.at < s.oldestAt) { s.oldestAt = it.at; }
+        });
+        return s;
+      },
+      enqueue: function (op) {
+        /* 같은 문서에 대한 대기 항목은 마지막 것만 남긴다 (무료 쓰기 절약) */
+        var path = String(op.path || '');
+        state.items = state.items.filter(function (it) {
+          return !(it.path === path && it.state === 'pending');
+        });
+        var item = {
+          id: 'op_' + now().toString(36) + '_' + (seq++).toString(36) + Math.random().toString(36).slice(2, 6),
+          path: path,
+          body: op.body === undefined ? null : op.body,
+          del: op.del === true,
+          at: isoOf(now()),
+          state: 'pending',
+          attempts: 0,
+          error: ''
+        };
+        state.items.push(item);
+        persist();
+        return item;
+      },
+      remove: function (ids) {
+        var set = {};
+        (ids || []).forEach(function (id) { set[id] = 1; });
+        if (!Object.keys(set).length) { return; }
+        state.items = state.items.filter(function (it) { return !set[it.id]; });
+        persist();
+      },
+      mark: function (ids, nextState, err) {
+        var set = {};
+        (ids || []).forEach(function (id) { set[id] = 1; });
+        state.items.forEach(function (it) {
+          if (!set[it.id]) { return; }
+          it.state = nextState;
+          it.attempts = num(it.attempts) + 1;
+          it.error = err ? errorText(err) : '';
+          it.triedAt = isoOf(now());
+        });
+        persist();
+      },
+      retryAll: function () {
+        state.items.forEach(function (it) {
+          if (it.state === 'failed') { it.state = 'pending'; it.error = ''; }
+        });
+        persist();
+      },
+      clear: function () { state = { items: [] }; persist(); }
+    };
+  }
+
+  /* =========================================================================
+     7. 동기화 엔진
+     ========================================================================= */
+  function createEngine(opts) {
+    opts = opts || {};
+    var storage = opts.storage || root.localStorage;
+    if (!storage) { throw new Error('storage 가 필요합니다'); }
+    var now = opts.now || function () { return Date.now(); };
+    var registry = buildRegistry(opts.keys);
+    var usage = createUsage(storage, { now: now, limits: opts.limits });
+    var outbox = createOutbox(storage, { now: now });
+    /* 사용량이 경고(80%)·차단(100%) 단계로 넘어가면 화면에 바로 알린다 */
+    var rawUsageRecord = usage.record;
+    usage.record = function (kind, n) {
+      var before = 0;
+      try { before = usage.snapshot().level; } catch (e) { before = 0; }
+      rawUsageRecord(kind, n);
+      var after = 0;
+      try { after = usage.snapshot().level; } catch (e) { after = 0; }
+      if (after !== before) { emit('usage', usage.snapshot()); }
+    };
+    var deviceId = opts.deviceId || 'dev_local';
+    var dojangId = safeId(opts.dojangId || 'mta-tkd');
+    var role = opts.role === 'tablet' ? 'tablet' : 'admin';
+    var adapter = opts.adapter || null;
+    var shadow = loadShadow();
+    var prevValues = {};
+    var listeners = [];
+    var applying = false;
+    var started = false;
+    var flushTimer = null, reloadTimer = null, reloadPending = false;
+    var lastEventAt = {};
+    var lastError = '';
+    var lastErrorKind = '';
+    var lastSyncAt = '';
+    var unsub = null;
+    var originals = null;
+    var hookTarget = null;
+
+    function basePath() { return 'dojangs/' + dojangId; }
+    function entryByName(n) {
+      for (var i = 0; i < registry.length; i++) { if (registry[i].name === n) { return registry[i]; } }
+      return null;
+    }
+    function entryByKey(k) {
+      for (var i = 0; i < registry.length; i++) { if (registry[i].key === k) { return registry[i]; } }
+      return null;
+    }
+    function entryByPath(p) {
+      /* 경로를 보고 어느 키에 속하는지 — 컬렉션 이름 기준 */
+      var seg = String(p).split('/');
+      if (seg.length < 4) { return null; }
+      var coll = seg[2];
+      for (var i = 0; i < registry.length; i++) {
+        var e = registry[i];
+        if (e.kind === 'local') { continue; }
+        if (e.kind === 'object' || e.kind === 'value') {
+          if (coll === 'meta' && seg[3] === safeId(e.meta)) { return e; }
+        } else if (e.coll === coll) { return e; }
+      }
+      return null;
+    }
+
+    /* ---------- shadow(문서별 마지막으로 아는 상태) ---------- */
+    function loadShadow() {
+      var raw = null;
+      try { raw = storage.getItem('tdk.fbShadow.v1'); } catch (e) { raw = null; }
+      var s = null;
+      try { s = raw ? JSON.parse(raw) : null; } catch (e) { s = null; }
+      return isPlain(s) ? s : {};
+    }
+    function saveShadow() {
+      var keys = Object.keys(shadow);
+      if (keys.length > 30000) {
+        /* 너무 커지면 오래된 출결 문서부터 정리 (원격은 그대로 남아 있음) */
+        keys.sort(function (a, b) {
+          return String((shadow[a] && shadow[a].u) || '').localeCompare(String((shadow[b] && shadow[b].u) || ''));
+        }).slice(0, keys.length - 30000).forEach(function (k) { delete shadow[k]; });
+      }
+      try { storage.setItem('tdk.fbShadow.v1', JSON.stringify(shadow)); } catch (e) {}
+    }
+    function shadowDoc(path) {
+      var s = shadow[path];
+      if (!s) { return null; }
+      var doc = {
+        _ver: num(s.v), _updatedAt: s.u || '', _updatedBy: s.by || '',
+        _fieldMeta: s.m || null, _deleted: !!s.d
+      };
+      if (s.b) {
+        var body = clone(s.b) || {};
+        Object.keys(body).forEach(function (k) { if (k.charAt(0) === '_') { delete body[k]; } });
+        for (var k2 in body) { if (hasOwn(body, k2)) { doc[k2] = body[k2]; } }
+      } else if (s.t !== undefined) {
+        doc.time = s.t;
+      }
+      return doc;
+    }
+    /* ---------- 저장소 감시 ---------- */
+    function attach(storageObj) {
+      if (!storageObj) { return false; }
+      if (typeof storageObj.setItem !== 'function') { return false; }
+      var proto = null;
+      try {
+        if (root.Storage && root.Storage.prototype && Object.getPrototypeOf(storageObj) === root.Storage.prototype) {
+          proto = root.Storage.prototype;
+          hookTarget = 'prototype';
+        }
+      } catch (e) { proto = null; }
+      if (proto) {
+        if (proto.__tdkfbHooked) { originals = proto.__tdkfbOrig; return true; }
+        originals = { set: proto.setItem, remove: proto.removeItem, clear: proto.clear };
+        proto.setItem = function (k, v) {
+          var r = originals.set.apply(this, arguments);
+          try { handleWrite(String(k), String(v)); } catch (e) {}
+          return r;
+        };
+        proto.removeItem = function (k) {
+          var r = originals.remove.apply(this, arguments);
+          try { handleWrite(String(k), null); } catch (e) {}
+          return r;
+        };
+        proto.clear = function () {
+          var r = originals.clear.apply(this, arguments);
+          try { emit('cleared', {}); } catch (e) {}
+          return r;
+        };
+        proto.__tdkfbHooked = true;
+        proto.__tdkfbOrig = originals;
+        return true;
+      }
+      /* 일반 객체(테스트용 메모리 저장소)는 객체 자체를 감싼다 */
+      if (storageObj.__tdkfbHooked) { originals = storageObj.__tdkfbOrig; return true; }
+      var origSet = storageObj.setItem;
+      var origRemove = storageObj.removeItem;
+      originals = { set: origSet, remove: origRemove, clear: storageObj.clear };
+      storageObj.setItem = function (k, v) {
+        var r = origSet.apply(storageObj, arguments);
+        try { handleWrite(String(k), String(v)); } catch (e) {}
+        return r;
+      };
+      storageObj.removeItem = function (k) {
+        var r = origRemove.apply(storageObj, arguments);
+        try { handleWrite(String(k), null); } catch (e) {}
+        return r;
+      };
+      storageObj.__tdkfbHooked = true;
+      storageObj.__tdkfbOrig = originals;
+      return true;
+    }
+    function rawSet(k, v) {
+      if (originals && originals.set) { originals.set.call(storage, k, v); return; }
+      storage.setItem(k, v);
+    }
+    function rawRemove(k) {
+      if (originals && originals.remove) { originals.remove.call(storage, k); return; }
+      storage.removeItem(k);
+    }
+
+    /* ---------- 값 읽기/쓰기 ---------- */
+    function readValue(name) {
+      var e = entryByName(name);
+      if (!e) { return null; }
+      var raw = null;
+      try { raw = storage.getItem(e.key); } catch (err) { raw = null; }
+      if (raw == null) { return null; }
+      try { return JSON.parse(raw); } catch (err) { return null; }
+    }
+    function writeValue(name, value) {
+      var e = entryByName(name);
+      if (!e) { return; }
+      var was = applying;
+      applying = true;
+      try { rawSet(e.key, JSON.stringify(value)); } catch (err) {}
+      applying = was;
+      prevValues[name] = value;
+    }
+
+    /* ---------- 로컬 변경 감지 ---------- */
+    function handleWrite(key, rawValue) {
+      if (applying) { return; }
+      if (LOCAL_KEYS[key]) { return; }
+      var entry = entryByKey(key);
+      if (!entry || entry.kind === 'local') { return; }
+      /* 출석 태블릿은 출결 이벤트만 올린다 (원생·원비·상담 등은 관리자 기기에서만) */
+      if (role === 'tablet' && entry.kind !== 'events') {
+        emit('blocked-local', { key: entry.name, reason: 'tablet-role' });
+        return;
+      }
+      var value = null;
+      if (rawValue != null) { try { value = JSON.parse(rawValue); } catch (e) { value = null; } }
+      prevValues[entry.name] = value;
+      capture(entry);
+      scheduleFlush();
+    }
+
+    function capture(entry) {
+      var base = basePath();
+      var changes = [];
+      var live = {};
+
+      if (entry.kind === 'events') {
+        var map = unionEventDocs(readValue('attendance'), readValue('records'), base);
+        Object.keys(map).forEach(function (p) { live[p] = map[p]; });
+      } else {
+        docsForEntry(entry, prevValues[entry.name], base).forEach(function (d) { live[d.path] = d; });
+      }
+
+      Object.keys(live).forEach(function (p) {
+        var d = live[p];
+        var body = clone(d.body) || {};
+        var h = contentHash(body);
+        var sh = shadow[p];
+        if (sh && !sh.d && sh.h === h) { return; }          /* 내용이 그대로 → 보내지 않음 */
+        if (entry.kind === 'events') {
+          var dup = duplicateEvent(p, body);
+          if (dup) { return; }
+        }
+        var prevBody = sh && sh.b ? sh.b : {};
+        var meta = stampFields(prevBody, sh ? sh.m : {}, body, { at: isoOf(now()), by: deviceId });
+        var ver = (sh ? num(sh.v) : 0) + 1;
+        var doc = valueFields(body);
+        doc._ver = ver;
+        doc._updatedAt = isoOf(now());
+        doc._updatedBy = deviceId;
+        doc._fieldMeta = meta;
+        shadow[p] = {
+          v: ver, m: meta, u: doc._updatedAt, by: deviceId, h: h, d: false,
+          b: entry.kind === 'events' ? null : mergeMetaBody(body, meta),
+          t: body.time
+        };
+        changes.push({ path: p, body: doc });
+      });
+
+      /* 사라진 문서 → 삭제 표시(툼스톤) */
+      var prefixOf = function (e) {
+        if (e.kind === 'object' || e.kind === 'value') { return base + '/meta/' + safeId(e.meta); }
+        return base + '/' + e.coll;
+      };
+      var prefix = prefixOf(entry);
+      Object.keys(shadow).forEach(function (p) {
+        if (p !== prefix && p.indexOf(prefix + '/') !== 0) { return; }
+        if (live[p]) { return; }
+        var sh2 = shadow[p];
+        if (!sh2 || sh2.d) { return; }
+        var ver2 = num(sh2.v) + 1;
+        var at2 = isoOf(now());
+        shadow[p] = { v: ver2, m: {}, u: at2, by: deviceId, h: '', d: true, b: null, t: undefined };
+        changes.push({
+          path: p,
+          body: { _deleted: true, _ver: ver2, _updatedAt: at2, _updatedBy: deviceId }
+        });
+      });
+
+      if (changes.length) {
+        saveShadow();
+        changes.forEach(function (c) { outbox.enqueue({ path: c.path, body: c.body }); });
+        emit('captured', { key: entry.name, count: changes.length });
+      }
+    }
+
+    /* 같은 출결을 아주 짧은 사이에 두 번 찍었을 때의 보조 차단 */
+    function duplicateEvent(path, body) {
+      var m = parseEventId(path.split('/').pop());
+      if (!m) { return false; }
+      var k = m.date + '|' + m.studentId + '|' + m.kind;
+      var last = lastEventAt[k];
+      lastEventAt[k] = now();
+      if (!last) { return false; }
+      if (now() - last < DUPLICATE_WINDOW_MS) {
+        var sh = shadow[path];
+        if (sh && !sh.d && String(sh.t || '') === String(body.time || '')) { return true; }
+      }
+      return false;
+    }
+
+    /* ---------- 원격 변경 반영 ---------- */
+    /* 여러 문서가 한꺼번에 오면 localStorage 반영은 바로, 화면 갱신은 한 번만 */
+    function scheduleReload() {
+      reloadPending = true;
+      if (reloadTimer) { return; }
+      reloadTimer = setTimeout(function () {
+        reloadTimer = null;
+        if (!reloadPending) { return; }
+        reloadPending = false;
+        reloadApp();
+        emit('applied', {});
+      }, opts.refreshMs || REFRESH_MS);
+    }
+    function flushReload() {
+      if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+      if (!reloadPending) { return false; }
+      reloadPending = false;
+      reloadApp();
+      emit('applied', {});
+      return true;
+    }
+
+    /* 원격 문서 수신 */
+    function onRemote(path, data, meta) {
+      if (!entryByPath(path)) { return; }
+      usage.record('reads', 1);
+      var remoteDoc = {};
+      if (isPlain(data)) {
+        Object.keys(data).forEach(function (k) { remoteDoc[k] = data[k]; });
+      } else {
+        remoteDoc._deleted = true;
+        remoteDoc._ver = num(meta && meta.ver) + 1;
+      }
+      var localSh = shadow[path];
+      var localDoc = null;
+      if (localSh) {
+        localDoc = {
+          _ver: num(localSh.v), _updatedAt: localSh.u || '', _updatedBy: localSh.by || '',
+          _fieldMeta: localSh.m || null, _deleted: !!localSh.d
+        };
+        if (localSh.b) {
+          var lb = valueFields(localSh.b);
+          Object.keys(lb).forEach(function (k) { localDoc[k] = lb[k]; });
+        } else if (localSh.t !== undefined) {
+          localDoc.time = localSh.t;
+        }
+      }
+      var entry = entryByPath(path);
+      var merged = mergeDocs(localDoc, remoteDoc, { arrayUnion: !!entry.union });
+      var kind = entry.kind;
+      var mergedBody = merged.deleted ? {} : (merged.body || {});
+      var remoteBody = remoteDoc._deleted ? {} : docBody(remoteDoc);
+
+      var localBody = {};
+      if (localDoc && !localDoc._deleted) { localBody = docBody(localDoc); }
+
+      var needLocal;
+      if (merged.deleted) { needLocal = !(localSh && localSh.d); }
+      else if (kind === 'events') { needLocal = String(mergedBody.time || '') !== String((localSh && localSh.t) || ''); }
+      else { needLocal = stableStringify(mergedBody) !== stableStringify(localBody); }
+      var needRemote = merged.deleted ? !remoteDoc._deleted : stableStringify(mergedBody) !== stableStringify(remoteBody);
+
+      if (needLocal) {
+        applyRemoteDoc(path, entry, merged);
+        scheduleReload();
+        emit('remote', { path: path, key: entry.name });
+      }
+      if (needRemote) {
+        /* 내 쪽이 더 최신인 필드가 있어 합친 결과를 되돌려 보낸다 → 양쪽이 같은 값으로 수렴 */
+        var body = bodyWithMeta(mergedBody, merged.meta);
+        body._ver = num(merged.ver) + 1;
+        body._updatedAt = isoOf(now());
+        body._updatedBy = deviceId;
+        if (merged.deleted) { body = { _deleted: true, _ver: body._ver, _updatedAt: body._updatedAt, _updatedBy: deviceId }; }
+        updateShadowFromMerged(path, merged, kind, body);
+        outbox.enqueue({ path: path, body: body });
+        scheduleFlush();
+      } else {
+        updateShadowFromMerged(path, merged, kind, null);
+      }
+      lastSyncAt = isoOf(now());
+    }
+
+    function bodyWithMeta(body, meta) {
+      return mergeMetaBody(valueFields(body), meta || {});
+    }
+    function mergeMetaBody(body, meta) {
+      var out = clone(body) || {};
+      out._fieldMeta = clone(meta || {});
+      return out;
+    }
+
+    function updateShadowFromMerged(path, merged, kind, sentBody) {
+      var body = merged.deleted ? {} : (merged.body || {});
+      var flat = flatten(sentBody || body);
+      shadow[path] = {
+        v: num(merged.ver) + (sentBody ? 1 : 0),
+        m: merged.meta || {},
+        u: (sentBody && sentBody._updatedAt) || merged.updatedAt || isoOf(now()),
+        by: (sentBody && sentBody._updatedBy) || merged.updatedBy || deviceId,
+        d: merged.deleted === true,
+        h: contentHash(body),
+        b: merged.deleted ? null : (kind === 'events' ? null : mergeMetaBody(body, merged.meta)),
+        t: merged.deleted ? undefined : body.time
+      };
+      saveShadow();
+    }
+
+    /* 원격에서 온 문서를 실제 localStorage 값에 반영 (로컬 쓰기로 잡히지 않게 applying 사용) */
+    function applyRemoteDoc(path, entry, merged) {
+      var base = basePath();
+      var deleted = merged.deleted === true;
+      var body = merged.body || {};
+      var seg = String(path).split('/');
+      var docKey = seg[seg.length - 1];
+
+      if (entry.kind === 'docs') {
+        var arr = readValue(entry.name);
+        if (!Array.isArray(arr)) { arr = []; }
+        var idx = -1;
+        for (var i = 0; i < arr.length; i++) {
+          if (arr[i] && safeId(arr[i].id) === docKey) { idx = i; break; }
+        }
+        if (deleted) {
+          if (idx >= 0) { arr.splice(idx, 1); writeValue(entry.name, arr); }
+        } else {
+          var item = clone(body) || {};
+          if (idx >= 0) { arr[idx] = item; } else { arr.push(item); }
+          writeValue(entry.name, arr);
+        }
+        return;
+      }
+
+      if (entry.kind === 'events') {
+        var m = parseEventId(docKey);
+        if (!m) { return; }
+        var att = readValue('attendance');
+        if (!isPlain(att)) { att = {}; }
+        var rec = readValue('records');
+        if (!isPlain(rec)) { rec = {}; }
+        var day = isPlain(att[m.date]) ? att[m.date] : {};
+        var e = isPlain(day[m.studentId]) ? day[m.studentId] : {};
+        var time = deleted ? '' : String(body.time || '').slice(0, 5);
+        if (m.kind === 'in') { if (time) { e.inTime = time; } else { delete e.inTime; } }
+        else { if (time) { e.outTime = time; } else { delete e.outTime; } }
+        if (!deleted && body.manual) { e.manual = true; }
+        if (body.src) { e.src = String(body.src); }
+        e.updatedAt = isoOf(now());
+        if (e.inTime || e.outTime || e.manual) {
+          day[m.studentId] = e;
+          att[m.date] = day;
+        } else {
+          delete day[m.studentId];
+          if (Object.keys(day).length) { att[m.date] = day; } else { delete att[m.date]; }
+        }
+        /* 구버전 records 키도 같은 내용으로 맞춘다 */
+        var rd = isPlain(rec[m.date]) ? rec[m.date] : {};
+        var r = isPlain(rd[m.studentId]) ? rd[m.studentId] : { in: null, out: null };
+        if (m.kind === 'in') { r.in = time || null; } else { r.out = time || null; }
+        if (!deleted && body.manual) { r.manual = true; }
+        if (r.in || r.out || r.manual) {
+          rd[m.studentId] = r;
+          rec[m.date] = rd;
+        } else {
+          delete rd[m.studentId];
+          if (Object.keys(rd).length) { rec[m.date] = rd; } else { delete rec[m.date]; }
+        }
+        writeValue('attendance', att);
+        writeValue('records', rec);
+        return;
+      }
+
+      if (entry.kind === 'tuition') {
+        var tui = readValue('tuition');
+        if (!isPlain(tui)) { tui = {}; }
+        var us = docKey.lastIndexOf('_');
+        if (us <= 0) { return; }
+        var mk = docKey.slice(0, us), sid = docKey.slice(us + 1);
+        var month = isPlain(tui[mk]) ? tui[mk] : {};
+        if (deleted) {
+          delete month[sid];
+          if (Object.keys(month).length) { tui[mk] = month; } else { delete tui[mk]; }
+        } else {
+          month[sid] = clone(body) || {};
+          tui[mk] = month;
+        }
+        writeValue('tuition', tui);
+        return;
+      }
+
+      if (entry.kind === 'object') {
+        var cur = readValue(entry.name);
+        var next = deleted ? {} : (clone(body) || {});
+        if (!deleted && isPlain(cur) && isPlain(body)) {
+          /* 병합 결과에 없는 필드는 기존 값 유지 */
+          Object.keys(cur).forEach(function (k) { if (k.charAt(0) !== '_' && !hasOwn(next, k)) { next[k] = cur[k]; } });
+        }
+        writeValue(entry.name, next);
+        return;
+      }
+
+      if (entry.kind === 'value') {
+        var v = deleted ? null : (hasOwn(body, '_value') ? body._value : body);
+        if (entry.union && Array.isArray(v)) {
+          var curArr = readValue(entry.name);
+          if (Array.isArray(curArr)) { v = unionArrays(curArr, v, true); }
+          if (entry.name === 'logs') {
+            v = v.slice().sort(function (a, b) {
+              return String((b && b.at) || '').localeCompare(String((a && a.at) || ''));
+            }).slice(0, 200);
+          }
+        }
+        writeValue(entry.name, v);
+        return;
+      }
+    }
+
+    /* ---------- 앱 화면 갱신 ---------- */
+    function reloadApp() {
+      var hook = opts.reload;
+      if (typeof hook !== 'function' && root.__tdk && root.__tdk.sync && typeof root.__tdk.sync.reload === 'function') {
+        hook = root.__tdk.sync.reload;
+      }
+      if (typeof hook === 'function') {
+        try { hook(); } catch (e) { lastError = errorText(e); }
+      }
+      try {
+        if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') {
+          root.dispatchEvent(new root.CustomEvent('tdkfb:changed'));
+        }
+      } catch (e) {}
+    }
+
+    /* ---------- 전송 ---------- */
+    function scheduleFlush() {
+      if (opts.autoflush === false) { return; }
+      if (flushTimer) { return; }
+      flushTimer = setTimeout(function () {
+        flushTimer = null;
+        flush().then(function () {}, function () {});
+      }, opts.flushMs || 700);
+    }
+
+    function online() {
+      try {
+        if (root.navigator && root.navigator.onLine === false) { return false; }
+      } catch (e) {}
+      return true;
+    }
+
+    /* 삭제도 "삭제 표시 문서(_deleted)"로 남긴다 — 오프라인이던 기기도 삭제 사실을 받아야 하므로 */
+    function opOf(item) {
+      if (item.del === true) { return { path: item.path, del: true }; }
+      return { path: item.path, body: item.body, merge: true };
+    }
+
+    function flush() {
+      if (!adapter) { return Promise.resolve({ ok: false, reason: 'no-adapter', queued: outbox.count() }); }
+      if (!online()) {
+        lastErrorKind = 'offline';
+        emit('status', { state: 'offline', queued: outbox.count() });
+        return Promise.resolve({ ok: false, reason: 'offline', queued: outbox.count() });
+      }
+      if (usage.blocked()) {
+        var snap = usage.snapshot();
+        emit('quota-blocked', snap);
+        return Promise.resolve({ ok: false, reason: 'quota', blocked: true, queued: outbox.count(), usage: snap });
+      }
+      var items = outbox.pending();
+      if (!items.length) { return Promise.resolve({ ok: true, sent: 0 }); }
+
+      var batches = [];
+      for (var i = 0; i < items.length; i += SPARK.maxBatch) { batches.push(items.slice(i, i + SPARK.maxBatch)); }
+      var sentTotal = 0;
+      var failedErr = null;
+
+      function runBatch(bi) {
+        if (bi >= batches.length) { return Promise.resolve(); }
+        var batch = batches[bi];
+        var writes = 0, deletes = 0;
+        batch.forEach(function (it) {
+          if (it.del === true) { deletes++; } else { writes++; }
+        });
+        return adapter.writeBatch(batch.map(opOf)).then(function () {
+          usage.record('writes', writes);
+          usage.record('deletes', deletes);
+          sentTotal += batch.length;
+          return runBatch(bi + 1);
+        });
+      }
+
+      return runBatch(0).then(function () {
+        /* setDoc/writeBatch 성공만으로는 부족 — 서버 저장 확인(ACK)까지 기다린 뒤 큐에서 지운다 */
+        var ack = (adapter && typeof adapter.acknowledge === 'function') ? adapter.acknowledge() : true;
+        return Promise.resolve(ack).then(function () {
+          outbox.remove(items.map(function (it) { return it.id; }));
+          lastSyncAt = isoOf(now());
+          lastError = '';
+          lastErrorKind = '';
+          emit('synced', { sent: sentTotal, at: lastSyncAt });
+          return { ok: true, sent: sentTotal, queued: outbox.count() };
+        }, function (err) {
+          outbox.mark(items.map(function (it) { return it.id; }), 'sent-unacked', err);
+          lastError = errorText(err);
+          emit('ack-failed', { error: lastError, queued: outbox.count() });
+          return { ok: false, reason: 'ack', error: lastError, queued: outbox.count() };
+        });
+      }, function (err) {
+        failedErr = err;
+        var ids = [];
+        batches.slice(Math.floor(sentTotal / SPARK.maxBatch)).forEach(function (b) {
+          b.forEach(function (it) { ids.push(it.id); });
+        });
+        if (isQuotaError(err)) {
+          usage.blockByError(err);
+          emit('quota-blocked', usage.snapshot());
+        } else {
+          outbox.mark(ids, 'failed', err);
+        }
+        var ne = normalizeError(err);
+        var isOff = ne.code === 'unavailable' || /offline|network|failed to fetch|ERR_NETWORK/i.test(ne.message);
+        lastError = errorText(err);
+        lastErrorKind = isQuotaError(err) ? 'quota' : (isOff ? 'offline' : 'error');
+        emit('flush-failed', { error: lastError, queued: outbox.count(), kind: lastErrorKind });
+        return { ok: false, reason: lastErrorKind === 'quota' ? 'quota' : (isOff ? 'offline' : 'error'), error: lastError, queued: outbox.count() };
+      });
+    }
+
+    /* ---------- 구독 ---------- */
+    function attachAdapter(nextAdapter) {
+      if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+      adapter = nextAdapter || null;
+      if (!adapter) { return; }
+      if (typeof adapter.subscribe === 'function') {
+        unsub = adapter.subscribe(function (path, data, meta) {
+          try { onRemote(path, data, meta); } catch (e) { lastError = errorText(e); }
+        });
+      }
+      emit('status', status());
+    }
+
+    /* ---------- 상태 ---------- */
+    function status() {
+      var s = { state: 'local', text: '⚪ 미연결(로컬 모드)', queued: outbox.count(), lastSyncAt: lastSyncAt, lastError: lastError, mode: adapter ? adapter.mode : 'local' };
+      if (usage.blocked()) { s.state = 'blocked'; s.text = '🔴 한도 초과 · 동기화 멈춤'; return s; }
+      if (!adapter) { return s; }
+      if (!online() || lastErrorKind === 'offline' || outbox.summary().failed > 0) { s.state = 'offline'; s.text = '🟡 오프라인 대기'; return s; }
+      if (lastError) { s.state = 'error'; s.text = '🟠 연결 문제'; return s; }
+      s.state = 'online';
+      s.text = '🟢 실시간 연결됨';
+      return s;
+    }
+
+    function emit(type, payload) {
+      var st = null;
+      try { st = status(); } catch (e) { st = null; }
+      listeners.forEach(function (fn) { try { fn(type, payload, st); } catch (e) {} });
+      if (typeof opts.onEvent === 'function') {
+        try { opts.onEvent(type, payload, st); } catch (e) {}
+      }
+    }
+
+    /* ---------- 이전(마이그레이션) ---------- */
+    function migrationPlan() {
+      var base = basePath();
+      var plan = { keys: [], docs: [], total: 0, batches: 0, synced: 0, localOnly: 0 };
+      var all = [];
+      registry.forEach(function (e) {
+        var row = { name: e.name, key: e.key, label: e.label, icon: e.icon, kind: e.kind, desc: e.desc, count: 0, localOnly: e.kind === 'local' };
+        if (e.kind !== 'local') {
+          var docs = docsForEntry(e, readValue(e.name), base);
+          row.count = docs.length;
+          docs.forEach(function (d) { all.push({ entry: e, doc: d }); });
+        } else {
+          plan.localOnly++;
+        }
+        plan.keys.push(row);
+      });
+      /* 같은 경로 중복 제거 (attendance·records) */
+      var byPath = {};
+      all.forEach(function (item) {
+        var prev = byPath[item.doc.path];
+        if (!prev) { byPath[item.doc.path] = item; return; }
+        if (!prev.doc.body.time && item.doc.body.time) { byPath[item.doc.path] = item; }
+      });
+      plan.docs = Object.keys(byPath).map(function (p) { return byPath[p]; });
+      plan.total = plan.docs.length;
+      plan.synced = plan.total;
+      plan.batches = Math.ceil(plan.total / SPARK.maxBatch);
+      /* 키별 실제 업로드 건수 재계산 */
+      var perKey = {};
+      plan.docs.forEach(function (it) { perKey[it.entry.name] = (perKey[it.entry.name] || 0) + 1; });
+      plan.keys.forEach(function (row) { row.count = perKey[row.name] || 0; });
+      return plan;
+    }
+
+    function buildMigrationDocs() {
+      var base = basePath();
+      var out = [];
+      registry.forEach(function (e) {
+        if (e.kind === 'local') { return; }
+        docsForEntry(e, readValue(e.name), base).forEach(function (d) {
+          var body = clone(d.body) || {};
+          var sh = shadow[d.path];
+          var prevBody = sh && sh.b ? sh.b : {};
+          var meta = stampFields(prevBody, sh ? sh.m : {}, body, { at: isoOf(now()), by: deviceId });
+          var doc = valueFields(body);
+          doc._ver = (sh ? num(sh.v) : 0) + 1;
+          doc._updatedAt = isoOf(now());
+          doc._updatedBy = deviceId;
+          doc._fieldMeta = meta;
+          out.push({ path: d.path, body: doc, entry: e });
+        });
+      });
+      /* 중복 경로 정리 */
+      var map = {};
+      out.forEach(function (it) { map[it.path] = it; });
+      return Object.keys(map).map(function (p) { return map[p]; });
+    }
+
+    function runMigration(opts2) {
+      opts2 = opts2 || {};
+      if (!adapter) { return Promise.resolve({ ok: false, reason: 'no-adapter' }); }
+      if (usage.blocked()) { return Promise.resolve({ ok: false, reason: 'quota', message: QUOTA_MESSAGE }); }
+      var docs = buildMigrationDocs();
+      if (!docs.length) { return Promise.resolve({ ok: true, written: 0, skipped: 0, total: 0, batches: 0, byKey: {} }); }
+      var overwrite = opts2.overwrite === true;   /* 기본: 이미 있는 문서는 건드리지 않는다 */
+      var byKey = {};
+      var stats = { ok: true, written: 0, skipped: 0, total: docs.length, batches: 0, byKey: byKey, errors: [] };
+      var batches = [];
+      for (var i = 0; i < docs.length; i += SPARK.maxBatch) { batches.push(docs.slice(i, i + SPARK.maxBatch)); }
+      stats.batches = batches.length;
+      var existing = {};
+
+      function readExisting(bi) {
+        if (bi >= batches.length) { return Promise.resolve(); }
+        var paths = batches[bi].map(function (d) { return d.path; });
+        if (typeof adapter.getDocs !== 'function') { return Promise.resolve(); }
+        return adapter.getDocs(paths).then(function (res) {
+          usage.record('reads', paths.length);
+          (res || []).forEach(function (docResult) {
+            if (docResult && docResult.path && docResult.exists) { existing[docResult.path] = docResult.data; }
+          });
+          return readExisting(bi + 1);
+        }, function () { return Promise.resolve(); });
+      }
+      function writeBatches(bi) {
+        if (bi >= batches.length) { return Promise.resolve(); }
+        var batch = batches[bi];
+        var ops = [];
+        var names = [];
+        batch.forEach(function (d) {
+          var prev = existing[d.path];
+          if (prev && (!overwrite || docCmp(prev, d.body) > 0)) {
+            /* 이미 Firestore 에 있는 문서는 건드리지 않는다(서버가 더 최신이면 더욱) */
+            stats.skipped++;
+            return;
+          }
+          ops.push({ path: d.path, body: d.body, merge: true });
+          names.push(d.entry.name);
+        });
+        if (!ops.length) { return writeBatches(bi + 1); }
+        return adapter.writeBatch(ops).then(function () {
+          usage.record('writes', ops.length);
+          stats.written += ops.length;
+          names.forEach(function (n) { stats.byKey[n] = (stats.byKey[n] || 0) + 1; });
+          return writeBatches(bi + 1);
+        }, function (err) {
+          stats.ok = false;
+          stats.errors.push(errorText(err));
+          return { ok: false };
+        });
+      }
+
+      return readExisting(0).then(function () { return writeBatches(0); }).then(function () {
+        var ack = (adapter && typeof adapter.acknowledge === 'function') ? adapter.acknowledge() : true;
+        return Promise.resolve(ack).then(function () {
+          emit('migrated', stats);
+          return stats;
+        }, function (err) {
+          return { ok: false, reason: 'ack', error: errorText(err) };
+        });
+      });
+    }
+
+    /* ---------- 시작/정지 ---------- */
+    /* 지금 기기에 있는 데이터를 "이미 아는 상태"로 그림자에 올린다.
+       → 아무것도 바꾸지 않았는데 처음 열었다는 이유로 전부 다시 보내는 일이 없다. */
+    function seedShadow() {
+      var base = basePath();
+      registry.forEach(function (e) {
+        if (e.kind === 'local') { return; }
+        if (e.kind === 'events') {
+          var map = unionEventDocs(readValue('attendance'), readValue('records'), base);
+          Object.keys(map).forEach(function (p) {
+            if (shadow[p]) { return; }
+            var b = map[p].body;
+            shadow[p] = { v: 0, m: {}, u: '', by: '', d: false, h: contentHash(b), b: null, t: b.time };
+          });
+          return;
+        }
+        docsForEntry(e, readValue(e.name), base).forEach(function (d) {
+          if (shadow[d.path]) { return; }
+          var body = d.body;
+          shadow[d.path] = { v: 0, m: {}, u: '', by: '', d: false, h: contentHash(body), b: mergeMetaBody(body, {}), t: body.time };
+        });
+      });
+      saveShadow();
+    }
+
+    var retryTimer = null;
+    function startRetryLoop() {
+      if (opts.autoflush === false || retryTimer) { return; }
+      retryTimer = setInterval(function () {
+        if (!adapter || usage.blocked() || !outbox.count()) { return; }
+        if (!online()) { return; }
+        flush().then(function () {}, function () {});
+      }, opts.retryMs || 30000);
+    }
+    function onOnline() {
+      lastErrorKind = '';
+      emit('status', status());
+      if (outbox.count()) { scheduleFlush(); }
+    }
+    function onOffline() {
+      lastErrorKind = 'offline';
+      emit('status', status());
+    }
+
+    function start() {
+      if (started) { return api; }
+      started = true;
+      registry.forEach(function (e) {
+        if (e.kind === 'local') { return; }
+        prevValues[e.name] = readValue(e.name);
+      });
+      seedShadow();
+      attach(storage);
+      if (root.addEventListener) {
+        try {
+          root.addEventListener('online', onOnline);
+          root.addEventListener('offline', onOffline);
+        } catch (e) {}
+      }
+      startRetryLoop();
+      if (adapter && typeof adapter.subscribe === 'function') {
+        unsub = adapter.subscribe(function (path, data, meta) {
+          try { onRemote(path, data, meta); } catch (e) { lastError = errorText(e); }
+        });
+      }
+      emit('status', status());
+      return api;
+    }
+
+    function stop() {
+      started = false;
+      if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+      if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
+      if (root.removeEventListener) {
+        try { root.removeEventListener('online', onOnline); root.removeEventListener('offline', onOffline); } catch (e) {}
+      }
+      if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+      if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+    }
+
+    /* ---------- 테스트/UI용 ---------- */
+    var api = {
+      VERSION: VERSION,
+      start: start,
+      stop: stop,
+      status: status,
+      usage: usage,
+      outbox: outbox,
+      registry: function () { return registry.map(function (e) { return clone(e); }); },
+      basePath: basePath,
+      setDevice: function (d) { deviceId = String(d || deviceId); },
+      setRole: function (r) { role = r === 'tablet' ? 'tablet' : 'admin'; },
+      role: function () { return role; },
+      device: function () { return deviceId; },
+      setDojang: function (d) { dojangId = safeId(d || 'mta-tkd'); },
+      attachAdapter: attachAdapter,
+      adapter: function () { return adapter; },
+      subscribe: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
+      flush: flush,
+      handleWrite: handleWrite,
+      captureKey: function (name) {
+        var e = entryByName(name);
+        if (!e) { return 0; }
+        prevValues[name] = readValue(name);
+        capture(e);
+        return outbox.count();
+      },
+      migrationPlan: migrationPlan,
+      runMigration: runMigration,
+      migrationDocs: buildMigrationDocs,
+      docsFor: function (name) {
+        var e = entryByName(name);
+        if (!e) { return []; }
+        return docsForEntry(e, readValue(name), basePath());
+      },
+      shadow: function (path) {
+        if (path) { return clone(shadow[path]) || null; }
+        return clone(shadow) || {};
+      },
+      resetShadow: function () { shadow = {}; saveShadow(); },
+      seedShadow: function () { seedShadow(); return Object.keys(shadow).length; },
+      setValue: function (name, value) { writeValue(name, value); },
+      applyRemoteNow: flushReload,
+      simulateRemote: function (path, data) { onRemote(path, data, null); },
+      mergeDocs: mergeDocs,
+      errors: function () { return { lastError: lastError, lastSyncAt: lastSyncAt }; }
+    };
+    return api;
+  }
+
+  /* =========================================================================
+     8. 모의 Firestore (체험·검증용) — 같은 브라우저의 두 탭이 실제로 동기화된다
+     ========================================================================= */
+  function createMockServer(opts) {
+    opts = opts || {};
+    var storage = opts.storage || null;
+    var persistKey = opts.persistKey || 'tdk.fbMock.v1';
+    var channelName = opts.channel || 'tdkfb-mock';
+    var docs = {};
+    var listeners = [];
+    var bc = null;
+    var failNext = null;
+    var offline = false;
+
+    if (storage) {
+      try {
+        var raw = storage.getItem(persistKey);
+        if (raw) { docs = JSON.parse(raw) || {}; } else { docs = {}; }
+      } catch (e) { docs = {}; }
+      if (!isPlain(docs)) { docs = {}; }
+    }
+    if (opts.channel !== false && typeof root.BroadcastChannel === 'function') {
+      try { bc = new root.BroadcastChannel(channelName); } catch (e) { bc = null; }
+    }
+    function persist() {
+      if (!storage) { return; }
+      try { storage.setItem(persistKey, JSON.stringify(docs)); } catch (e) {}
+    }
+    function deliver(paths) {
+      paths.forEach(function (p) {
+        var data = docs[p] ? clone(docs[p]) : null;
+        listeners.forEach(function (fn) { try { fn(p, data, { ver: data ? num(data._ver) : 0 }); } catch (e) {} });
+      });
+    }
+    function apply(ops) {
+      var paths = [];
+      ops.forEach(function (op) {
+        if (!op || !op.path) { return; }
+        if (op.del) { delete docs[op.path]; }
+        else if (isPlain(op.body)) {
+          var cur = isPlain(docs[op.path]) ? docs[op.path] : {};
+          var next = op.merge === false ? {} : clone(cur) || {};
+          Object.keys(op.body).forEach(function (k) { next[k] = op.body[k]; });
+          docs[op.path] = next;
+        }
+        paths.push(op.path);
+      });
+      persist();
+      if (bc) { try { bc.postMessage({ ops: ops }); } catch (e) {} }
+      deliver(paths);
+      return paths;
+    }
+    if (bc) {
+      bc.onmessage = function (ev) {
+        var data = ev && ev.data;
+        if (!data || data.echo) { return; }
+        var paths = [];
+        (data.ops || []).forEach(function (op) {
+          if (!op || !op.path) { return; }
+          if (op.del) { delete docs[op.path]; }
+          else if (isPlain(op.body)) {
+            var cur = isPlain(docs[op.path]) ? docs[op.path] : {};
+            var next = op.merge === false ? {} : clone(cur) || {};
+            Object.keys(op.body).forEach(function (k) { next[k] = op.body[k]; });
+            docs[op.path] = next;
+          }
+          paths.push(op.path);
+        });
+        persist();
+        deliver(paths);
+      };
+    }
+
+    return {
+      mode: 'mock',
+      get: function (path) { return isPlain(docs[path]) ? clone(docs[path]) : null; },
+      all: function () { return clone(docs) || {}; },
+      keys: function () { return Object.keys(docs); },
+      write: function (ops) {
+        if (offline) { return Promise.reject({ code: 'unavailable', message: 'offline' }); }
+        if (failNext) { var err = failNext; failNext = null; return Promise.reject(err); }
+        apply(ops);
+        return Promise.resolve({ ok: true });
+      },
+      subscribe: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
+      setOffline: function (v) { offline = !!v; },
+      failNextWith: function (err) { failNext = err || { code: 'unavailable', message: 'mock fail' }; },
+      clear: function () { docs = {}; persist(); },
+      stats: function () { return { docs: Object.keys(docs).length }; },
+      close: function () { if (bc) { try { bc.close(); } catch (e) {} bc = null; } }
+    };
+  }
+
+  function createMockAdapter(server, opts) {
+    opts = opts || {};
+    var ackFails = false;
+    return {
+      mode: 'mock',
+      label: opts.label || '모의 Firestore',
+      writeBatch: function (ops) { return server.write(ops); },
+      getDoc: function (path) {
+        return Promise.resolve({ path: path, exists: !!server.get(path), data: server.get(path) });
+      },
+      getDocs: function (paths) {
+        return Promise.resolve(paths.map(function (p) {
+          return { path: p, exists: !!server.get(p), data: server.get(p) };
+        }));
+      },
+      acknowledge: function () {
+        if (ackFails) { return Promise.reject({ code: 'unavailable', message: 'ack 실패(모의)' }); }
+        return Promise.resolve(true);
+      },
+      setAckFails: function (v) { ackFails = !!v; },
+      subscribe: function (fn) {
+        /* 문서 단위 구독 → 엔진이 문서별로 병합한다 */
+        return server.subscribe(function (path, data) { fn(path, data, { ver: data ? num(data._ver) : 0 }); });
+      },
+      test: function () {
+        return server.write([]).then(function () { return { ok: true, message: '모의 Firestore 연결됨' }; });
+      }
+    };
+  }
+
+  /* =========================================================================
+     9. 실제 Firebase(Firestore) 어댑터 — firebaseConfig 는 코드에 넣지 않는다
+     ========================================================================= */
+  function loadFirebaseModules(version) {
+    var v = version || '11.0.2';
+    var base = 'https://www.gstatic.com/firebasejs/' + v + '/';
+    return Promise.all([
+      import(base + 'firebase-app.js'),
+      import(base + 'firebase-firestore.js'),
+      import(base + 'firebase-auth.js')
+    ]).then(function (mods) {
+      return { app: mods[0], firestore: mods[1], auth: mods[2], version: v };
+    });
+  }
+
+  function createFirestoreAdapter(cfg, opts) {
+    opts = opts || {};
+    var mods = null, app = null, db = null, auth = null;
+    var sdkVersion = (cfg && cfg.sdkVersion) || '11.0.2';
+    var unsubs = [];
+
+    function connect() {
+      return loadFirebaseModules(sdkVersion).then(function (m) {
+        mods = m;
+        var fs = m.firestore;
+        app = m.app.initializeApp({
+          apiKey: cfg.apiKey, authDomain: cfg.authDomain, projectId: cfg.projectId,
+          storageBucket: cfg.storageBucket, messagingSenderId: cfg.messagingSenderId, appId: cfg.appId
+        }, 'tdk-fb-' + (cfg.dojangId || 'mta'));
+        /* 오프라인 임시 저장 + 여러 탭 동시 사용 */
+        db = fs.initializeFirestore(app, {
+          localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() })
+        });
+        auth = m.auth.getAuth(app);
+        return api;
+      });
+    }
+
+    var api = {
+      mode: 'firestore',
+      label: 'Firebase Firestore',
+      connect: connect,
+      raw: function () { return { mods: mods, app: app, db: db, auth: auth }; },
+      signInEmail: function (email, pw) {
+        return auth.signInWithEmailAndPassword(email, pw).then(function (cred) { return { uid: cred.user.uid, email: cred.user.email }; });
+      },
+      signInAnonymously: function () {
+        return auth.signInAnonymously().then(function (cred) { return { uid: cred.user.uid }; });
+      },
+      signOut: function () { return auth.signOut(); },
+      currentUser: function () { return auth && auth.currentUser ? { uid: auth.currentUser.uid, email: auth.currentUser.email || '', anonymous: !!auth.currentUser.isAnonymous } : null; },
+      uid: function () { return auth && auth.currentUser ? auth.currentUser.uid : ''; },
+      writeBatch: function (ops) {
+        var fs = mods.firestore;
+        var batch = fs.writeBatch(db);
+        ops.forEach(function (op) {
+          if (op.del) { batch.delete(fs.doc(db, op.path)); }
+          else { batch.set(fs.doc(db, op.path), op.body || {}, { merge: op.merge !== false }); }
+        });
+        return batch.commit();
+      },
+      getDoc: function (path) {
+        var fs = mods.firestore;
+        return fs.getDoc(fs.doc(db, path)).then(function (snap) {
+          return { path: path, exists: snap.exists(), data: snap.exists() ? snap.data() : null };
+        });
+      },
+      getDocs: function (paths) {
+        var fs = mods.firestore;
+        return Promise.all(paths.map(function (p) {
+          return fs.getDoc(fs.doc(db, p)).then(function (snap) {
+            return { path: p, exists: snap.exists(), data: snap.exists() ? snap.data() : null };
+          });
+        }));
+      },
+      /* 서버 저장 확인 — 큐에서 지우기 전에 이것이 성공해야 한다 */
+      acknowledge: function () {
+        var fs = mods.firestore;
+        return typeof fs.waitForPendingWrites === 'function' ? fs.waitForPendingWrites(db) : Promise.resolve(true);
+      },
+      subscribe: function (fn) {
+        var fs = mods.firestore;
+        var basePath = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
+        var since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+        var sinceIso = since.toISOString().slice(0, 10);
+        var specs = [
+          { path: basePath + '/students' },
+          { path: basePath + '/counsel' },
+          { path: basePath + '/shuttle' },
+          { path: basePath + '/coupons' },
+          { path: basePath + '/meta' },
+          { path: basePath + '/tuition' },
+          /* 출결은 최근 7일만 실시간 구독 — 오래된 기록까지 매번 읽지 않아 무료 한도를 아낀다 */
+          { path: basePath + '/attendanceEvents', where: { field: 'date', op: '>=', value: sinceIso } }
+        ];
+        specs.forEach(function (spec) {
+          var coll = fs.collection(db, spec.path);
+          var q = coll;
+          if (spec.where) {
+            q = fs.query(coll, fs.where(spec.where.field, spec.where.op, spec.where.value));
+          }
+          var un = fs.onSnapshot(q, { includeMetadataChanges: false }, function (snap) {
+            snap.docChanges().forEach(function (ch) {
+              if (ch.type === 'removed') { fn(ch.doc.ref.path, null, { ver: 0 }); }
+              else { fn(ch.doc.ref.path, ch.doc.data(), { ver: 0 }); }
+            });
+          }, function (err) {
+            if (typeof opts.onError === 'function') { opts.onError(err); }
+          });
+          unsubs.push(un);
+        });
+        return function () { unsubs.forEach(function (u) { try { u(); } catch (e) {} }); unsubs = []; };
+      },
+      test: function () {
+        if (!db) { return Promise.resolve({ ok: false, message: '아직 연결되지 않았습니다' }); }
+        /* 규칙상 읽기가 막혀 있어도 "연결 자체"는 확인된다 — 존재하지 않는 문서 읽기 1회 */
+        return api.getDoc(opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd')) + '/meta/settings')
+          .then(function (r) { return { ok: true, message: r.exists ? '연결됨 · 설정 문서 있음' : '연결됨 · 아직 데이터 없음' }; },
+            function (err) { return { ok: false, message: errorText(err) }; });
+      },
+      disconnect: function () { unsubs.forEach(function (u) { try { u(); } catch (e) {} }); unsubs = []; }
+    };
+    return connect();
+  }
+
+  /* =========================================================================
+     10. 설정값 검증
+     ========================================================================= */
+  function validateConfig(input) {
+    var cfg = isPlain(input) ? input : {};
+    var errors = [];
+    if (!String(cfg.apiKey || '').trim()) { errors.push('apiKey 가 없습니다'); }
+    if (!String(cfg.projectId || '').trim()) { errors.push('projectId 가 없습니다'); }
+    if (!String(cfg.appId || '').trim()) { errors.push('appId 가 없습니다'); }
+    var projectId = String(cfg.projectId || '');
+    if (projectId && !/^[a-z0-9][a-z0-9-]{2,40}$/.test(projectId)) { errors.push('projectId 형식이 올바르지 않습니다'); }
+    var dojangId = safeId(cfg.dojangId || '');
+    return {
+      ok: errors.length === 0,
+      errors: errors,
+      config: errors.length === 0 ? {
+        apiKey: String(cfg.apiKey).trim(),
+        authDomain: String(cfg.authDomain || (projectId + '.firebaseapp.com')).trim(),
+        projectId: projectId,
+        storageBucket: String(cfg.storageBucket || (projectId + '.appspot.com')).trim(),
+        messagingSenderId: String(cfg.messagingSenderId || '').trim(),
+        appId: String(cfg.appId).trim(),
+        dojangId: dojangId || 'mta-tkd',
+        sdkVersion: String(cfg.sdkVersion || '11.0.2')
+      } : null
+    };
+  }
+
+  function createMemoryStorage(seed) {
+    var map = {};
+    if (isPlain(seed)) { Object.keys(seed).forEach(function (k) { map[k] = String(seed[k]); }); }
+    return {
+      getItem: function (k) { return hasOwn(map, k) ? map[k] : null; },
+      setItem: function (k, v) { map[k] = String(v); },
+      removeItem: function (k) { delete map[k]; },
+      clear: function () { map = {}; },
+      key: function (i) { return Object.keys(map)[i] || null; },
+      get length() { return Object.keys(map).length; },
+      _dump: function () { return clone(map); }
+    };
+  }
+
+  return {
+    VERSION: VERSION,
+    SPARK: SPARK,
+    QUOTA_MESSAGE: QUOTA_MESSAGE,
+    KEY_TABLE: KEY_TABLE,
+    LOCAL_KEYS: LOCAL_KEYS,
+    buildRegistry: buildRegistry,
+    createEngine: createEngine,
+    createUsage: createUsage,
+    createOutbox: createOutbox,
+    createMockServer: createMockServer,
+    createMockAdapter: createMockAdapter,
+    createFirestoreAdapter: createFirestoreAdapter,
+    loadFirebaseModules: loadFirebaseModules,
+    createMemoryStorage: createMemoryStorage,
+    validateConfig: validateConfig,
+    mergeDocs: mergeDocs,
+    stampFields: stampFields,
+    flatten: flatten,
+    unflatten: unflatten,
+    stableStringify: stableStringify,
+    contentHash: contentHash,
+    docsForEntry: docsForEntry,
+    docBody: docBody,
+    unionEventDocs: unionEventDocs,
+    unionArrays: unionArrays,
+    eventIdOf: eventIdOf,
+    parseEventId: parseEventId,
+    safeId: safeId,
+    isoOf: isoOf,
+    dayOf: dayOf,
+    errorText: errorText,
+    isQuotaError: isQuotaError
+  };
+});

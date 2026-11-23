@@ -1,0 +1,48 @@
+/* =============================================================================
+   Firebase 실시간 동기화 패널 스타일 (테스트 버전 전용 · 기존 화면 위에 얹기만 함)
+   ============================================================================= */
+.fb-test-tag { background: #fff0e6; color: #b34a00; }
+#admin-fb-panel .panel-head h3 { display: flex; align-items: center; gap: 6px; }
+.fb-sec { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.fb-sec-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.fb-sec-head b { font-size: 12.5px; color: #23324f; }
+.fb-json {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px; line-height: 1.55; min-height: 104px; resize: vertical; width: 100%;
+}
+.fb-gauge { margin: 9px 0 2px; }
+.fb-gauge-top { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 800; color: var(--muted); }
+.fb-gauge-top b { color: #23324f; }
+.fb-bar { height: 9px; background: #eef1f7; border-radius: 999px; overflow: hidden; margin-top: 4px; }
+.fb-bar i { display: block; height: 100%; width: 0; background: var(--mint); transition: width .35s ease; }
+.fb-bar i.warn { background: #f59f00; }
+.fb-bar i.danger { background: var(--red); }
+.fb-warn {
+  background: #fff5f5; border: 1px solid #f3c9c9; color: #a02020; border-radius: 12px;
+  padding: 10px 12px; font-size: 11.5px; font-weight: 700; line-height: 1.6; margin-bottom: 10px;
+}
+.fb-queue { max-height: 220px; overflow: auto; font-size: 11.5px; margin-top: 6px; }
+.fb-queue-row { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #f0f2f7; flex-wrap: wrap; }
+.fb-queue-row .chip { flex: none; }
+.fb-q-path { font-weight: 800; color: #23324f; word-break: break-all; }
+.fb-q-time { color: var(--muted); font-weight: 600; }
+.fb-q-err { color: #c0392b; font-weight: 700; width: 100%; }
+.fb-pill {
+  position: fixed; left: 10px; bottom: 10px; z-index: 70; pointer-events: none;
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  font-family: inherit; opacity: .94;
+}
+.fb-pill-tag, .fb-pill-state {
+  display: inline-block; font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 999px;
+  background: rgba(13, 27, 62, .82); color: #fff; letter-spacing: -.2px;
+  box-shadow: 0 2px 8px rgba(13, 27, 62, .18);
+}
+.fb-pill-state { background: rgba(107, 114, 128, .85); }
+.fb-pill-state.online { background: rgba(12, 166, 120, .92); }
+.fb-pill-state.offline, .fb-pill-state.error { background: rgba(214, 138, 0, .92); }
+.fb-pill-state.blocked { background: rgba(194, 47, 47, .92); }
+@media (max-width: 760px) {
+  .fb-pill { left: 8px; bottom: 8px; }
+  .fb-pill-tag, .fb-pill-state { font-size: 9px; padding: 2px 6px; }
+  .fb-json { font-size: 11px; min-height: 92px; }
+}

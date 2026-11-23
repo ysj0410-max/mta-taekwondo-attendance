@@ -1,0 +1,120 @@
+rules_version = '2';
+
+/* =============================================================================
+   경희대MTA태권도 — Firestore 보안 규칙 (Firebase 테스트 버전)
+   -----------------------------------------------------------------------------
+   구조
+     dojangs/{도장ID}/roles/{사용자UID}        role: "admin" | "tablet"
+     dojangs/{도장ID}/students/{원생ID}
+     dojangs/{도장ID}/attendanceEvents/{이벤트ID}
+     dojangs/{도장ID}/tuition/{연월_원생ID}
+     dojangs/{도장ID}/counsel/{상담ID}
+     dojangs/{도장ID}/shuttle/{운행ID}
+     dojangs/{도장ID}/coupons/{쿠폰ID}
+     dojangs/{도장ID}/meta/{settings|feeTable|smsTemplates|couponTypes|logs|muted|admin}
+
+   원칙
+     1) 로그인하지 않은 사람은 읽기도 쓰기도 전부 차단
+     2) 관리자(role=admin)  : 모든 컬렉션 읽기·쓰기
+     3) 출석 태블릿(role=tablet) : 이름·띠·출결에 필요한 읽기 + 출결 이벤트 "새로 만들기"만
+        → 원생 정보 수정/삭제, 원비·상담·쿠폰·설정 쓰기, 삭제는 모두 차단
+     4) 역할(roles) 문서는 관리자만 만들 수 있음
+        ※ 첫 관리자는 Firebase 콘솔에서 직접 만들어야 합니다(SETUP_GUIDE 참고).
+        ※ 규칙의 get() 은 문서 읽기 1회로 계산됩니다. 한도 관리에 참고하세요.
+   ============================================================================= */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ---------- 공통 함수 ---------- */
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    /* 이 도장에서 이 사용자의 역할 — 문서가 없으면 규칙 평가가 실패해 "거부"됩니다 */
+    function roleOf(dojangId) {
+      return get(/databases/$(database)/documents/dojangs/$(dojangId)/roles/$(request.auth.uid))
+             .data.get('role', '');
+    }
+    function isAdmin(dojangId) {
+      return signedIn() && roleOf(dojangId) == 'admin';
+    }
+    function isTablet(dojangId) {
+      return signedIn() && roleOf(dojangId) == 'tablet';
+    }
+
+    /* 출결 문서 한 건의 모양 검사 — 시간은 HH:MM, 종류는 in/out */
+    function validEvent(data) {
+      return data.keys().hasAll(['date', 'studentId', 'kind', 'time'])
+             && data.kind in ['in', 'out']
+             && data.date is string
+             && data.date.size() == 10
+             && data.time is string
+             && data.time.matches('[0-2][0-9]:[0-5][0-9]')
+             && data.studentId is string
+             && data.studentId.size() > 0
+             && data.studentId.size() <= 300;
+    }
+
+    /* ---------- 도장별 데이터 ---------- */
+    match /dojangs/{dojangId} {
+
+      /* 권한 문서: 자기 역할은 읽고, 관리자만 만들고 고친다 */
+      match /roles/{uid} {
+        allow read: if signedIn() && (request.auth.uid == uid || isAdmin(dojangId));
+        allow create, update, delete: if isAdmin(dojangId);
+      }
+
+      /* 원생 명단 — 태블릿은 읽기만(키오스크 이름·띠 표시), 쓰기는 관리자만 */
+      match /students/{studentId} {
+        allow read: if isAdmin(dojangId) || isTablet(dojangId);
+        allow create, update, delete: if isAdmin(dojangId);
+      }
+
+      /* 출결 이벤트 — 태블릿은 "새 이벤트 만들기"만, 고치고 지우는 것은 관리자만 */
+      match /attendanceEvents/{eventId} {
+        allow read: if isAdmin(dojangId) || isTablet(dojangId);
+        allow create: if (isAdmin(dojangId) || isTablet(dojangId)) && validEvent(request.resource.data);
+        allow update, delete: if isAdmin(dojangId);
+      }
+
+      /* 원비 — 관리자 전용 (태블릿은 금액·납부 정보를 볼 수 없음) */
+      match /tuition/{recordId} {
+        allow read, write: if isAdmin(dojangId);
+      }
+
+      /* 상담 기록 — 관리자 전용 */
+      match /counsel/{counselId} {
+        allow read, write: if isAdmin(dojangId);
+      }
+
+      /* 차량 운행 — 관리자 전용 */
+      match /shuttle/{shuttleId} {
+        allow read, write: if isAdmin(dojangId);
+      }
+
+      /* 쿠폰 — 관리자 전용 */
+      match /coupons/{couponId} {
+        allow read, write: if isAdmin(dojangId);
+      }
+
+      /* 설정·단가표·문구·로그·효과음·관리자 계정(해시)
+         태블릿은 화면 표시에 필요한 설정 3개만 읽고, 쓰기는 관리자만 */
+      match /meta/{docId} {
+        allow read: if isAdmin(dojangId)
+                      || (isTablet(dojangId) && docId in ['settings', 'feeTable', 'couponTypes']);
+        allow write: if isAdmin(dojangId);
+      }
+
+      /* 그 밖의 경로는 아무도 접근 불가 */
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    /* 최상위·다른 도장의 모든 경로도 전부 차단 (미인증 사용자 포함) */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

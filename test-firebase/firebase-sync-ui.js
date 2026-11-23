@@ -1,0 +1,678 @@
+/* =============================================================================
+   경희대MTA태권도 — 🔥 Firebase 실시간 동기화 설정 패널 (테스트 버전 전용)
+   -----------------------------------------------------------------------------
+   · 「🔐 관리자 계정」 탭 안에 「🔥 Firebase 실시간 동기화」 패널을 살립니다.
+   · firebaseConfig 는 코드에 넣지 않고, 이 화면에서 붙여넣어 기기(localStorage)에
+     저장합니다. (tdk.fbConfig.v1 — 다른 기기로 자동 전송되지 않습니다)
+   · 모의 모드(🧪)에서는 실제 Firebase 없이 전 기능을 그대로 연습할 수 있습니다.
+     같은 브라우저에서 탭을 두 개 열면 PC·태블릿처럼 서로 동기화됩니다.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var FB = window.TDKFirebaseSync;
+  if (!FB) { return; }
+
+  var CFG_KEY = 'tdk.fbConfig.v1';
+  var DEV_KEY = 'tdk.fbDevice.v1';
+  var DEFAULT_DOJANG = 'mta-tkd';
+
+  var S = {
+    engine: null,
+    server: null,
+    adapter: null,
+    cfg: { mode: 'off', dojangId: DEFAULT_DOJANG, role: 'admin', config: null },
+    plan: null,
+    queueOpen: false,
+    auth: null,
+    busy: false,
+    msg: '',
+    msgKind: '',
+    timer: null
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function val(id) { var e = $(id); return e ? String(e.value == null ? '' : e.value) : ''; }
+  function setText(id, text) { var e = $(id); if (e) { e.textContent = text; } }
+  function setHtml(id, html) { var e = $(id); if (e) { e.innerHTML = html; } }
+  function show(id, on) { var e = $(id); if (e) { e.style.display = on ? '' : 'none'; } }
+
+  function readJSON(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      if (!raw) { return fallback; }
+      var v = JSON.parse(raw);
+      return v == null ? fallback : v;
+    } catch (e) { return fallback; }
+  }
+  function writeJSON(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+  }
+  function deviceId() {
+    var id = readJSON(DEV_KEY, '');
+    if (typeof id === 'string' && id) { return id; }
+    id = 'dev-' + Math.random().toString(36).slice(2, 8);
+    writeJSON(DEV_KEY, id);
+    return id;
+  }
+  function nowText(iso) {
+    if (!iso) { return '-'; }
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) { return iso; }
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) +
+      ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+  }
+  function numText(n) { return String(n == null ? 0 : n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  function baseName(path) {
+    var p = String(path || '').split('/');
+    var last = p[p.length - 1] || '';
+    var coll = p.length > 2 ? p[p.length - 2] : '';
+    return coll + '/' + last;
+  }
+
+  /* ---------- 설정 저장/읽기 ---------- */
+  function loadConfig() {
+    var raw = readJSON(CFG_KEY, null);
+    if (!raw || typeof raw !== 'object') {
+      return { mode: 'off', dojangId: DEFAULT_DOJANG, role: 'admin', config: null };
+    }
+    return {
+      mode: raw.mode === 'mock' || raw.mode === 'firestore' ? raw.mode : 'off',
+      dojangId: FB.safeId(raw.dojangId || DEFAULT_DOJANG),
+      role: raw.role === 'tablet' ? 'tablet' : 'admin',
+      config: raw.config && typeof raw.config === 'object' ? raw.config : null,
+      lastSyncAt: raw.lastSyncAt || ''
+    };
+  }
+  function saveConfig(next) {
+    S.cfg = Object.assign({}, S.cfg, next || {});
+    writeJSON(CFG_KEY, S.cfg);
+  }
+
+  /* ---------- 엔진 준비 ---------- */
+  function stopEngine() {
+    if (S.engine) { try { S.engine.stop(); } catch (e) {} S.engine = null; }
+    if (S.adapter && typeof S.adapter.disconnect === 'function') { try { S.adapter.disconnect(); } catch (e) {} }
+    if (S.server && typeof S.server.close === 'function') { try { S.server.close(); } catch (e) {} }
+    S.adapter = null;
+    S.server = null;
+  }
+
+  function appKeys() {
+    try {
+      if (window.__tdk && window.__tdk.LS) { return window.__tdk.LS; }
+    } catch (e) {}
+    return null;
+  }
+
+  function makeEngine(adapter) {
+    var keys = appKeys();
+    var engine = FB.createEngine({
+      storage: localStorage,
+      keys: keys || undefined,
+      adapter: adapter,
+      deviceId: deviceId(),
+      dojangId: S.cfg.dojangId,
+      role: S.cfg.role,
+      reload: function () {
+        try {
+          if (window.__tdk && window.__tdk.sync && typeof window.__tdk.sync.reload === 'function') {
+            window.__tdk.sync.reload();
+          }
+        } catch (e) {}
+      },
+      onEvent: function (type, payload) {
+        if (type === 'quota-blocked') { showWarn(true); }
+        if (type === 'synced') { saveConfig({ lastSyncAt: payload && payload.at }); }
+        if (type === 'usage' && payload && payload.level >= 1) {
+          S.msg = payload.level >= 2
+            ? '🔴 무료 한도를 모두 사용했습니다 — 동기화를 잠시 멈추고 기기에 보관합니다.'
+            : '🟡 무료 한도의 80%를 넘었습니다 — 남은 양을 확인해 주세요.';
+          S.msgKind = 'warn';
+        }
+        renderAll();
+      }
+    });
+    engine.start();
+    S.engine = engine;
+    return engine;
+  }
+
+  function connectMock() {
+    stopEngine();
+    S.server = FB.createMockServer({ storage: localStorage, channel: true });
+    S.adapter = FB.createMockAdapter(S.server, { label: '모의 Firestore' });
+    makeEngine(S.adapter);
+    saveConfig({ mode: 'mock' });
+    S.msg = '🧪 모의 Firestore 로 켰습니다 · 같은 브라우저에서 이 주소를 탭으로 하나 더 열면 PC↔태블릿처럼 동기화됩니다.';
+    S.msgKind = 'ok';
+    renderAll();
+  }
+
+  function connectFirestore() {
+    var v = FB.validateConfig(S.cfg.config || {});
+    if (!v.ok) {
+      S.msg = '⚠️ 설정을 확인해 주세요: ' + v.errors.join(' / ');
+      S.msgKind = 'warn';
+      renderAll();
+      return Promise.resolve(false);
+    }
+    stopEngine();
+    S.msg = '🔥 Firebase 에 연결하는 중…';
+    S.msgKind = '';
+    renderAll();
+    return FB.createFirestoreAdapter(Object.assign({ dojangId: S.cfg.dojangId }, v.config), {
+      basePath: 'dojangs/' + S.cfg.dojangId,
+      onError: function (err) {
+        S.msg = '⚠️ 실시간 구독 오류: ' + FB.errorText(err);
+        S.msgKind = 'warn';
+        renderAll();
+      }
+    }).then(function (adapter) {
+      S.adapter = adapter;
+      makeEngine(adapter);
+      saveConfig({ mode: 'firestore', config: v.config });
+      S.msg = '🔥 Firebase 에 연결했습니다. 관리자 로그인 후 데이터를 이전해 주세요.';
+      S.msgKind = 'ok';
+      renderAll();
+      return true;
+    }, function (err) {
+      S.adapter = null;
+      S.msg = '⚠️ 연결하지 못했습니다: ' + FB.errorText(err) + ' — 인터넷과 firebaseConfig 를 확인해 주세요.';
+      S.msgKind = 'warn';
+      renderAll();
+      return false;
+    });
+  }
+
+  function disconnect() {
+    stopEngine();
+    saveConfig({ mode: 'off' });
+    S.msg = '동기화를 껐습니다. 이 기기는 지금까지처럼 혼자 저장합니다(로컬 모드).';
+    S.msgKind = '';
+    renderAll();
+  }
+
+  /* ---------- 상태 표시 ---------- */
+  function chipFor(state) {
+    if (state === 'online') { return 'ok'; }
+    if (state === 'blocked') { return 'off'; }
+    if (state === 'offline' || state === 'error') { return 'wait'; }
+    return 'wait';
+  }
+
+  function renderStatus() {
+    var st = S.engine ? S.engine.status() : { state: 'local', text: '⚪ 미연결(로컬 모드)', queued: 0 };
+    var chip = $('fb-state');
+    if (chip) {
+      chip.textContent = st.text + (st.queued ? (' · 대기 ' + st.queued + '건') : '');
+      chip.className = 'chip ' + chipFor(st.state);
+    }
+    var pill = $('fb-pill-state');
+    if (pill) {
+      var narrow = (typeof window.innerWidth === 'number' && window.innerWidth <= 760);
+      var pillText = st.text;
+      if (narrow) {
+        /* 폰 화면에서는 버튼을 가리지 않도록 짧게 */
+        pillText = st.state === 'online' ? '🟢 연결'
+          : st.state === 'offline' ? ('🟡 대기' + (st.queued ? ' ' + st.queued : ''))
+          : st.state === 'blocked' ? '🔴 한도'
+          : st.state === 'error' ? '🟠 연결문제' : '⚪ 로컬';
+      } else if (st.queued) {
+        pillText = st.text + ' · 대기 ' + st.queued + '건';
+      }
+      pill.textContent = pillText;
+      pill.className = 'fb-pill-state ' + st.state;
+    }
+    var tag = $('fb-pill-tag');
+    if (tag && typeof window.innerWidth === 'number') {
+      tag.textContent = window.innerWidth <= 760 ? '🧪 테스트' : '🧪 Firebase 테스트 버전';
+    }
+    setText('fb-usage-note', S.engine ? (S.engine.usage.snapshot().date + ' 기준 · 기기에서 센 추정치') : '동기화를 켜면 표시됩니다');
+    var lastSync = (S.engine && S.engine.errors().lastSyncAt) || S.cfg.lastSyncAt || '';
+    setText('fb-sync-note', '마지막 동기화: ' + (lastSync ? nowText(lastSync) : '아직 없음') +
+      (S.engine ? ' · 기기 ID ' + deviceId() : ''));
+    showWarn(st.state === 'blocked');
+  }
+
+  function showWarn(on) {
+    var el = $('fb-warn');
+    if (!el) { return; }
+    if (!on) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.innerHTML = '🔴 <b>무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다.</b><br>' +
+      '지금 찍은 기록은 <b>이 기기 로컬에 임시 보관</b> 중이며, 한도가 풀리면(태평양 시간 자정) 자동으로 다시 보냅니다. ' +
+      '유료 결제로 자동 전환되지 않습니다.<br>' +
+      '그동안 <b>Google Drive 백업</b>(「💾 도장 데이터 전체 백업」 또는 「☁️ 드라이브 자동 백업」)을 받아 두시길 권합니다.';
+  }
+
+  function renderUsage() {
+    var snap = S.engine ? S.engine.usage.snapshot() : {
+      reads: 0, writes: 0, deletes: 0,
+      limits: { reads: FB.SPARK.reads, writes: FB.SPARK.writes, deletes: FB.SPARK.deletes },
+      pct: { reads: 0, writes: 0, deletes: 0 }, level: 0
+    };
+    [['reads', 'read', '읽기'], ['writes', 'write', '쓰기'], ['deletes', 'del', '삭제']].forEach(function (row) {
+      var k = row[0], barId = 'fb-bar-' + row[1], txtId = 'fb-use-' + row[1];
+      var pct = Math.min(1, snap.pct[k] || 0);
+      var bar = $(barId);
+      if (bar) {
+        bar.style.width = Math.round(pct * 100) + '%';
+        bar.className = pct >= 1 ? 'danger' : (pct >= FB.SPARK.warnRatio ? 'warn' : '');
+      }
+      setText(txtId, numText(snap[k]) + ' / ' + numText(snap.limits[k]) + '  (' + Math.floor((snap.pct[k] || 0) * 100) + '%)');
+    });
+    var note = $('fb-usage-note');
+    if (note && snap.level >= 2) { note.textContent = '한도 초과 — 동기화를 멈추고 기기에 보관 중'; }
+    else if (note && snap.level >= 1) { note.textContent = '무료 한도의 80%를 넘었습니다 — 남은 양을 확인하세요'; }
+  }
+
+  function renderQueue() {
+    var out = S.engine ? S.engine.outbox : null;
+    var sum = out ? out.summary() : { pending: 0, failed: 0, unacked: 0, sent: 0, oldestAt: '' };
+    var chip = $('fb-queue-chip');
+    if (chip) {
+      var total = sum.pending + sum.failed + sum.unacked;
+      chip.textContent = total ? ('대기 ' + total + '건' + (sum.failed ? ' · 실패 ' + sum.failed : '') + (sum.unacked ? ' · 확인대기 ' + sum.unacked : '')) : '대기 없음';
+      chip.className = 'chip ' + (total ? (sum.failed ? 'off' : 'wait') : 'ok');
+    }
+    if (!S.queueOpen || !out) { return; }
+    var items = out.list().filter(function (it) { return it.state !== 'sent'; }).slice(-40).reverse();
+    if (!items.length) { setHtml('fb-queue-list', '<div class="tiny-note" style="padding:8px 0">대기 중인 기록이 없습니다.</div>'); return; }
+    var stateText = { pending: '전송 대기', failed: '전송 실패', 'sent-unacked': '서버 확인 대기', sending: '보내는 중' };
+    var html = items.map(function (it) {
+      var cls = it.state === 'failed' ? 'off' : 'wait';
+      return '<div class="fb-queue-row"><span class="chip ' + cls + '">' + (stateText[it.state] || it.state) + '</span>' +
+        '<span class="fb-q-path">' + baseName(it.path) + '</span>' +
+        '<span class="fb-q-time">' + nowText(it.at) + (it.attempts ? ' · ' + it.attempts + '회' : '') + '</span>' +
+        (it.error ? '<span class="fb-q-err">' + it.error + '</span>' : '') + '</div>';
+    }).join('');
+    var old = sum.oldestAt ? ('가장 오래된 대기: ' + nowText(sum.oldestAt)) : '';
+    setHtml('fb-queue-list', (old ? '<div class="tiny-note" style="padding:4px 0 8px">' + old + '</div>' : '') + html);
+  }
+
+  function keyCountText(byKey) {
+    if (!byKey || !Object.keys(byKey).length) { return '없음'; }
+    var label = {};
+    (S.plan ? S.plan.keys : []).forEach(function (k) { label[k.name] = k.label; });
+    return Object.keys(byKey).sort().map(function (name) {
+      return (label[name] || name) + ' ' + numText(byKey[name]) + '건';
+    }).join(' · ');
+  }
+
+  function renderMigration() {
+    var wrap = $('fb-mig-wrap');
+    if (!S.plan) { if (wrap) { wrap.style.display = 'none'; } return; }
+    if (wrap) { wrap.style.display = ''; }
+    var rows = S.plan.keys.map(function (k) {
+      var isLocal = k.localOnly;
+      return '<tr><td>' + k.icon + ' <b>' + k.label + '</b><br><span class="tiny-note">' + k.key + '</span></td>' +
+        '<td class="tiny-note">' + (isLocal ? '🚫 기기 로컬 전용 (보내지 않음)' : k.desc) + '</td>' +
+        '<td class="num"><b>' + (isLocal ? '—' : numText(k.count)) + '</b>' + (isLocal ? '' : '건') + '</td></tr>';
+    }).join('');
+    setHtml('fb-mig-table', rows);
+    setText('fb-mig-note', '모두 ' + numText(S.plan.total) + '건 · Firestore 배치 ' + S.plan.batches + '회' +
+      (S.plan.localOnly ? ' · 로컬 전용 ' + S.plan.localOnly + '개 키 제외' : ''));
+    var run = $('fb-mig-run');
+    if (run) { run.disabled = !(S.engine && S.engine.adapter && S.plan.total >= 0) || S.cfg.role === 'tablet' || S.busy; }
+  }
+
+  function renderAuth() {
+    var a = S.auth;
+    var el = $('fb-auth');
+    if (el) {
+      var label = '로그인 안 됨';
+      if (a) {
+        var roleText = a.role === 'admin' ? '관리자' : (a.role === 'tablet' ? '출석 태블릿' : a.role);
+        label = '✅ 로그인: ' + (a.email || a.uid) + (roleText ? (' · 역할: ' + roleText) : '');
+      }
+      el.textContent = label;
+      el.className = 'tiny-note';
+    }
+    var note = $('fb-role-state');
+    if (note) {
+      if (!S.adapter || S.adapter.mode !== 'firestore') {
+        note.textContent = '실제 Firebase 모드에서만 로그인합니다. (모의 모드는 로그인 없이 시험)';
+      } else if (a && a.role === 'admin') {
+        note.textContent = '이 계정은 관리자 권한입니다 — 모든 데이터를 읽고 쓸 수 있습니다.';
+      } else if (a && a.role) {
+        note.textContent = '이 계정의 역할은 「' + a.role + '」입니다. 쓰기 권한이 제한됩니다.';
+      } else if (a) {
+        note.textContent = '⚠️ roles 문서가 없습니다 — Firestore에 dojangs/' + S.cfg.dojangId + '/roles/' + a.uid + ' 문서를 만들고 role: "admin" 을 넣어 주세요.';
+      } else {
+        note.textContent = 'Firebase 콘솔 → Authentication 에서 만든 관리자 이메일/비밀번호로 로그인하세요.';
+      }
+    }
+  }
+
+  function renderAll() {
+    var modeSel = $('fb-mode');
+    if (modeSel) { modeSel.value = S.cfg.mode; }
+    var roleSel = $('fb-role');
+    if (roleSel) { roleSel.value = S.cfg.role; }
+    var dj = $('fb-dojang');
+    if (dj && !dj.value) { dj.value = S.cfg.dojangId; }
+    var cfgArea = $('fb-config');
+    if (cfgArea && !cfgArea.value && S.cfg.config) {
+      cfgArea.value = FB.stableStringify(S.cfg.config).replace(/,"/g, ',\n  "').replace(/^\{/, '{\n  ').replace(/\}$/, '\n}');
+    }
+    setText('fb-msg', S.msg || '설정을 저장하고 연결하면 실시간 동기화가 시작됩니다.');
+    var msgEl = $('fb-msg');
+    if (msgEl) {
+      msgEl.className = 'tiny-note';
+      msgEl.style.color = S.msgKind === 'warn' ? '#c0392b' : (S.msgKind === 'ok' ? '#0b7a55' : '');
+    }
+    renderStatus();
+    renderUsage();
+    renderQueue();
+    renderMigration();
+    renderAuth();
+  }
+
+  /* ---------- 동작 ---------- */
+  function readForm() {
+    var raw = val('fb-config').trim();
+    var parsed = null;
+    if (raw) {
+      try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+      if (!parsed) {
+        /* 흔한 실수: const firebase_config = { ... }; 통째로 붙여넣은 경우 */
+        var m = raw.match(/\{[\s\S]*\}/);
+        if (m) { try { parsed = JSON.parse(m[0]); } catch (e2) { parsed = null; } }
+      }
+    }
+    return {
+      dojangId: FB.safeId(val('fb-dojang') || DEFAULT_DOJANG),
+      role: val('fb-role') === 'tablet' ? 'tablet' : 'admin',
+      mode: val('fb-mode'),
+      config: parsed
+    };
+  }
+
+  function onSave() {
+    var f = readForm();
+    var cfg = f.config || S.cfg.config;
+    if (f.mode === 'firestore') {
+      var v = FB.validateConfig(cfg || {});
+      if (!v.ok) {
+        S.msg = '⚠️ firebaseConfig 를 붙여넣어 주세요: ' + v.errors.join(' / ');
+        S.msgKind = 'warn';
+        renderAll();
+        return;
+      }
+      cfg = v.config;
+    }
+    saveConfig({ dojangId: f.dojangId, role: f.role, mode: f.mode === 'firestore' || f.mode === 'mock' ? f.mode : 'off', config: cfg });
+    S.msg = '설정을 이 기기에 저장했습니다.';
+    S.msgKind = 'ok';
+    if (S.cfg.mode === 'mock') { connectMock(); return; }
+    if (S.cfg.mode === 'firestore') { connectFirestore(); return; }
+    disconnect();
+  }
+
+  function onTest() {
+    if (!S.engine || !S.adapter) {
+      S.msg = '먼저 「설정 저장」으로 연결해 주세요.';
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    if (!S.adapter.test) {
+      S.msg = '연결 테스트를 지원하지 않는 모드입니다.';
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    S.msg = '연결 확인 중…';
+    renderAll();
+    S.adapter.test().then(function (r) {
+      S.msg = (r && r.ok ? '✅ ' : '⚠️ ') + ((r && r.message) || '');
+      S.msgKind = r && r.ok ? 'ok' : 'warn';
+      renderAll();
+    }, function (err) {
+      S.msg = '⚠️ 연결 실패: ' + FB.errorText(err);
+      S.msgKind = 'warn';
+      renderAll();
+    });
+  }
+
+  function onLogin() {
+    if (!S.adapter || S.adapter.mode !== 'firestore' || !S.adapter.signInEmail) {
+      S.msg = '실제 Firebase 모드에서만 로그인할 수 있습니다. (모의 모드는 로그인 없이 시험)';
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    var email = val('fb-email').trim(), pw = val('fb-pw');
+    if (!email || !pw) {
+      S.msg = '이메일과 비밀번호를 입력해 주세요.';
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    S.msg = '로그인 중…';
+    renderAll();
+    S.adapter.signInEmail(email, pw).then(function (u) {
+      var pwEl = $('fb-pw');
+      if (pwEl) { pwEl.value = ''; }
+      S.auth = { uid: u.uid, email: u.email, role: '' };
+      return S.adapter.getDoc('dojangs/' + S.cfg.dojangId + '/roles/' + u.uid).then(function (r) {
+        S.auth.role = r && r.exists && r.data ? String(r.data.role || '') : '';
+        S.msg = S.auth.role === 'admin' ? '✅ 관리자로 로그인했습니다.' : '로그인은 됐지만 roles 문서의 role 을 확인해 주세요.';
+        S.msgKind = S.auth.role === 'admin' ? 'ok' : 'warn';
+        renderAll();
+      }, function () { renderAll(); });
+    }, function (err) {
+      S.msg = '⚠️ 로그인 실패: ' + FB.errorText(err) + ' (Firebase Authentication 에서 이메일/비밀번호 로그인을 켜고 계정을 만들어 주세요)';
+      S.msgKind = 'warn';
+      renderAll();
+    });
+  }
+
+  function onLogout() {
+    if (S.adapter && S.adapter.signOut) { S.adapter.signOut().then(function () {}, function () {}); }
+    S.auth = null;
+    S.msg = '로그아웃했습니다.';
+    renderAll();
+  }
+
+  function onPreview() {
+    if (!S.engine) {
+      S.msg = '먼저 동기화를 켜 주세요.';
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    S.plan = S.engine.migrationPlan();
+    setHtml('fb-mig-result', '이전 대상: ' + S.plan.keys.filter(function (k) { return !k.localOnly && k.count; })
+      .map(function (k) { return k.label + ' ' + numText(k.count) + '건'; }).join(' · '));
+    S.msg = '현재 기기의 데이터 ' + numText(S.plan.total) + '건을 확인했습니다. 아래 표를 보고 「이전 실행」을 눌러 주세요.';
+    S.msgKind = 'ok';
+    renderAll();
+  }
+
+  function onMigrate() {
+    if (!S.engine || !S.plan) { return; }
+    if (S.cfg.role === 'tablet') {
+      S.msg = '출석 태블릿 역할에서는 이전하지 않습니다 — 관리자 PC에서 해 주세요.';
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    var msg = '현재 이 기기의 데이터 ' + numText(S.plan.total) + '건을 Firestore로 보냅니다.\n\n' +
+      '· 이미 Firestore에 있는 문서는 건드리지 않습니다(덮어쓰기 없음).\n' +
+      '· 얼굴 특징값 2종은 이 기기에만 남습니다.\n' +
+      '· 약 ' + Math.max(1, Math.ceil(S.plan.total / 400)) + '초 걸립니다.\n\n진행할까요?';
+    if (typeof window.confirm === 'function' && !window.confirm(msg)) { return; }
+    S.busy = true;
+    S.msg = '📤 이전 중…';
+    renderAll();
+    S.engine.runMigration().then(function (r) {
+      S.busy = false;
+      if (r.ok) {
+        S.msg = '✅ 이전 완료 — 새로 저장 ' + numText(r.written) + '건 · 건너뜀 ' + numText(r.skipped) + '건 · 배치 ' + r.batches + '회';
+        S.msgKind = 'ok';
+        setHtml('fb-mig-result', '방금 저장한 키별 건수: ' + keyCountText(r.byKey));
+      } else {
+        S.msg = '⚠️ 이전을 끝내지 못했습니다: ' + (r.error || r.reason || '') + ' — 다시 누르면 이어서 진행합니다.';
+        S.msgKind = 'warn';
+      }
+      S.plan = S.engine.migrationPlan();
+      renderAll();
+    }, function (err) {
+      S.busy = false;
+      S.msg = '⚠️ 이전 실패: ' + FB.errorText(err);
+      S.msgKind = 'warn';
+      renderAll();
+    });
+  }
+
+  function onFlush() {
+    if (!S.engine) { return; }
+    S.msg = '보내는 중…';
+    renderAll();
+    S.engine.flush().then(function (r) {
+      if (r.ok) {
+        S.msg = r.sent ? ('✅ ' + numText(r.sent) + '건을 보냈습니다.') : '보낼 기록이 없습니다.';
+        S.msgKind = 'ok';
+      } else if (r.reason === 'quota') {
+        S.msg = '🔴 무료 한도 초과 — 기기에 보관 중입니다. 한도가 풀리면 자동으로 다시 보냅니다.';
+        S.msgKind = 'warn';
+      } else if (r.reason === 'offline') {
+        S.msg = '🟡 인터넷이 없습니다 — 연결되면 자동으로 다시 보냅니다.';
+        S.msgKind = 'warn';
+      } else if (r.reason === 'no-adapter') {
+        S.msg = '먼저 Firebase(또는 모의 모드)에 연결해 주세요.';
+        S.msgKind = 'warn';
+      } else {
+        S.msg = '⚠️ 전송 실패: ' + (r.error || '');
+        S.msgKind = 'warn';
+      }
+      renderAll();
+    }, function (err) {
+      S.msg = '⚠️ 전송 실패: ' + FB.errorText(err);
+      renderAll();
+    });
+  }
+
+  function onRetry() {
+    if (!S.engine) { return; }
+    S.engine.outbox.retryAll();
+    onFlush();
+  }
+
+  function onUsageReset() {
+    if (!S.engine) { return; }
+    if (typeof window.confirm === 'function' && !window.confirm('오늘 사용량 카운터를 0으로 되돌립니다.\n실제 Firebase 사용량은 그대로이니 안내용으로만 쓰세요. 계속할까요?')) { return; }
+    S.engine.usage.reset();
+    S.msg = '사용량 카운터를 0으로 되돌렸습니다.';
+    S.msgKind = 'ok';
+    renderAll();
+  }
+
+  function guideUrl() {
+    var host = location.hostname || '';
+    var parts = String(location.pathname || '').split('/').filter(function (x) { return !!x; });
+    if (/(^|\.)github\.io$/.test(host) && parts.length >= 1) {
+      /* GitHub Pages 에 올라간 경우 — 브라우저에서 예쁘게 보이는 저장소 문서로 연다 */
+      return 'https://github.com/' + host.split('.')[0] + '/' + parts[0] + '/blob/main/' +
+        parts.slice(1).join('/') + (parts.length > 1 ? '/' : '') + 'SETUP_GUIDE.md';
+    }
+    return location.href.replace(/index\.html.*$/, '') + 'SETUP_GUIDE.md';
+  }
+
+  function onGuide() {
+    var url = guideUrl();
+    if (typeof window.open === 'function') { window.open(url, '_blank'); }
+    S.msg = '설정 안내서를 새 창으로 열었습니다: ' + url;
+    S.msgKind = '';
+    renderAll();
+  }
+
+  /* ---------- 화면 아래 작은 상태 알약 ---------- */
+  function ensurePill() {
+    if ($('fb-pill')) { return; }
+    var d = document.createElement('div');
+    d.id = 'fb-pill';
+    d.className = 'fb-pill';
+    d.innerHTML = '<span class="fb-pill-tag" id="fb-pill-tag">🧪 Firebase 테스트 버전</span><span class="fb-pill-state" id="fb-pill-state">⚪ 미연결(로컬 모드)</span>';
+    document.body.appendChild(d);
+  }
+
+  /* ---------- 이벤트 연결 ---------- */
+  function bind() {
+    var map = [
+      ['fb-save', onSave], ['fb-test', onTest], ['fb-mock', connectMock],
+      ['fb-login', onLogin], ['fb-logout', onLogout],
+      ['fb-mig-preview', onPreview], ['fb-mig-run', onMigrate],
+      ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-usage-reset', onUsageReset],
+      ['fb-guide', onGuide]
+    ];
+    map.forEach(function (pair) {
+      var el = $(pair[0]);
+      if (el) { el.addEventListener('click', pair[1]); }
+    });
+    var toggle = $('fb-queue-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', function () {
+        S.queueOpen = !S.queueOpen;
+        show('fb-queue-list', S.queueOpen);
+        toggle.textContent = S.queueOpen ? '대기 목록 닫기' : '대기 목록 보기';
+        renderQueue();
+      });
+    }
+    var modeSel = $('fb-mode');
+    if (modeSel) {
+      modeSel.addEventListener('change', function () {
+        if (modeSel.value === 'off') { disconnect(); }
+        else if (modeSel.value === 'mock') { connectMock(); }
+        else { S.msg = 'firebaseConfig 를 붙여넣고 「설정 저장」을 눌러 주세요.'; S.msgKind = ''; S.cfg.mode = 'firestore'; renderAll(); }
+      });
+    }
+  }
+
+  /* ---------- 시작 ---------- */
+  function boot() {
+    if (!$('admin-fb-panel')) { return; }
+    S.cfg = loadConfig();
+    deviceId();
+    ensurePill();
+    bind();
+    /* 저장해 둔 훅이 없으면 앱이 준비될 때까지 잠깐 기다린다 */
+    var tries = 0;
+    (function ready() {
+      tries++;
+      var ok = window.__tdk && window.__tdk.app;
+      if (!ok && tries < 60) { setTimeout(ready, 150); return; }
+      if (S.cfg.mode === 'mock') { connectMock(); }
+      else if (S.cfg.mode === 'firestore') { connectFirestore(); }
+      else { renderAll(); }
+      if (S.timer) { clearInterval(S.timer); }
+      S.timer = setInterval(function () { renderStatus(); renderUsage(); renderQueue(); }, 2000);
+    })();
+  }
+
+  window.TDKFB = {
+    engine: function () { return S.engine; },
+    adapter: function () { return S.adapter; },
+    server: function () { return S.server; },
+    config: function () { return S.cfg; },
+    connectMock: connectMock,
+    connectFirestore: connectFirestore,
+    disconnect: disconnect,
+    flush: function () { return S.engine ? S.engine.flush() : null; },
+    preview: onPreview,
+    plan: function () { return S.plan; },
+    render: renderAll,
+    onAdminTab: function (tab) {
+      if (tab === 'settings') { renderAll(); }
+    },
+    state: S
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { setTimeout(boot, 400); });
+  } else {
+    setTimeout(boot, 400);
+  }
+})();
