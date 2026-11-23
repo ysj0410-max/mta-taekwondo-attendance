@@ -9275,7 +9275,8 @@
             '「💳 원비 관리」와 「📊 수납 리포트」에 바로 반영했어요.</div>',
           actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
         });
-        toast('원비 기록 ' + fmtWon(res.added) + '칸을 동기화했어요');
+        toast(res.added ? ('원비 기록 ' + fmtWon(res.added) + '칸을 동기화했어요')
+          : (res.filled ? ('빈 항목 ' + res.filled + '칸을 채웠어요') : '이미 반영된 기록이에요 · 새로 넣은 칸 없음'));
       });
     });
   }
