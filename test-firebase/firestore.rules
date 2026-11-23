@@ -1,7 +1,7 @@
 rules_version = '2';
 
 /* =============================================================================
-   경희대MTA태권도 — Firestore 보안 규칙 (Firebase 테스트 버전 · v3)
+   경희대MTA태권도 — Firestore 보안 규칙 (Firebase 테스트 버전 · v4)
    -----------------------------------------------------------------------------
    구조
      dojangs/{도장ID}/roles/{사용자UID}          role: "admin" | "tablet"
@@ -13,7 +13,7 @@ rules_version = '2';
      dojangs/{도장ID}/meta/{settings|feeTable|smsTemplates|couponTypes|logs|muted|admin}
      dojangs/{도장ID}/meta/kioskConfig            출석 화면 최소 설정 (태블릿 읽기 허용)
 
-   원칙 (v3 — v2 의 권한·개인정보 분리 위에 "칸(필드) 제한"과 "출결 위조 방지"를 더함)
+   원칙 (v4 — v3 의 권한·개인정보·칸 제한 위에 "출결 시간 형식"을 더 엄격하게)
      1) 로그인하지 않은 사람은 읽기도 쓰기도 전부 차단
      2) 관리자 계정(role=admin)만 개인정보·원비·상담·설정(meta)에 접근
      3) 출석 태블릿 계정(role=tablet)이 읽을 수 있는 것은 딱 세 가지
@@ -31,6 +31,8 @@ rules_version = '2';
           · attendanceEvents 쓰기: 허용 칸(hasOnly)만
           · 태블릿의 출결 만들기: 그 도장에 실제로 있는 원생(kioskStudents 에 존재)만,
             문서 ID 가 {날짜}_{원생ID}_{in|out} 와 정확히 같아야 함
+     7) v4 — 출결 시간을 실제 시계 시각으로 한정 (00:00~23:59)
+          · 예전 검사([0-2][0-9])는 24:00 · 29:59 처럼 없는 시각을 통과시켰다 → ([01][0-9]|2[0-3]) 로 막음
    ============================================================================= */
 
 service cloud.firestore {
@@ -74,7 +76,7 @@ service cloud.firestore {
     /* 출결 문서 한 건의 모양 검사
          · 필수 칸: date · studentId · kind · time
          · 허용 칸 밖의 칸이 하나라도 있으면 거부 (hasOnly)
-         · 시간 HH:MM, 종류 in/out, 날짜 YYYY-MM-DD, 원생 ID 문자열 길이 */
+         · 시간 00:00~23:59 (24:00~29:59 거부), 종류 in/out, 날짜 YYYY-MM-DD, 원생 ID 문자열 길이 */
     function validEvent(data) {
       return data.keys().hasAll(['date', 'studentId', 'kind', 'time'])
              && data.keys().hasOnly(eventFields())
@@ -84,7 +86,8 @@ service cloud.firestore {
              && data.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
              && data.time is string
              && data.time.size() == 5
-             && data.time.matches('[0-2][0-9]:[0-5][0-9]')
+             /* 시계 시간만 허용: 00:00 ~ 23:59 (24:00 · 29:59 같은 없는 시각은 거부) */
+             && data.time.matches('([01][0-9]|2[0-3]):[0-5][0-9]')
              && data.studentId is string
              && data.studentId.size() > 0
              && data.studentId.size() <= 120;

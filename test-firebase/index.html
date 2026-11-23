@@ -1687,6 +1687,34 @@
                   </div>
                   <div class="tiny-note" id="fb-sync-note" style="margin-top:4px">마지막 동기화: 아직 없음</div>
 
+                  <div class="fb-sec" id="fb-perm-sec">
+                    <div class="fb-sec-head"><b>🧪 모의 권한 테스트 (가짜 원생 3명)</b><span class="chip wait" id="fb-perm-tag">아직 실행 전</span></div>
+                    <div class="tiny-note" style="margin:0 0 8px">
+                      실제 Firebase에 연결하기 <b>전에</b>, 가짜 원생 3명(김민준·이서연·박지호)으로
+                      <b>관리자 PC</b>와 <b>출석 태블릿</b>이 보는 정보가 어떻게 다른지 이 화면에서 바로 확인합니다.
+                      가짜 원생은 <b>화면 안에서만</b> 쓰고, 이 기기에 저장된 원생 명단은 건드리지 않습니다.
+                    </div>
+                    <div class="form-actions" style="flex-wrap:wrap;margin:0">
+                      <button class="btn btn-mint btn-sm" id="fb-perm-run">🧪 모의 권한 테스트 준비 (가짜 원생 3명)</button>
+                    </div>
+                    <div class="tiny-note" id="fb-perm-result" style="margin-top:8px">위 버튼을 누르면 관리자 PC와 태블릿의 차이를 한 줄로 보여 줍니다.</div>
+                    <div id="fb-perm-wrap" style="display:none;margin-top:8px">
+                      <div class="fb-perm-cards" id="fb-perm-cards"></div>
+                      <div class="tablewrap" style="margin-top:8px">
+                        <table class="tb">
+                          <thead><tr><th>Firestore 경로</th><th id="fb-perm-th-admin">관리자 PC</th><th id="fb-perm-th-tablet">출석 태블릿</th></tr></thead>
+                          <tbody id="fb-perm-table"></tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <div class="help" style="margin-top:8px">
+                      태블릿에 내려가는 것은 <b>kioskStudents</b>(이름·부서·수업·띠·상태)와 <b>출결·출석 화면 설정</b>뿐입니다.
+                      원생 전화번호·생년월일·티콘 ID·특이사항(<b>students</b>), 원비(<b>tuition</b>), 상담(<b>counsel</b>)은 서버 규칙 <b>firestore.rules</b>가 차단합니다.
+                      이 표의 「차단」은 그 규칙의 허용 목록과 같게 계산한 값이고, 실제 차단은 Firebase에 연결한 뒤 서버가 합니다.
+                      두 기기 동기화 자체를 연습하려면 「🧪 모의 모드로 켜기」 후 <b>탭 2개</b>로 열어 보세요(자세한 순서는 SETUP_GUIDE 12장).
+                    </div>
+                  </div>
+
                   <div class="fb-sec">
                     <div class="fb-sec-head"><b>🔑 Firebase 로그인 — 역할마다 다른 계정</b><span class="tiny-note" id="fb-auth">로그인 안 됨</span></div>
                     <div class="tiny-note" id="fb-role-hint" style="margin:0 0 8px">이 기기의 역할은 <b>관리자 PC</b> 입니다 — 아래 <b>관리자 PC 계정</b>으로 로그인하세요.</div>

@@ -778,6 +778,140 @@
     renderAll();
   }
 
+  /* ---------- 🧪 모의 권한 테스트 — 가짜 원생 3명 (관리자 PC ↔ 출석 태블릿) ----------
+     실제 Firebase에 연결하기 전에도 두 역할이 보는 정보의 차이를 이 화면에서 바로 확인한다.
+     · 가짜 원생은 이 파일 안에서만 만들고, 기기 저장소(tdk.students.v1)에는 절대 쓰지 않는다
+       (같은 주소의 실제 원생 명단을 건드리지 않기 위해서).
+     · 태블릿 쪽 카드는 엔진이 실제로 만들어 보내는 FB.kioskStudentBody() 결과를 그대로 쓴다
+       (firestore.rules 의 kioskFields() 와 같은 칸만 남는다).
+     · 태블릿 허용 경로는 규칙 isTablet 의 허용 목록과 같다:
+         kioskStudents(읽기) · attendanceEvents(읽기 + 새로 만들기) · meta/kioskConfig(읽기)
+       나머지 경로의 실제 거부는 서버 규칙이 하고, tests/test_rules.py 가 시나리오로 검증한다. */
+  var PERM_STUDENTS = [
+    { id: 'demo-minjun', name: '김민준', division: '초등부', course: '16회', belt: '파란띠', status: 'active',
+      phone: '010-1111-2222', birthDate: '2016-05-12', tconId: 'tkd_demo1', note: '땅콩 알레르기 — 간식 확인',
+      tuition: { month: '2026-11', amount: 180000, paid: true, method: '카드' },
+      counsel: { count: 2, last: '2026-11-18 · 전화 · 승급 상담' } },
+    { id: 'demo-seoyeon', name: '이서연', division: '유치부', course: '8회', belt: '노란띠', status: 'active',
+      phone: '010-2222-3333', birthDate: '2020-09-18', tconId: 'tkd_demo2', note: '차량 하원 — 화·목 5시 30분',
+      tuition: { month: '2026-11', amount: 160000, paid: false, method: '' },
+      counsel: { count: 1, last: '2026-11-05 · 대면 · 차량 변경' } },
+    { id: 'demo-jiho', name: '박지호', division: '초등부', course: '12회', belt: '빨간띠', status: 'paused',
+      phone: '010-3333-4444', birthDate: '2014-02-27', tconId: 'tkd_demo3', note: '휴관 중 — 12월 복귀 예정',
+      tuition: { month: '2026-11', amount: 180000, paid: true, method: '현금' },
+      counsel: { count: 3, last: '2026-10-28 · 문자 · 휴관 안내' } }
+  ];
+  var PERM_PATHS = [
+    { path: 'students', label: '원생 전체 정보 (연락처·생년월일·티콘 ID·비고)', admin: '읽기·쓰기', tablet: '' },
+    { path: 'tuition', label: '원비 (금액·납부·수단)', admin: '읽기·쓰기', tablet: '' },
+    { path: 'counsel', label: '상담 기록', admin: '읽기·쓰기', tablet: '' },
+    { path: 'shuttle', label: '차량 운행', admin: '읽기·쓰기', tablet: '' },
+    { path: 'coupons', label: '쿠폰 지급 현황', admin: '읽기·쓰기', tablet: '' },
+    { path: 'meta/settings · logs · admin', label: '도장 설정·문자 로그·관리자 계정', admin: '읽기·쓰기', tablet: '' },
+    { path: 'kioskStudents', label: '출석 화면용 최소 정보 (이름·부서·수업·띠·상태)', admin: '읽기·쓰기', tablet: '읽기' },
+    { path: 'attendanceEvents', label: '출결 기록', admin: '읽기·쓰기', tablet: '읽기 + 새로 만들기' },
+    { path: 'meta/kioskConfig', label: '출석 화면 최소 설정', admin: '읽기·쓰기', tablet: '읽기' }
+  ];
+  var PERM_PRIVATE = ['phone', 'birthDate', 'tconId', 'note', 'tuitionDay', 'siblingDiscount', 'monthlyFee', 'attendCount'];
+
+  function permEsc(v) {
+    return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function permSanitize() {
+    return PERM_STUDENTS.map(function (s) {
+      var body = (typeof FB.kioskStudentBody === 'function') ? FB.kioskStudentBody(s) : null;
+      return { full: s, kiosk: body };
+    });
+  }
+  function permLeaks(rows) {
+    var n = 0;
+    (rows || []).forEach(function (r) {
+      if (!r || !r.kiosk) { n++; return; }
+      PERM_PRIVATE.forEach(function (k) {
+        var v = r.kiosk[k];
+        if (v !== undefined && v !== null && String(v) !== '') { n++; }
+      });
+    });
+    return n;
+  }
+  /* 지금 이 기기의 역할 — 서버 roles 로 확인된 값이 있으면 그 값, 없으면 화면 선택값 */
+  function permRoleNow() {
+    var er = engineRole();
+    if (er === 'admin' || er === 'tablet') { return er; }
+    return S.cfg.role === 'tablet' ? 'tablet' : 'admin';
+  }
+  function permRow(label, value, locked) {
+    return '<div class="fb-perm-row"><span>' + label + '</span><b>' +
+      (locked ? '🔒 ' + permEsc(value) : permEsc(value)) + '</b></div>';
+  }
+  function permCardsHtml(rows, current) {
+    var adminCards = rows.map(function (r) {
+      var s = r.full, t = s.tuition || {}, c = s.counsel || {};
+      return '<div class="fb-perm-card">' +
+        '<div class="fb-perm-name">' + permEsc(s.name) +
+          ' <span class="tiny-note">' + permEsc(s.division) + ' · ' + permEsc(s.course) + '</span></div>' +
+        permRow('띠 / 상태', s.belt + ' · ' + (s.status === 'paused' ? '휴관' : '재원')) +
+        permRow('연락처', s.phone) + permRow('생년월일', s.birthDate) +
+        permRow('티콘 ID', s.tconId) + permRow('비고', s.note) +
+        permRow('원비', t.month + ' ' + numText(t.amount) + '원 ' + (t.paid ? '납부(' + t.method + ')' : '미납')) +
+        permRow('상담', c.count + '건 · ' + c.last) +
+        '</div>';
+    }).join('');
+    var tabletCards = rows.map(function (r) {
+      var s = r.full, k = r.kiosk || {};
+      return '<div class="fb-perm-card deny">' +
+        '<div class="fb-perm-name">' + permEsc(k.name || s.name) +
+          ' <span class="tiny-note">' + permEsc(k.division) + ' · ' + permEsc(k.course) + '</span></div>' +
+        permRow('띠 / 상태', (k.belt || '') + ' · ' + (k.status === 'paused' ? '휴관' : '재원')) +
+        permRow('연락처', '받지 않음', true) + permRow('생년월일', '받지 않음', true) +
+        permRow('티콘 ID', '받지 않음', true) + permRow('비고', '받지 않음', true) +
+        permRow('원비', '차단 (tuition)', true) + permRow('상담', '차단 (counsel)', true) +
+        '</div>';
+    }).join('');
+    return '<div class="fb-perm-col' + (current === 'admin' ? ' here' : '') + '">' +
+        '<div class="fb-perm-col-head">👨‍💼 관리자 PC · students <span class="chip ok">전체 정보</span>' +
+          (current === 'admin' ? ' <span class="chip wait">이 기기</span>' : '') + '</div>' + adminCards + '</div>' +
+      '<div class="fb-perm-col' + (current === 'tablet' ? ' here' : '') + '">' +
+        '<div class="fb-perm-col-head">📱 출석 태블릿 · kioskStudents <span class="chip wait">최소 정보</span>' +
+          (current === 'tablet' ? ' <span class="chip wait">이 기기</span>' : '') + '</div>' + tabletCards + '</div>';
+  }
+  function permTableHtml() {
+    return PERM_PATHS.map(function (p) {
+      var tablet = p.tablet
+        ? '<span class="chip ok">✅ ' + p.tablet + '</span>'
+        : '<span class="chip off">❌ 차단</span>';
+      return '<tr><td><b>' + permEsc(p.path) + '</b><br><span class="tiny-note">' + permEsc(p.label) + '</span></td>' +
+        '<td><span class="chip ok">✅ ' + p.admin + '</span></td><td>' + tablet + '</td></tr>';
+    }).join('');
+  }
+  /* 버튼을 누를 때 실행 — 결과를 1줄로 돌려준다(테스트에서도 그대로 확인) */
+  function runPermDemo() {
+    var current = permRoleNow();
+    var rows = permSanitize();
+    var leak = permLeaks(rows);
+    var blocked = PERM_PATHS.filter(function (p) { return !p.tablet; }).length;
+    setHtml('fb-perm-cards', permCardsHtml(rows, current));
+    setHtml('fb-perm-table', permTableHtml());
+    setText('fb-perm-th-admin', '관리자 PC' + (current === 'admin' ? ' (이 기기)' : ''));
+    setText('fb-perm-th-tablet', '출석 태블릿' + (current === 'tablet' ? ' (이 기기)' : ''));
+    show('fb-perm-wrap', true);
+    var tag = $('fb-perm-tag');
+    if (tag) {
+      tag.textContent = current === 'admin' ? '관리자 PC 시점' : '출석 태블릿 시점';
+      tag.className = 'chip ' + (current === 'admin' ? 'ok' : 'wait');
+    }
+    var line = '🧪 테스트 결과 — 관리자 PC: students ' + rows.length + '명 전체(연락처·생년월일·비고·원비·상담) 읽기·쓰기 가능 · ' +
+      '출석 태블릿: kioskStudents ' + rows.length + '명 최소 정보만 수신(개인정보 ' + leak + '칸) · ' +
+      'students·tuition·counsel 등 ' + blocked + '경로 차단' + (leak ? ' ⚠️ 개인정보가 샜습니다!' : '');
+    var el = $('fb-perm-result');
+    if (el) {
+      el.textContent = line + ' — 이 기기 역할 「' + (current === 'admin' ? '관리자 PC' : '출석 태블릿') + '」 시점으로 표시했습니다.';
+      el.style.color = leak ? '#c0392b' : '#0b7a55';
+      el.style.fontWeight = '800';
+    }
+    return { role: current, students: rows.length, leak: leak, blocked: blocked, line: line };
+  }
+
   /* ---------- 화면 아래 작은 상태 알약 ---------- */
   function ensurePill() {
     if ($('fb-pill')) { return; }
@@ -798,6 +932,7 @@
       ['fb-tablet-logout', function () { logoutAs('tablet'); }],
       ['fb-mig-preview', onPreview], ['fb-mig-run', onMigrate],
       ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-usage-reset', onUsageReset],
+      ['fb-perm-run', runPermDemo],
       ['fb-guide', onGuide]
     ];
     map.forEach(function (pair) {
@@ -867,6 +1002,10 @@
     connectMock: connectMock,
     connectFirestore: connectFirestore,
     disconnect: disconnect,
+    permDemo: runPermDemo,
+    permData: function () {
+      return { students: PERM_STUDENTS, paths: PERM_PATHS, sanitize: permSanitize, leaks: permLeaks, role: permRoleNow };
+    },
     flush: function () { return S.engine ? S.engine.flush() : null; },
     preview: onPreview,
     plan: function () { return S.plan; },
