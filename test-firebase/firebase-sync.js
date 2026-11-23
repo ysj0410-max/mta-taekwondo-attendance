@@ -447,6 +447,34 @@
       smsByAdmin: true
     };
   }
+  /* =========================================================================
+     3-2. 🧹 태블릿 개인정보 비우기(얼굴 유지) — 대상 칸과 남길 칸
+     -------------------------------------------------------------------------
+     · 원생 객체에서 남기는 칸: id · name · division · course · belt · status
+       (+ 동기화 메타 _ver 등 _ 로 시작하는 칸)
+     · 이 기기에서 비우는 저장 키: 원비·상담·차량·쿠폰·문자로그·단가표·
+       문자문구·효과음·관리자 얼굴 — 태블릿 화면에 필요 없는 것들
+     · 절대 건드리지 않는 키: tdk.faces.v1(원생 얼굴) · tdk.fbConfig.v1 ·
+       tdk.fbDevice.v1 · tdk.fbState.v1 · tdk.fbOutbox.v1 · tdk.fbShadow.v1 · tdk.fbUsage.v1
+     ========================================================================= */
+  var SCRUB_KEEP_FIELDS = ['id', 'name', 'division', 'course', 'belt', 'status'];
+  var SCRUB_CLEAR_NAMES = ['tuition', 'counsel', 'shuttle', 'coupons', 'couponTypes', 'logs', 'feeTable', 'smsTemplates', 'muted', 'adminFace'];
+  var SCRUB_EMPTY = {
+    tuition: {}, counsel: [], shuttle: [], coupons: [], couponTypes: [], logs: [],
+    feeTable: {}, smsTemplates: [], muted: false, adminFace: []
+  };
+  /* 얼굴 특징값 보관함은 객체({id:{…}}) 또는 배열([{…}]) 둘 다 쓴다 */
+  function countFaces(value) {
+    if (Array.isArray(value)) {
+      return value.filter(function (f) { return !!f && typeof f === 'object'; }).length;
+    }
+    if (!isPlain(value)) { return 0; }
+    return Object.keys(value).filter(function (k) {
+      var f = value[k];
+      return !!f && typeof f === 'object';
+    }).length;
+  }
+
   /* 이 도장 데이터에 개인정보가 들어 있는 원생이 몇 명인지 (태블릿 안내용) */
   function countPrivateStudents(list) {
     var n = 0;
@@ -893,6 +921,57 @@
         if (after === 'admin') { rescanLocal(); }
       }
       return after;
+    }
+
+    /* ---------- 🧹 태블릿 개인정보 비우기 (등록된 얼굴은 그대로) ----------
+       태블릿 화면에 필요한 것은 이름·부서·수업·띠·상태뿐이다.
+       · 「출석 태블릿」으로 확인된 기기에서만 실행한다 — 관리자 PC 의 원본을 지우지 않게.
+       · tdk.faces.v1(원생 얼굴 특징값)과 Firebase 연결 설정은 절대 건드리지 않는다.
+       · 서버(Firestore)에는 아무것도 쓰거나 지우지 않는다 — 이 기기 저장소만 비운다.
+         writeValue 를 써서 로컬 변경 감지·전송 큐를 타지 않게 한다(태블릿은 어차피 올릴 수 없다). */
+    function scrubTabletPII() {
+      var role = effectiveRole();
+      if (role !== 'tablet') {
+        /* 관리자 PC·역할 미확인 기기에서는 실행하지 않는다 */
+        return { ok: false, reason: role === 'admin' ? 'admin-role' : 'role-unverified', role: role };
+      }
+      var faces = readValue('faces');
+      var faceCount = countFaces(faces);
+      var students = readValue('students');
+      var list = Array.isArray(students) ? students : [];
+      var scrubbed = 0;
+      var next = list.map(function (s) {
+        if (!isPlain(s)) { return s; }
+        var had = Object.keys(s).some(function (k) {
+          return k.charAt(0) !== '_' && SCRUB_KEEP_FIELDS.indexOf(k) === -1;
+        });
+        if (had) { scrubbed++; }
+        var out = {};
+        /* 동기화 메타(_ver·_updatedAt·_fieldMeta …)는 그대로 두고 나머지는 허용 목록만 남긴다 */
+        Object.keys(s).forEach(function (k) { if (k.charAt(0) === '_') { out[k] = s[k]; } });
+        SCRUB_KEEP_FIELDS.forEach(function (f) { if (hasOwn(s, f)) { out[f] = s[f]; } });
+        return out;
+      });
+      writeValue('students', next);
+      var cleared = [];
+      SCRUB_CLEAR_NAMES.forEach(function (name) {
+        var e = entryByName(name);
+        if (!e) { return; }
+        writeValue(name, clone(SCRUB_EMPTY[name]));
+        cleared.push(e.key);
+      });
+      /* 지운 뒤 남은 얼굴은 100% 그대로 — 한 번 더 세어 돌려준다 */
+      var facesAfter = countFaces(readValue('faces'));
+      return {
+        ok: true,
+        role: role,
+        students: scrubbed,
+        studentsLeft: next.length,
+        faces: facesAfter,
+        facesBefore: faceCount,
+        cleared: cleared,
+        kept: ['tdk.faces.v1', 'tdk.fbConfig.v1', 'tdk.fbDevice.v1', 'tdk.fbState.v1', 'tdk.fbOutbox.v1', 'tdk.fbShadow.v1', 'tdk.fbUsage.v1']
+      };
     }
 
     /* 역할이 풀린 뒤: 지금 기기의 값을 다시 훑어 서버와 다른 문서만 큐에 올린다 */
@@ -1854,6 +1933,8 @@
          이 값만으로는 관리자 권한이 생기지 않는다 */
       setRole: function (r) { return setDeviceRole(r); },
       setDeviceRole: setDeviceRole,
+      scrubTabletPII: scrubTabletPII,
+      countPrivateStudents: function () { return countPrivateStudents(readValue('students')); },
       role: function () { return effectiveRole(); },
       effectiveRole: effectiveRole,
       deviceRole: function () { return deviceRole; },
@@ -2271,6 +2352,9 @@
     kioskStudentBody: kioskStudentBody,
     kioskConfigBody: kioskConfigBody,
     countPrivateStudents: countPrivateStudents,
+    countFaces: countFaces,
+    SCRUB_KEEP_FIELDS: SCRUB_KEEP_FIELDS,
+    SCRUB_CLEAR_NAMES: SCRUB_CLEAR_NAMES,
     LOCAL_KEYS: LOCAL_KEYS,
     buildRegistry: buildRegistry,
     createEngine: createEngine,

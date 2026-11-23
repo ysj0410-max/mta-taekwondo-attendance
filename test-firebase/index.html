@@ -1646,7 +1646,7 @@
         <div id="admin-settings" class="ov" style="display:none">
           <div class="panel" id="admin-fb-panel">
                 <div class="panel-head">
-                  <h3>🔥 Firebase 실시간 동기화 <span class="chip fb-test-tag">테스트 v5</span></h3>
+                  <h3>🔥 Firebase 실시간 동기화 <span class="chip fb-test-tag">테스트 v6</span></h3>
                   <div class="spacer"></div>
                   <span class="chip wait" id="fb-state">⚪ 미연결(로컬 모드)</span>
                 </div>
@@ -1685,6 +1685,19 @@
                   <div class="tiny-note" style="margin-top:4px;color:#8a6d3b">
                     ⚠️ 위 「이 기기 역할」은 <b>안내·연습용</b>입니다 — 실제 권한은 <b>로그인한 계정의 서버 <code>roles/{UID}</code> 문서</b>가 정합니다. 서버 역할이 <code>tablet</code>(또는 미등록)이면 여기서 「관리자 PC」를 골라도 관리자 권한(원생 개인정보·원비·이전)은 생기지 않습니다.
                   </div>
+                  <div class="fb-sec" id="fb-scrub-sec">
+                    <div class="fb-sec-head"><b>🧹 이 태블릿의 개인정보 비우기</b><span class="chip wait" id="fb-scrub-tag">역할 확인 전</span></div>
+                    <div class="tiny-note" id="fb-scrub-note" style="margin:0 0 8px;line-height:1.6">
+                      태블릿에는 <b>이름·부서·수업·띠·상태</b>만 있으면 됩니다.
+                      이 버튼은 <b>전화번호·생년월일·티콘 ID·특이사항·원비·상담·차량·쿠폰·문자 로그</b>를
+                      <b>이 기기에서만</b> 비웁니다. <b>등록된 관원 얼굴(tdk.faces.v1)과 Firebase 연결 설정은 그대로 남습니다.</b>
+                    </div>
+                    <div class="form-actions" style="margin:0;flex-wrap:wrap">
+                      <button class="btn btn-danger btn-sm" id="fb-tablet-scrub" disabled>🧹 태블릿 개인정보만 비우기 (얼굴 유지)</button>
+                    </div>
+                    <div class="tiny-note" id="fb-scrub-state" style="margin-top:6px">출석 태블릿 역할에서만 쓸 수 있습니다 — 서버(Firestore)의 자료는 지우지 않습니다.</div>
+                  </div>
+
                   <div class="tiny-note" id="fb-sync-note" style="margin-top:4px">마지막 동기화: 아직 없음</div>
 
                   <div class="fb-sec" id="fb-perm-sec">

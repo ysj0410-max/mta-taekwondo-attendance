@@ -351,7 +351,7 @@
     }
     var tag = $('fb-pill-tag');
     if (tag && typeof window.innerWidth === 'number') {
-      tag.textContent = window.innerWidth <= 760 ? '🧪 테스트 v5' : '🧪 Firebase 테스트 v5';
+      tag.textContent = window.innerWidth <= 760 ? '🧪 테스트 v6' : '🧪 Firebase 테스트 v6';
     }
     setText('fb-usage-note', S.engine
       ? (S.engine.usage.snapshot().date + ' 기준 · 이 기기에서 센 추정치 (PC·태블릿 합산 아님)')
@@ -461,6 +461,86 @@
     return r === 'admin' ? '관리자 PC' : (r === 'tablet' ? '출석 태블릿' : String(r || '역할 없음'));
   }
 
+  /* ---------- 🧹 태블릿 개인정보 비우기 (얼굴 유지) ----------
+     태블릿 역할로 확인된 기기에서만 열린다 — 관리자 PC 의 원본을 실수로 지우지 않게.
+     실제 삭제는 엔진이 하며(scrubTabletPII), 여기서는 확인창·화면 갱신만 맡는다. */
+  function localJSON(key, fallback) { return readJSON(key, fallback); }
+  function scrubPrivateCount() {
+    return FB.countPrivateStudents ? FB.countPrivateStudents(localJSON('tdk.students.v1', [])) : 0;
+  }
+  function scrubFaceCount() {
+    return FB.countFaces ? FB.countFaces(localJSON('tdk.faces.v1', null)) : 0;
+  }
+  function renderScrub() {
+    var btn = $('fb-tablet-scrub');
+    var tag = $('fb-scrub-tag');
+    var state = $('fb-scrub-state');
+    var role = engineRole();
+    var isTab = role === 'tablet';
+    if (btn) { btn.disabled = !isTab; }
+    if (tag) {
+      tag.textContent = isTab ? '이 기기는 출석 태블릿'
+        : (role === 'admin' ? '관리자 PC · 사용 안 함' : '역할 확인 전');
+      tag.className = 'chip ' + (isTab ? 'ok' : 'wait');
+    }
+    if (!state) { return; }
+    if (!isTab) {
+      state.textContent = role === 'admin'
+        ? '관리자 PC 에서는 이 버튼을 쓸 수 없습니다 — 관리자의 원생·원비 자료를 실수로 지우지 않도록 태블릿 역할에서만 동작합니다.'
+        : '역할을 확인한 뒤 「출석 태블릿」으로 확인되면 쓸 수 있습니다 — 역할 확인 전에는 아무 자료도 지우지 않습니다.';
+      return;
+    }
+    var n = scrubPrivateCount();
+    var faces = scrubFaceCount();
+    state.textContent = (n > 0
+      ? '이 기기에 원생 개인정보가 ' + numText(n) + '명분 남아 있습니다'
+      : '이 기기의 원생 명단에는 개인정보가 없습니다') +
+      ' · 등록 얼굴 ' + numText(faces) + '명은 그대로 유지됩니다.';
+  }
+
+  var SCRUB_CONFIRM_TEXT = '전화번호·생년월일·원비·상담·차량·쿠폰 기록을 이 태블릿에서 지웁니다. 등록된 관원 얼굴(tdk.faces.v1)과 Firebase 연결 설정은 그대로 남습니다.';
+
+  function reloadApp() {
+    try {
+      if (window.__tdk && window.__tdk.sync && typeof window.__tdk.sync.reload === 'function') {
+        return window.__tdk.sync.reload();
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function onScrubTablet() {
+    var role = engineRole();
+    if (!S.engine || role !== 'tablet') {
+      S.msg = role === 'admin'
+        ? '🔒 관리자 PC 에서는 「태블릿 개인정보만 비우기」를 쓸 수 없습니다 — 출석 태블릿 역할인 기기에서 실행해 주세요.'
+        : '🔒 역할을 「출석 태블릿」으로 확인한 뒤 다시 눌러 주세요 — 지금은 아무 자료도 지우지 않았습니다.';
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    if (typeof window.confirm === 'function' && !window.confirm(SCRUB_CONFIRM_TEXT)) {
+      S.msg = '개인정보 비우기를 취소했습니다 — 아무것도 지우지 않았습니다.';
+      S.msgKind = '';
+      renderAll();
+      return;
+    }
+    var r = null;
+    try { r = S.engine.scrubTabletPII(); }
+    catch (e) { r = { ok: false, reason: 'error', error: FB.errorText(e) }; }
+    if (!r || !r.ok) {
+      S.msg = '⚠️ 개인정보를 비우지 못했습니다: ' + ((r && (r.error || r.reason)) || '알 수 없는 이유');
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    /* 화면(인메모리)도 비운 자료로 다시 읽어 즉시 반영한다 — 지운 기록이 화면에 남지 않게 */
+    reloadApp();
+    S.msg = '✅ 이 태블릿의 개인정보를 비웠습니다. 등록된 얼굴 ' + numText(r.faces) + '명은 그대로 유지됩니다.';
+    S.msgKind = 'ok';
+    renderAll();
+  }
+
   /* ---------- 유효 권한은 서버 roles 기준 ----------
      화면에서 고른 역할(S.cfg.role)은 "어떤 계정으로 로그인할지"를 고르는 값일 뿐이고,
      실제로 무엇을 할 수 있는지는 엔진이 서버 roles/{uid} 로 잠근 effectiveRole() 이 정한다. */
@@ -558,6 +638,7 @@
     renderQueue();
     renderMigration();
     renderAuth();
+    renderScrub();
   }
 
   /* ---------- 동작 ---------- */
@@ -991,7 +1072,7 @@
     var d = document.createElement('div');
     d.id = 'fb-pill';
     d.className = 'fb-pill';
-    d.innerHTML = '<span class="fb-pill-tag" id="fb-pill-tag">🧪 Firebase 테스트 v5</span><span class="fb-pill-state" id="fb-pill-state">⚪ 미연결(로컬 모드)</span>';
+    d.innerHTML = '<span class="fb-pill-tag" id="fb-pill-tag">🧪 Firebase 테스트 v6</span><span class="fb-pill-state" id="fb-pill-state">⚪ 미연결(로컬 모드)</span>';
     document.body.appendChild(d);
   }
 
@@ -1006,6 +1087,7 @@
       ['fb-mig-preview', onPreview], ['fb-mig-run', onMigrate],
       ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-usage-reset', onUsageReset],
       ['fb-perm-run', runPermDemo],
+      ['fb-tablet-scrub', onScrubTablet],
       ['fb-guide', onGuide]
     ];
     map.forEach(function (pair) {
@@ -1080,6 +1162,12 @@
       return { students: PERM_STUDENTS, paths: PERM_PATHS, sanitize: permSanitize, leaks: permLeaks, role: permRoleNow };
     },
     flush: function () { return S.engine ? S.engine.flush() : null; },
+    scrubTablet: onScrubTablet,
+    scrubConfirmText: SCRUB_CONFIRM_TEXT,
+    scrubState: function () {
+      return { role: engineRole(), privateStudents: scrubPrivateCount(), faces: scrubFaceCount(),
+        btnDisabled: !!($('fb-tablet-scrub') && $('fb-tablet-scrub').disabled) };
+    },
     preview: onPreview,
     plan: function () { return S.plan; },
     render: renderAll,
