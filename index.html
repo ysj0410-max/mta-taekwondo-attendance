@@ -1067,11 +1067,12 @@
     #view-attendance .card-title .dot{width:6px; height:6px}
     #cam-head-note{display:none}
     .ai-chip{font-size:9.5px; padding:2px 7px}
-    .stage{flex:0 0 auto; height:clamp(76px,10.5dvh,112px); margin:0 9px; border-radius:13px}
-    .stage-ph{gap:4px; padding:9px 10px 22px}
-    .stage-ph .ph-icon{display:none}
-    .stage-ph p{font-size:10.5px; line-height:1.4; max-width:250px; font-weight:700}
-    .stage-ph .ph-sub{display:none}
+    /* 카메라 화면: 세로 폰에서도 얼굴이 크게 비치도록 4:3에 가까운 높이로 (예전 76~112px는 너무 납작했다) */
+    .stage{flex:0 0 auto; height:clamp(230px,34dvh,320px); margin:0 9px; border-radius:13px}
+    .stage-ph{gap:8px; padding:14px 12px 26px}
+    .stage-ph .ph-icon{display:grid; width:54px; height:54px; border-radius:18px; font-size:25px; margin-bottom:0}
+    .stage-ph p{font-size:12.5px; line-height:1.5; max-width:280px; font-weight:600}
+    .stage-ph .ph-sub{display:block; font-size:10.5px}
     .stage-hud{left:7px; bottom:7px; padding:3px 8px; font-size:9.5px; gap:5px}
     .stage-tip{display:none}
     .cam-bar{flex-wrap:wrap; gap:6px; padding:7px 9px 9px}
@@ -1184,7 +1185,6 @@
     .dojo-name{font-size:14.5px}
     .mode-btn{font-size:13px; padding:8px 6px}
     .tab-btn{font-size:11.5px; padding:8px 8px}
-    .stage{height:clamp(72px,9.5dvh,96px)}
   }
 </style>
 </head>
@@ -7963,22 +7963,24 @@
   function attFindStudent(name, byName) {
     return byName[attNameKey(name)] || null;
   }
-  function attCreateStudent(name, phone) {
+  function attCreateStudent(name, phone, paused) {
     var s = {
       id: uid('stu'), name: String(name).trim(), phone: String(phone || '').trim(), className: '', division: '초등부',
       course: '', siblingDiscount: false, belt: '흰띠', attendCount: 0, lastAttendanceDate: '',
       grade: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '',
-      monthlyFee: null, status: 'active', pausedDate: '', pauseReason: ''
+      monthlyFee: null, status: paused ? 'paused' : 'active', pausedDate: '', pauseReason: ''
     };
     app.students.push(s);
     return s;
   }
 
-  /* 실제 반영 — parsed(records) + opts { mode: 'merge'|'replace', createMissing } */
+  /* 실제 반영 — parsed(records) + opts { mode: 'merge'|'replace', createMissing: false|true|'paused' }
+     createMissing: true → 재원생으로 새로 등록 · 'paused' → 휴관생으로 새로 등록 */
   function applyAttendanceImport(parsed, opts) {
     opts = opts || {};
     var mode = opts.mode === 'replace' ? 'replace' : 'merge';
-    var out = { added: 0, filled: 0, kept: 0, skipped: 0, created: 0, students: 0, cleared: 0, records: 0 };
+    var createPaused = opts.createMissing === 'paused';
+    var out = { added: 0, filled: 0, kept: 0, skipped: 0, created: 0, createdPaused: 0, students: 0, cleared: 0, records: 0 };
     if (!parsed || !parsed.records || !parsed.records.length) { return out; }
 
     var byName = {}, nameLists = {};
@@ -8001,11 +8003,12 @@
     parsed.records.forEach(function (rec) {
       var s = findStudent(rec);
       if (!s && opts.createMissing) {
-        s = attCreateStudent(rec.name, rec.phone);
+        s = attCreateStudent(rec.name, rec.phone, createPaused);
         var nk = attNameKey(rec.name);
         byName[nk] = byName[nk] || s;
         (nameLists[nk] = nameLists[nk] || []).push(s);
         out.created++;
+        if (createPaused) { out.createdPaused++; }
       }
       if (!s) { out.skipped++; return; }
       touched[s.id] = true;
@@ -8172,7 +8175,8 @@
         '</select></div>' +
         '<div class="field"><label>명단 외 이름</label><select class="input" id="attimp-missing">' +
         '<option value="skip">건너뛰기</option>' +
-        '<option value="create">관원으로 새로 등록</option>' +
+        '<option value="create">재원생으로 새로 등록</option>' +
+        '<option value="paused">🛌 휴관생으로 새로 등록 (월간 출석부에 같이 표시)</option>' +
         '</select></div>' +
         '</div>' +
         '<div class="field"><label>달력형 파일의 연·월 (파일에서 읽은 값 — 다르면 바꿔 주세요)</label>' +
@@ -8189,7 +8193,9 @@
         onAction: function (value) {
           if (value !== 'go') { return; }
           chosen.mode = el('attimp-mode') ? el('attimp-mode').value : 'merge';
-          chosen.createMissing = el('attimp-missing') ? el('attimp-missing').value === 'create' : false;
+          var missingPick = el('attimp-missing') ? el('attimp-missing').value : 'skip';
+          // skip | create(재원생) | paused(휴관생) — 예전에는 create만 true로 넘겼다
+          chosen.createMissing = missingPick === 'paused' ? 'paused' : (missingPick === 'create');
           var monthEl = el('attimp-month');
           if (monthEl && /^\d{4}-\d{2}$/.test(String(monthEl.value || ''))) {
             chosen.month = String(monthEl.value);
@@ -8215,7 +8221,11 @@
         var msg = '출결기록 동기화 완료 · 새 기록 ' + fmtWon(res.added) + '건' +
           (res.filled ? ' · 시간 채움 ' + res.filled + '건' : '') +
           (res.kept ? ' · 이미 있던 기록 ' + res.kept + '건 유지' : '') +
-          (res.created ? ' · 관원 ' + res.created + '명 새로 등록' : '') +
+          (res.created ? ' · ' + (res.createdPaused
+            ? (res.created === res.createdPaused
+              ? '휴관생 ' + res.createdPaused + '명'
+              : '휴관생 ' + res.createdPaused + '명 · 재원생 ' + (res.created - res.createdPaused) + '명')
+            : '관원 ' + res.created + '명') + ' 새로 등록' : '') +
           (res.skipped ? ' · 명단 외 ' + res.skipped + '건 건너뜀' : '') +
           ' · 관원 ' + res.students + '명 누적 출석 재계산';
         openModal({
@@ -10219,12 +10229,15 @@
       return;
     }
 
+    /* 바이트로 읽어 UTF-8 · EUC-KR(CP949) 을 가려 낸다 */
     var textReader = new FileReader();
     textReader.onload = function (e) {
-      applyPausedImport(rowsToStudents(parseCSV(e.target.result)), name, mode);
+      var text = '';
+      try { text = attDecodeCsvBytes(e && e.target ? e.target.result : null); } catch (err) { text = ''; }
+      applyPausedImport(rowsToStudents(parseCSV(text)), name, mode);
     };
     textReader.onerror = function () { toast('파일을 읽는 중 오류가 났어요.'); };
-    textReader.readAsText(file, 'utf-8');
+    textReader.readAsArrayBuffer(file);
   }
 
   function setStudentPausedField(id, field, value) {
@@ -12200,7 +12213,7 @@
     belt: ['띠', '급', '벨트', '품', 'belt', 'rank'],
     phone: ['연락처', '전화', '휴대폰', '핸드폰', '보호자', '학부모', '부모', 'phone', 'tel', 'mobile', 'contact'],
     attendCount: ['누적출석', '출석일수', '출석횟수', '승급출석', '총출석', '출석', 'attend', 'count'],
-    firstRegDate: ['첫등록일', '등록일', '가입일', '등록날짜', 'firstreg', 'regdate'],
+    firstRegDate: ['첫등록일', '등록일', '가입일', '등록날짜', '입학일', 'firstreg', 'regdate'],
     birthDate: ['생년월일', '생일', '생년월일자', '출생일', 'birthdate', 'birthday', 'birth', 'dob'],
     tconId: ['티콘id', '티콘아이디', '티콘', 'tconid', 'tcon'],
     tuitionDate: ['원비날짜', '원비 납부일', '원비납부일', '납부일', '수납일', 'tuitiondate', 'paiddate'],
@@ -12209,6 +12222,68 @@
     note: ['특이사항', '비고', '메모', 'note', 'remark', 'memo'],
     status: ['상태', '구분', 'status', 'state']
   };
+
+  /* ---------- 보호자 전화 번호 고르기 ----------
+     학원 프로그램(원생관리) 내보내기처럼 전화 열이 여러 개인 파일이 있다.
+       휴대전화 · 일반전화 · 어머님/모 전화(+Sms) · 아버님/부 전화(+Sms) · 기타전화(+Sms)
+     열 이름으로 어느 전화인지 표시해 두고, 행마다 값이 있는 열을 아래 순서로 고른다.
+       (1) 바로 뒤 Sms 열에 ☏ 같은 수신 표시가 있고 번호가 있는 열
+       (2) 모 전화 → 부 전화 → 보호자 → 휴대전화 → 기타·일반 전화
+     값이 빈 열은 건너뛴다(예전에는 휴대전화 열 하나만 보다가 비어 있으면 번호를 잃었다). */
+  var PHONE_KIND_RANK = { mother: 0, father: 1, guardian: 2, mobile: 3, other: 4, generic: 5 };
+  function phoneHeaderKind(text) {
+    var t = String(text == null ? '' : text).toLowerCase().replace(/\s+/g, '');
+    if (!t) { return ''; }
+    if (!/전화|연락|폰|phone|tel|mobile|contact|hp/.test(t)) { return ''; }
+    if (/어머|모친|모전화|모연락|모휴대|mother|mom/.test(t)) { return 'mother'; }
+    if (/아버|부친|부전화|부연락|부휴대|father|dad/.test(t)) { return 'father'; }
+    if (/보호자|학부모|부모|guardian|parent/.test(t)) { return 'guardian'; }
+    if (/휴대|핸드|모바일|mobile|cell/.test(t)) { return 'mobile'; }
+    if (/기타|일반|자택|집전화|other|home/.test(t)) { return 'other'; }
+    return 'generic';
+  }
+  /* 전화 열 바로 뒤의 「Sms·문자 수신」 열인지 */
+  function isSmsHeader(text) {
+    var t = String(text == null ? '' : text).toLowerCase().replace(/\s+/g, '');
+    if (!t || t.length > 10) { return false; }
+    return /sms|문자|수신/.test(t);
+  }
+  /* 행 하나에서 쓸 전화번호 — 후보 열 중 가장 알맞은 값(없으면 '') */
+  function phoneFromColumns(row, cols) {
+    var best = '', bestRank = 99999;
+    for (var i = 0; i < (cols || []).length; i++) {
+      var col = cols[i];
+      var val = String(row[col.c] == null ? '' : row[col.c]).trim();
+      if (digitsOnly(val).length < 4) { continue; }
+      var smsOn = col.sms !== null && col.sms !== undefined &&
+        String(row[col.sms] == null ? '' : row[col.sms]).trim() !== '';
+      var kind = PHONE_KIND_RANK[col.kind];
+      var rank = (smsOn ? 0 : 100) + (kind === undefined ? 5 : kind);
+      if (rank < bestRank) { bestRank = rank; best = val; }
+    }
+    return best;
+  }
+  /* 「12회-18만 / 형제」·「선수단-22만」·「입시반(중)-40만」처럼 횟수·과정 이름이 섞인 칸에서 수업과정만 뽑는다 */
+  function courseFromText(txt) {
+    var t = String(txt == null ? '' : txt);
+    if (!t) { return ''; }
+    var m = t.match(/(\d{1,2})\s*회/);
+    if (m) { var c = normalizeCourse(m[1] + '회'); if (c) { return c; } }
+    if (/시범/.test(t)) { return '시범단'; }
+    if (/선수/.test(t)) { return '선수단'; }
+    if (/입시/.test(t)) { return '입시반'; }
+    return '';
+  }
+  /* 「입시반(중)」처럼 부서를 괄호에 줄여 쓴 칸에서 부서를 뽑는다 */
+  function divisionFromCourseText(txt) {
+    var t = String(txt == null ? '' : txt);
+    if (!t) { return ''; }
+    if (/\(\s*중\s*\)|중등/.test(t)) { return '중등부'; }
+    if (/\(\s*고\s*\)|고등/.test(t)) { return '고등부'; }
+    if (/\(\s*유\s*\)|유치/.test(t)) { return '유치부'; }
+    if (/\(\s*초\s*\)|초등/.test(t)) { return '초등부'; }
+    return '';
+  }
 
   /* 엑셀·CSV의 날짜 표기를 YYYY-MM-DD로 맞춘다 (2016.5.12 · 2016년 5월 12일 · 20160512) */
   function normalizeImportDate(v) {
@@ -12275,13 +12350,22 @@
     for (var r = 0; r < limit; r++) {
       var row = rows[r] || [];
       var map = {};
+      var phoneCols = [];
       var score = 0;
       for (var c = 0; c < row.length; c++) {
+        var kind = phoneHeaderKind(row[c]);
+        if (kind) {
+          // 전화 열은 따로 모은다 — '부 전화'가 부서('부')로, '모 전화'가 다른 칸으로 새지 않게
+          phoneCols.push({ c: c, kind: kind, sms: (c + 1 < row.length && isSmsHeader(row[c + 1])) ? c + 1 : null });
+          score++;
+          continue;
+        }
         var f = matchField(row[c]);
         if (f && map[f] === undefined) { map[f] = c; score++; }
       }
+      if (phoneCols.length && map.phone === undefined) { map.phone = phoneCols[0].c; }
       if (map.name !== undefined && score >= 2) {
-        if (!best || score > best.score) { best = { index: r, map: map, score: score }; }
+        if (!best || score > best.score) { best = { index: r, map: map, score: score, phoneCols: phoneCols }; }
       }
     }
     return best;
@@ -12294,10 +12378,11 @@
     if (!rows.length) { return []; }
 
     var header = detectHeader(rows);
-    var map, start;
+    var map, start, phoneCols = [];
     if (header) {
       map = header.map;
       start = header.index + 1;
+      phoneCols = header.phoneCols || [];
     } else {
       map = { name: 0, className: 1, belt: 2, phone: 3 };
       start = 0;
@@ -12309,7 +12394,10 @@
       if (!name) { continue; }
       // 머리글이 반복되거나 합계 행인 경우 스킵
       if (matchField(name) === 'name') { continue; }
-      var phoneRaw = map.phone !== undefined ? row[map.phone] : '';
+      // 전화 열이 여러 개면 행마다 값이 있는 열에서 고른다(모 전화 → 부 전화 → 휴대전화 → 기타전화)
+      var phoneRaw = phoneCols.length
+        ? phoneFromColumns(row, phoneCols)
+        : (map.phone !== undefined ? row[map.phone] : '');
       var countRaw = map.attendCount !== undefined ? String(row[map.attendCount] == null ? '' : row[map.attendCount]) : '';
       var statusRaw = map.status !== undefined ? String(row[map.status] == null ? '' : row[map.status]) : '';
       var pausedRaw = map.pausedDate !== undefined ? String(row[map.pausedDate] == null ? '' : row[map.pausedDate]) : '';
@@ -12319,10 +12407,14 @@
         return map[f] === undefined ? '' : String(row[map[f]] == null ? '' : row[map[f]]).trim();
       };
       var importClass = cellOf('className');
-      var importDivision = normalizeDivision(cellOf('division')) || divisionFromText(importClass) || divisionFromText(cellOf('course'));
-      var importCourse = normalizeCourse(cellOf('course'));
+      var courseCell = cellOf('course');
+      var importDivision = normalizeDivision(cellOf('division')) || divisionFromText(importClass) ||
+        divisionFromText(courseCell) || divisionFromCourseText(courseCell);
+      var importCourse = normalizeCourse(courseCell) || courseFromText(courseCell);
       var sibRaw = cellOf('siblingDiscount');
-      var importSibling = /^(y|yes|o|예|형제|true|1|체크)$/i.test(sibRaw) || sibRaw.indexOf('형제') !== -1;
+      // 형제할인은 전용 열이 없어도 과정·반 칸의 「형제」 표시로 잡아 준다 (예: '12회-18만 / 형제')
+      var importSibling = /^(y|yes|o|예|형제|true|1|체크)$/i.test(sibRaw) || sibRaw.indexOf('형제') !== -1 ||
+        importClass.indexOf('형제') !== -1 || courseCell.indexOf('형제') !== -1;
       out.push({
         id: uid('stu'),
         name: name,
@@ -12410,13 +12502,79 @@
       return;
     }
 
+    /* 바이트로 읽어 UTF-8 · EUC-KR(CP949) 을 가려 낸다 — 학원 프로그램에서 받은 CSV가 CP949인 경우가 있다 */
     var textReader = new FileReader();
     textReader.onload = function (e) {
-      var rows = parseCSV(e.target.result);
-      applyImport(rowsToStudents(rows), name);
+      var text = '';
+      try { text = attDecodeCsvBytes(e && e.target ? e.target.result : null); } catch (err) { text = ''; }
+      applyImport(rowsToStudents(parseCSV(text)), name);
     };
     textReader.onerror = function () { toast('파일을 읽는 중 오류가 났어요.'); };
-    textReader.readAsText(file, 'utf-8');
+    textReader.readAsArrayBuffer(file);
+  }
+
+  /* 읽어 들인 명단을 기존 명단에 합친다(순수 계산) — 모달 없이 테스트할 수 있게 따로 둔다.
+     · 이름+보호자 번호가 같으면 그 관원
+     · 이름이 같고 기존 번호가 비어 있는 1명이면 새로 만들지 않고 번호만 채운다
+     · 이미 번호가 있는데 다른 번호면 동명이인으로 보고 따로 둔다 */
+  function mergeImportedStudents(students) {
+    var out = { added: 0, filled: 0, matched: 0 };
+    var existing = {};
+    var nameIndex = {};
+    app.students.forEach(function (s) {
+      existing[s.name + '|' + digitsOnly(s.phone)] = s;
+      (nameIndex[s.name] = nameIndex[s.name] || []).push(s);
+    });
+    (students || []).forEach(function (s) {
+      var digits = digitsOnly(s.phone);
+      var key = s.name + '|' + digits;
+      var hit = existing[key];
+      // 이름은 같은데 기존 관원의 전화번호가 비어 있던 경우 — 새 관원을 만들지 않고 번호만 채운다
+      if (!hit && digits) {
+        var cands = nameIndex[s.name] || [];
+        if (cands.length === 1 && !digitsOnly(cands[0].phone)) { hit = cands[0]; }
+      }
+      if (!hit) {
+        app.students.push(s);
+        existing[key] = s;
+        (nameIndex[s.name] = nameIndex[s.name] || []).push(s);
+        out.added++;
+        return;
+      }
+      out.matched++;
+      // 기존 관원의 보호자 번호가 비어 있으면 새로 읽은 번호로 채운다(이미 있으면 덮지 않음)
+      if (!String(hit.phone || '').trim() && digits) {
+        hit.phone = normalizePhone(s.phone);
+        out.filled++;
+        if (!existing[key]) { existing[key] = hit; }
+      }
+      // 파일이 휴관(상태·구분 열)으로 표시한 기존 관원만 휴관생으로 바꾼다
+      if (s.status === 'paused') {
+        hit.status = 'paused';
+        if (isDateKey(s.pausedDate)) { hit.pausedDate = s.pausedDate; }
+        else if (!isDateKey(hit.pausedDate)) { hit.pausedDate = todayKey(); }
+        if (s.pauseReason) { hit.pauseReason = s.pauseReason; }
+      }
+      // 첫 등록일·생년월일·티콘 ID·원비 날짜는 비어 있을 때만 채운다(직접 고친 값을 덮지 않음)
+      if (!isDateKey(hit.firstRegDate) && isDateKey(s.firstRegDate)) {
+        hit.firstRegDate = s.firstRegDate;
+      }
+      if (!isDateKey(hit.birthDate) && isDateKey(s.birthDate)) {
+        hit.birthDate = s.birthDate;
+      }
+      if (!String(hit.tconId || '').trim() && s.tconId) {
+        hit.tconId = s.tconId;
+      }
+      // 특이사항·비고도 직접 고친 값이 있으면 그대로 두고, 비어 있을 때만 채운다
+      if (!noteOf(hit) && noteOf(s)) {
+        hit.note = noteOf(s);
+      }
+      if (!tuitionDayOf(hit) && tuitionDayOf(s)) {
+        hit.tuitionDay = tuitionDayOf(s);
+        delete hit.tuitionDate;
+      }
+    });
+    return out;
   }
 
   function applyImport(students, fileName) {
@@ -12444,37 +12602,7 @@
       if (choice === 'replace') {
         app.students = students;
       } else {
-        var existing = {};
-        app.students.forEach(function (s) { existing[s.name + '|' + digitsOnly(s.phone)] = s; });
-        students.forEach(function (s) {
-          var hit = existing[s.name + '|' + digitsOnly(s.phone)];
-          if (!hit) { app.students.push(s); return; }
-          // 파일이 휴관(상태·구분 열)으로 표시한 기존 관원만 휴관생으로 바꾼다
-          if (s.status === 'paused') {
-            hit.status = 'paused';
-            if (isDateKey(s.pausedDate)) { hit.pausedDate = s.pausedDate; }
-            else if (!isDateKey(hit.pausedDate)) { hit.pausedDate = todayKey(); }
-            if (s.pauseReason) { hit.pauseReason = s.pauseReason; }
-          }
-          // 첫 등록일·생년월일·티콘 ID·원비 날짜는 비어 있을 때만 채운다(직접 고친 값을 덮지 않음)
-          if (!isDateKey(hit.firstRegDate) && isDateKey(s.firstRegDate)) {
-            hit.firstRegDate = s.firstRegDate;
-          }
-          if (!isDateKey(hit.birthDate) && isDateKey(s.birthDate)) {
-            hit.birthDate = s.birthDate;
-          }
-          if (!String(hit.tconId || '').trim() && s.tconId) {
-            hit.tconId = s.tconId;
-          }
-          // 특이사항·비고도 직접 고친 값이 있으면 그대로 두고, 비어 있을 때만 채운다
-          if (!noteOf(hit) && noteOf(s)) {
-            hit.note = noteOf(s);
-          }
-          if (!tuitionDayOf(hit) && tuitionDayOf(s)) {
-            hit.tuitionDay = tuitionDayOf(s);
-            delete hit.tuitionDate;
-          }
-        });
+        mergeImportedStudents(students);
       }
       saveStudents();
       // 파일에 적힌 「원비 날짜」는 원비 관리 납부일로도 넣어 둔다
@@ -14676,7 +14804,9 @@
       edit: startEdit,
       reset: resetStudentForm,
       updateFee: updateFeeCalc,
-      sort: rosterSort
+      sort: rosterSort,
+      importRoster: applyImport,
+      mergeRoster: mergeImportedStudents
     },
     tuition: {
       status: TUITION_STATUS,
