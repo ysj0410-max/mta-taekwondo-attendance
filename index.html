@@ -421,7 +421,7 @@
   .modal{
     position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(520px,90vw);
     background:#fff; border-radius:20px; padding:22px 22px 18px; box-shadow:0 30px 70px rgba(0,0,0,.35);
-    animation:bannerIn .2s ease-out;
+    max-height:90vh; overflow-y:auto; animation:bannerIn .2s ease-out;
   }
   .modal h3{margin:0 0 6px; font-size:16.5px; letter-spacing:-.4px}
   .modal-sub{font-size:12px; color:var(--muted); font-weight:600; margin-bottom:14px; line-height:1.6}
@@ -1943,6 +1943,8 @@
             <button class="btn" id="btn-tu-settings">⚙️ 원비 설정</button>
             <button class="btn" id="btn-tu-fee-settings">💵 수업별 원비</button>
             <button class="btn btn-primary" id="btn-tu-csv">📥 원비 내역 CSV 다운로드</button>
+            <button class="btn btn-mint" id="btn-tu-import">📤 원비 엑셀/CSV 동기화</button>
+            <input type="file" id="tu-import-file" accept=".csv,.xlsx,.xls,text/csv" style="display:none" aria-label="원비 명단 파일 선택">
           </div>
 
           <div class="stats tu-stats">
@@ -8800,6 +8802,612 @@
     }
   }
 
+  /* =========================================================
+     11-F-2. 원비 엑셀/CSV 동기화 — 1년 치 원비 명단을 한 번에 올린다
+     · 파일 모양: 제목 줄 「2026년 원비 명단」 + 머리글
+       현영 · 수업 · 이름 · 원비날짜 · 1문자 · 1월 … 12월 · 비고
+     · 월 칸: 8.26/카/18 → 그 달 완납 · 카드 · 180,000원(납부일 8/26)
+              결제완료 → 완납 / 휴관·골절·한달쉼 같은 글 → 면제·휴원 + 메모
+              환불·마이너스 금액 → 금액을 만들지 않고 메모로만 남긴다
+     · 원비날짜 열은 관원의 「원비 날짜」(s.tuitionDay)로도 옮긴다
+     ========================================================= */
+  var TUSY_NAME_HEADERS = ['이름', '성명', '원생', '원생명', '학생', '학생명', '관원', '관원명', '수련생', '회원명'];
+  var TUSY_AMOUNT_RE = /-?\d[\d,]*(?:\.\d+)?/g;
+  function tusyText(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+
+  /* 금액: 18 → 180,000(만원 단위) · 7.5 → 75,000 · 135,000 → 135,000 · 56000 → 56,000
+     · 「105,00」처럼 끝자리가 모자란 쉼표 표기는 105,000 으로 본다 */
+  function tusyMoney(tok) {
+    var t = String(tok == null ? '' : tok).replace(/\s+/g, '');
+    if (!t) { return null; }
+    var neg = /^[-−]/.test(t);
+    t = t.replace(/^[-−]+/, '');
+    var n = null;
+    if (t.indexOf(',') !== -1) {
+      var parts = t.split(',');
+      var head = parts[0].replace(/[^0-9]/g, '');
+      var tail = parts.slice(1).join('').replace(/[^0-9]/g, '');
+      if (!head) { return null; }
+      if (tail.length < 3) { tail = (tail + '000').slice(0, 3); }
+      n = parseInt(head + tail, 10);
+    } else if (t.indexOf('.') !== -1) {
+      var f = parseFloat(t.replace(/[^0-9.]/g, ''));
+      if (isNaN(f)) { return null; }
+      n = Math.round(f * 10000);
+    } else {
+      var d = t.replace(/[^0-9]/g, '');
+      if (!d) { return null; }
+      n = parseInt(d, 10);
+      if (n < 1000) { n = Math.round(n * 10000); }
+    }
+    if (!isFinite(n)) { return null; }
+    return neg ? -n : n;
+  }
+
+  /* 원비 날짜(일자): 12->1 → 1 · 15->23 → 23 · 7일->9일 → 9 · 18-22 → 18 · 17 → 17 */
+  function tusyDay(raw) {
+    var t = String(raw == null ? '' : raw).replace(/\s+/g, '');
+    if (!t) { return 0; }
+    var pick = t;
+    if (/->|→|~|∼/.test(t)) {
+      var part = t.split(/->|→|~|∼/);
+      pick = part[part.length - 1];
+    } else if (t.indexOf('-') !== -1) {
+      pick = t.split('-')[0];
+    }
+    var nums = pick.match(/\d{1,2}/g) || [];
+    var d = nums.length ? parseInt(nums[nums.length - 1], 10) : 0;
+    return (d >= 1 && d <= 31) ? d : 0;
+  }
+
+  /* 수업: 8회·12회·16회 · 선 → 선수단 · 입 → 입시반 · 7부 같은 반 표기는 수업이 아니다 */
+  function tusyCourse(raw) {
+    var t = String(raw == null ? '' : raw).replace(/\s+/g, '');
+    if (!t) { return ''; }
+    if (/^(8|12|16)회$/.test(t)) { return t; }
+    if (/시범/.test(t)) { return '시범단'; }
+    if (/선수/.test(t) || t === '선') { return '선수단'; }
+    if (/입시/.test(t) || t === '입') { return '입시반'; }
+    return '';
+  }
+
+  /* 납부일의 연도 — 1월 칸의 12월 날짜는 지난해 선납, 12월 칸의 1월 날짜는 다음해 */
+  function tusyPaidDate(mk, mm, dd) {
+    var cy = parseInt(String(mk).slice(0, 4), 10);
+    var cm = parseInt(String(mk).slice(5, 7), 10);
+    var y = cy;
+    if (mm - cm > 6) { y = cy - 1; }
+    else if (cm - mm > 6) { y = cy + 1; }
+    return attMakeDate(y, mm, dd);
+  }
+
+  /* 월 칸 하나 → { status, amount, paidDate, method, memo, refund } | null */
+  function tusyCell(raw, mk, dayHint) {
+    if (raw == null) { return null; }
+    if (raw instanceof Date) {
+      if (isNaN(raw.getTime())) { return null; }
+      return {
+        status: 'paid', method: '', memo: '',
+        paidDate: attMakeDate(raw.getFullYear(), raw.getMonth() + 1, raw.getDate()) || ''
+      };
+    }
+    var text = tusyText(raw);
+    if (!text || /^0+$/.test(text)) { return null; }
+    var memoRaw = text.slice(0, 40);
+    var refund = /환불/.test(text);
+    if (/^(결제\s*완료|완납|결제됨|수납)$/.test(text)) {
+      return { status: 'paid', method: '', memo: '결제완료', paidDate: dayHint ? tuitionDateForDay(mk, dayHint) : '' };
+    }
+    var m = /^(\d{1,2})\s*[.\/월\-]\s*(\d{1,2})((?:\s*[,·]\s*\d{1,2})*)/.exec(text);
+    if (!m) {
+      return { status: refund ? 'unpaid' : 'exempt', memo: memoRaw, refund: refund };
+    }
+    var rest = text.slice(m[0].length);
+    var method = '';
+    if (/카/.test(rest)) { method = '카드'; }
+    else if (/통|입금|계좌/.test(rest)) { method = '입금'; }
+    else if (/현/.test(rest)) { method = '현금'; }
+    var cleaned = rest.replace(/[카드통장입금계좌현금원\s\/]/g, ' ');
+    var toks = cleaned.match(TUSY_AMOUNT_RE) || [];
+    var amount = null;
+    for (var i = toks.length - 1; i >= 0; i--) {
+      var v = tusyMoney(toks[i]);
+      if (v != null) { amount = v; break; }
+    }
+    if (refund || (amount != null && amount < 0)) {
+      var txt = '환불';
+      if (amount != null) { txt += ' ' + fmtWon(Math.abs(amount)) + '원'; }
+      txt += ' (' + memoRaw + ')';
+      return { status: 'unpaid', memo: txt.slice(0, 40), refund: true };
+    }
+    var paidDate = tusyPaidDate(mk, parseInt(m[1], 10), parseInt(m[2], 10));
+    var memo = '';
+    /* 날짜가 여럿이거나(8.28,31) 수단·금액이 빠진 칸은 원문을 남긴다 */
+    if (m[3] || amount == null || !method) { memo = memoRaw; }
+    if (!paidDate && dayHint) { paidDate = tuitionDateForDay(mk, dayHint); }
+    return {
+      status: 'paid', method: method, memo: memo.slice(0, 40),
+      amount: (amount == null ? undefined : amount), paidDate: paidDate || ''
+    };
+  }
+
+  /* 「N문자」 열 — 신규/복관처럼 뜻이 있는 글만 그 달 메모로 */
+  function tusyMonthNote(v) {
+    var t = tusyText(v);
+    if (!t || /^0+$/.test(t)) { return ''; }
+    if (/^(완|카|현|통|O|o|X|x)$/.test(t)) { return ''; }
+    if (/^\d{1,2}$/.test(t)) { return ''; }
+    if (t === '신') { return '신규'; }
+    if (t === '복') { return '복관'; }
+    return t.slice(0, 16);
+  }
+  function tusyNoteValue(v) {
+    var t = tusyText(v);
+    if (!t || /^0+$/.test(t)) { return ''; }
+    if (/^01\d[\d\-]{6,}$/.test(t.replace(/\s/g, ''))) { return ''; }
+    return t;
+  }
+  function tusyAppendNote(s, text) {
+    var add = tusyText(text);
+    if (!add) { return false; }
+    var cur = noteOf(s);
+    if (cur.indexOf(add) !== -1) { return false; }
+    s.note = normalizeNote(cur ? (cur + ' · ' + add) : add);
+    return true;
+  }
+  function tusyEmptyRecord(r) {
+    if (!r) { return true; }
+    if (r.status && r.status !== 'unpaid') { return false; }
+    if (r.amount != null) { return false; }
+    if (isDateKey(r.paidDate)) { return false; }
+    if (r.method || r.memo || r.deduction || r.deductionReason) { return false; }
+    return true;
+  }
+
+  /* 머리글 찾기 — 「이름」 열과 「1월~12월」 열이 같이 있는 줄 */
+  function tusyHeaderInfo(rows) {
+    var best = null;
+    var limit = Math.min((rows || []).length, 12);
+    for (var i = 0; i < limit; i++) {
+      var row = rows[i] || [];
+      var name = -1, course = -1, day = -1, note = -1, months = {};
+      for (var c = 0; c < row.length; c++) {
+        var h = tusyText(row[c]).replace(/\s+/g, '').toLowerCase();
+        if (!h) { continue; }
+        if (name < 0 && TUSY_NAME_HEADERS.indexOf(h) !== -1) { name = c; continue; }
+        if (course < 0 && (h === '수업' || h === '수업과정' || h === '과정')) { course = c; continue; }
+        if (day < 0 && (h.indexOf('원비날짜') === 0 || h === '원비일' || h === '납부일')) { day = c; continue; }
+        if (note < 0 && h === '비고') { note = c; continue; }
+        var mm = /^(\d{1,2})월$/.exec(h);
+        if (mm) {
+          var mo = parseInt(mm[1], 10);
+          if (mo >= 1 && mo <= 12 && months[mo] == null) { months[mo] = c; }
+        }
+      }
+      if (name >= 0 && Object.keys(months).length >= 6) {
+        best = { headerIdx: i, name: name, course: course, day: day, note: note, months: months };
+        break;
+      }
+    }
+    if (!best) { return null; }
+    var year = 0;
+    for (var t = 0; t < best.headerIdx; t++) {
+      var ym = /(\d{4})\s*년/.exec((rows[t] || []).join(' '));
+      if (ym) { year = parseInt(ym[1], 10); break; }
+    }
+    best.year = year;
+    return best;
+  }
+
+  /* 파일(행 배열) → 동기화 계획
+     { ok, year, fileYear, rows:[{name, course, day, sibling, note, months:{월:칸}}], months:{YYYY-MM:{...}}, stats } */
+  function parseTuitionSyncRows(rows, opts) {
+    opts = opts || {};
+    var out = {
+      ok: false, year: new Date().getFullYear(), fileYear: 0, fileName: opts.fileName || '',
+      rows: [], months: {}, skipped: 0, pausedRows: 0,
+      stats: { paid: 0, exempt: 0, unpaid: 0, refund: 0, amount: 0 }
+    };
+    var sectionPaused = false;
+    var info = tusyHeaderInfo(rows);
+    if (!info) { return out; }
+    out.ok = true;
+    out.fileYear = info.year || 0;
+    var year = parseInt(opts.year, 10);
+    if (!(year >= 1900 && year <= 2100)) { year = info.year || new Date().getFullYear(); }
+    out.year = year;
+    var headerRow = rows[info.headerIdx] || [];
+    var noteCols = {};
+    Object.keys(info.months).forEach(function (mo) {
+      var c = info.months[mo];
+      var nc = -1;
+      if (c - 1 >= 0) {
+        var h = String(headerRow[c - 1] == null ? '' : headerRow[c - 1]).replace(/\s+/g, '');
+        if (!h || /^\d{1,2}문자$/.test(h) || h === '문자') { nc = c - 1; }
+      }
+      noteCols[mo] = nc;
+    });
+
+    for (var r = info.headerIdx + 1; r < rows.length; r++) {
+      var row = rows[r] || [];
+      var name = String(info.name >= 0 ? row[info.name] : '').replace(/\s+/g, '');
+      /* 「휴관 및 퇴관자」 같은 구분줄 — 이 아래는 휴관생으로 본다 */
+      if (!name) {
+        var lineText = row.map(tusyText).join(' ');
+        if (/(휴관|퇴관)/.test(lineText)) { sectionPaused = true; }
+        out.skipped++;
+        continue;
+      }
+      if (!/[가-힣A-Za-z]/.test(name)) { out.skipped++; continue; }
+      if (TUSY_NAME_HEADERS.indexOf(name) !== -1) { continue; }
+      var item = {
+        name: name, course: '', courseRaw: '', day: 0, dayRaw: '',
+        sibling: false, siblingRaw: '', note: '', months: {},
+        pausedSection: sectionPaused
+      };
+      if (sectionPaused) { out.pausedRows++; }
+      if (info.course >= 0) {
+        item.courseRaw = tusyText(row[info.course]);
+        item.course = tusyCourse(item.courseRaw);
+      }
+      if (info.day >= 0) {
+        item.dayRaw = tusyText(row[info.day]);
+        item.day = tusyDay(item.dayRaw);
+      }
+      item.siblingRaw = info.name > 0 ? tusyText(row[0]) : '';
+      item.sibling = /(형제|남매|자매)/.test(item.siblingRaw);
+
+      var parts = [];
+      if (item.siblingRaw && !/(형제|남매|자매)/.test(item.siblingRaw) &&
+          !/^현\s*영$/.test(item.siblingRaw.replace(/\s/g, ''))) {
+        parts.push(item.siblingRaw);
+      }
+      if (info.note >= 0) {
+        for (var nc = info.note; nc < row.length; nc++) {
+          var nv = tusyNoteValue(row[nc]);
+          if (nv) { parts.push(nv); }
+        }
+      }
+      item.note = parts.join(' · ').slice(0, 200);
+
+      Object.keys(info.months).forEach(function (mo) {
+        var c = info.months[mo];
+        var mk = year + '-' + pad2(parseInt(mo, 10));
+        var cell = tusyCell(row[c], mk, item.day);
+        if (!cell) { return; }
+        var nc2 = noteCols[mo];
+        if (nc2 >= 0) {
+          var extra = tusyMonthNote(row[nc2]);
+          if (extra) { cell.memo = ((cell.memo ? cell.memo + ' · ' : '') + extra).slice(0, 40); }
+        }
+        item.months[mo] = cell;
+        var st = out.months[mk];
+        if (!st) { st = out.months[mk] = { paid: 0, exempt: 0, unpaid: 0, refund: 0, amount: 0, cells: 0 }; }
+        st.cells++;
+        if (cell.status === 'paid') {
+          st.paid++; st.amount += (cell.amount || 0);
+          out.stats.paid++; out.stats.amount += (cell.amount || 0);
+        } else if (cell.status === 'exempt') {
+          st.exempt++; out.stats.exempt++;
+        } else {
+          st.unpaid++; out.stats.unpaid++;
+        }
+        if (cell.refund) { st.refund++; out.stats.refund++; }
+      });
+      out.rows.push(item);
+    }
+    return out;
+  }
+
+  /* 이름 → 관원 연결 (정확 일치 → 공백 무시 → 뒷숫자 뗀 기본 이름), 같은 관원을 두 번 쓰지 않는다 */
+  function tuitionSyncMatch(parsed) {
+    var byKey = {};
+    (app.students || []).forEach(function (s) {
+      var k = attNameKey(s.name);
+      if (!k) { return; }
+      (byKey[k] = byKey[k] || []).push(s);
+    });
+    /* 재원생을 먼저 연결하고, 같은 이름이면 휴관생은 뒤로 */
+    Object.keys(byKey).forEach(function (k) {
+      byKey[k].sort(function (a, b) {
+        var pa = isPaused(a) ? 1 : 0, pb = isPaused(b) ? 1 : 0;
+        if (pa !== pb) { return pa - pb; }
+        return rosterSort(a, b);
+      });
+    });
+    var used = {};
+    var freeList = function (list) {
+      return (list || []).filter(function (s) { return !used[s.id]; });
+    };
+    /* 같은 이름이 여럿이면 파일의 칸(재원 / 휴관·퇴관)에 맞는 쪽을 먼저 */
+    var pickFrom = function (list, preferPaused) {
+      var free = freeList(list);
+      if (free.length <= 1) { return free[0] || null; }
+      var pref = free.filter(function (s) { return preferPaused ? isPaused(s) : !isPaused(s); });
+      return pref[0] || free[0];
+    };
+    /* 같은 이름이 여럿일 때 고를 수 있는지 — 구간으로 가르거나 숫자로 구분된 경우만 */
+    var pickPool = function (list, preferPaused) {
+      var free = freeList(list);
+      if (free.length <= 1) { return free[0] || null; }
+      var pref = free.filter(function (s) { return preferPaused ? isPaused(s) : !isPaused(s); });
+      if (pref.length === 1) { return pref[0]; }
+      return null;
+    };
+    var items = [], unmatched = [], ambiguous = [];
+    ((parsed && parsed.rows) || []).forEach(function (row) {
+      var k = row.name;
+      var preferPaused = !!row.pausedSection;
+      var s = pickPool(byKey[k], preferPaused);
+      if (!s && freeList(byKey[k]).length > 1 && /\d$/.test(k)) {
+        s = pickFrom(byKey[k], preferPaused);      // 김연우7·김연우8 처럼 숫자로 구분한 동명이인
+      } else if (!s && freeList(byKey[k]).length > 1 && !/\d$/.test(k)) {
+        ambiguous.push(row.name);
+      }
+      if (!s) {
+        var base = k.replace(/\d+$/, '');
+        if (base && base !== k) {
+          var bpool = freeList(byKey[base]);
+          if (bpool.length) { s = pickFrom(byKey[base], preferPaused); }
+        }
+      }
+      if (s) { used[s.id] = true; } else { unmatched.push(row.name); }
+      items.push({ row: row, student: s });
+    });
+    var matched = 0;
+    items.forEach(function (it) { if (it.student) { matched++; } });
+    return { items: items, matched: matched, unmatched: unmatched, ambiguous: ambiguous };
+  }
+
+  /* 미리보기 — 연도 · 명단 · 월별 납부 · 명단 안/밖 · 새로 넣을 칸 */
+  function tuitionSyncSummaryHtml(parsed, plan, fileName) {
+    var mKeys = Object.keys(parsed.months).sort();
+    var range = '';
+    if (mKeys.length) {
+      range = (mKeys.length === 1) ? tuitionMonthLabel(mKeys[0])
+        : (tuitionMonthLabel(mKeys[0]) + ' ~ ' + tuitionMonthLabel(mKeys[mKeys.length - 1]));
+    }
+    var cells = 0;
+    mKeys.forEach(function (k) { cells += parsed.months[k].cells; });
+    var monthLine = mKeys.map(function (k) {
+      return parseInt(k.slice(5, 7), 10) + '월 ' + fmtWon(parsed.months[k].paid) + '건';
+    }).join(' · ');
+    var dayCount = 0;
+    plan.items.forEach(function (it) { if (it.row.day) { dayCount++; } });
+    var add = 0, keep = 0;
+    plan.items.forEach(function (it) {
+      Object.keys(it.row.months).forEach(function (mo) {
+        var mk = parsed.year + '-' + pad2(parseInt(mo, 10));
+        if (it.student && app.tuition[mk] && app.tuition[mk][it.student.id]) { keep++; } else { add++; }
+      });
+    });
+    var unknown = plan.unmatched.slice(0, 8).join(', ');
+    return '<div class="help" style="margin-top:0">' +
+      '📄 <b>' + esc(fileName || parsed.fileName || '파일') + '</b>' +
+      (parsed.fileYear ? ' · 파일 제목의 연도 <b>' + parsed.fileYear + '년</b>' : '') + '<br>' +
+      '명단 <b>' + fmtWon(parsed.rows.length) + '명</b> · 원비 칸 <b>' + fmtWon(cells) + '칸</b> — ' +
+      '완납 <b>' + fmtWon(parsed.stats.paid) + '</b> · 면제·휴원 ' + fmtWon(parsed.stats.exempt) +
+      ' · 환불 ' + fmtWon(parsed.stats.refund) + '<br>' +
+      '수납 있는 달 <b>' + mKeys.length + '개월</b>' + (monthLine ? ' — ' + esc(monthLine) : '') + '<br>' +
+      '명단에 있음 <b>' + plan.matched + '명</b> · 명단 외 <b>' + plan.unmatched.length + '명</b>' +
+      (plan.unmatched.length ? ' (' + esc(unknown) +
+        (plan.unmatched.length > 8 ? ' 외 ' + (plan.unmatched.length - 8) + '명' : '') + ')' : '') +
+      (plan.ambiguous.length ? '<br>동명이인이라 못 가른 이름: ' + esc(plan.ambiguous.slice(0, 5).join(', ')) : '') +
+      (parsed.pausedRows ? '<br>「휴관 및 퇴관자」 칸 아래 <b>' + parsed.pausedRows + '명</b>은 휴관생으로 연결·등록하고, 「원비 날짜」 ' + dayCount + '명도 함께 맞춥니다.' : '') +
+      (parsed.pausedRows ? '<br>' : '<br>이 파일의 「원비 날짜」 <b>' + dayCount + '명</b>을 「🥋 원생 관리」의 원비 날짜로도 맞춥니다.<br>') +
+      '새로 넣을 기록 <b>' + fmtWon(add) + '칸</b> · 이미 있어 그대로 둘 <b>' + fmtWon(keep) + '칸</b>' +
+      '</div>';
+  }
+
+  /* 올린 파일 읽기 → 미리보기 모달 → 반영 */
+  function openTuitionSync(file) {
+    if (!file) { return; }
+    attReadFile(file, function (rows, fileName) {
+      if (!rows || !rows.length) {
+        toast('파일에서 표를 읽지 못했어요.');
+        return;
+      }
+      var parsed = parseTuitionSyncRows(rows, { fileName: fileName });
+      if (!parsed.ok) {
+        openModal({
+          title: '원비 명단을 찾지 못했어요',
+          sub: '「이름」 열과 「1월 ~ 12월」 열이 있는 파일인지 확인해 주세요.',
+          body: '<div class="help" style="margin-top:0">엑셀에서 <b>[CSV UTF-8]</b>로 저장한 파일도 그대로 올릴 수 있어요.</div>',
+          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        });
+        return;
+      }
+      if (!parsed.rows.length) {
+        openModal({
+          title: '명단에 관원이 없어요',
+          sub: '머리글 아래에 이름이 있는 줄이 있는지 확인해 주세요.',
+          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        });
+        return;
+      }
+      var plan = tuitionSyncMatch(parsed);
+      var chosen = { mode: 'merge', missing: 'paused', year: parsed.year };
+      var body = tuitionSyncSummaryHtml(parsed, plan, fileName) +
+        '<div class="row2" style="margin-top:10px">' +
+        '<div class="field"><label>저장 방식</label><select class="input" id="tusy-mode">' +
+        '<option value="merge">합치기 — 기존 기록 유지, 빈 달·빈 항목만 채움</option>' +
+        '<option value="replace">교체 — 파일에 나온 달 기록을 파일 내용으로 바꿈</option>' +
+        '</select></div>' +
+        '<div class="field"><label>명단 외 이름</label><select class="input" id="tusy-missing">' +
+        '<option value="paused">🛌 휴관생으로 새로 등록</option>' +
+        '<option value="skip">건너뛰기</option>' +
+        '<option value="create">재원생으로 새로 등록</option>' +
+        '</select></div>' +
+        '</div>' +
+        '<div class="field"><label>연도 (파일 제목에서 읽은 값 — 다르면 바꿔 주세요)</label>' +
+        '<input class="input" id="tusy-year" type="number" min="1990" max="2100" step="1" value="' + parsed.year + '"></div>' +
+        '<div class="help">저장하면 「💳 원비 관리」·「📊 수납 리포트」와 「🥋 원생 관리」의 원비 날짜에 바로 반영됩니다.</div>';
+      openModal({
+        title: '원비 명단 ' + fmtWon(parsed.rows.length) + '명을 동기화할까요?',
+        body: body,
+        actions: [
+          { label: '취소', value: null, kind: 'btn-ghost' },
+          { label: '동기화', value: 'go', kind: 'btn-primary' }
+        ],
+        onAction: function (value) {
+          if (value !== 'go') { return; }
+          chosen.mode = el('tusy-mode') ? el('tusy-mode').value : 'merge';
+          chosen.missing = el('tusy-missing') ? el('tusy-missing').value : 'paused';
+          var y = parseInt(el('tusy-year') ? el('tusy-year').value : '', 10);
+          if (y >= 1900 && y <= 2100) { chosen.year = y; }
+        }
+      }).then(function (value) {
+        if (value !== 'go') { return; }
+        if (chosen.year !== parsed.year) {
+          parsed = parseTuitionSyncRows(rows, { fileName: fileName, year: chosen.year });
+        }
+        var res = applyTuitionSync(parsed, chosen);
+        var msg = '관원 ' + res.students + '명 · 원비 기록 ' + fmtWon(res.added) + '칸';
+        if (res.filled) { msg += ' · 빈 항목 채움 ' + res.filled + '칸'; }
+        if (res.kept) { msg += ' · 이미 있던 기록 ' + fmtWon(res.kept) + '칸 유지'; }
+        if (res.replaced) { msg += ' · 바꾼 기록 ' + fmtWon(res.replaced) + '칸'; }
+        if (res.created) {
+          msg += ' · 새로 등록 ' + res.created + '명' +
+            (res.createdPaused ? ' (휴관생 ' + res.createdPaused + '명)' : '');
+        }
+        if (res.skipped) { msg += ' · 명단 외 ' + res.skipped + '명 건너뜀'; }
+        openModal({
+          title: '원비 동기화를 마쳤어요',
+          sub: msg,
+          body: '<div class="help" style="margin-top:0">' +
+            '수납 금액 <b>' + fmtWon(res.amount) + '원</b> · 원비 날짜 ' + res.daySet + '명 맞춤' +
+            (res.courseSet ? ' · 수업 ' + res.courseSet + '명' : '') +
+            (res.siblingSet ? ' · 형제할인 ' + res.siblingSet + '명' : '') + '<br>' +
+            '「💳 원비 관리」와 「📊 수납 리포트」에 바로 반영했어요.</div>',
+          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        });
+        toast('원비 기록 ' + fmtWon(res.added) + '칸을 동기화했어요');
+      });
+    });
+  }
+
+  /* 실제 반영 — opts { mode: 'merge'|'replace', missing: 'skip'|'create'|'paused' } */
+  function applyTuitionSync(parsed, opts) {
+    opts = opts || {};
+    var mode = opts.mode === 'replace' ? 'replace' : 'merge';
+    var missing = opts.missing === 'create' ? 'create' : (opts.missing === 'skip' ? 'skip' : 'paused');
+    var out = {
+      students: 0, created: 0, createdPaused: 0, skipped: 0, added: 0, kept: 0, filled: 0,
+      replaced: 0, paid: 0, exempt: 0, unpaid: 0, amount: 0,
+      daySet: 0, courseSet: 0, siblingSet: 0, notes: 0
+    };
+    if (!parsed || !parsed.ok || !parsed.rows || !parsed.rows.length) { return out; }
+    var plan = tuitionSyncMatch(parsed);
+    var touched = {};
+
+    /* 1) 관원 연결 · 새로 등록 · 원비 날짜·수업·형제할인·비고 */
+    plan.items.forEach(function (it) {
+      if (!it.student) {
+        if (missing === 'skip') { out.skipped++; return; }
+        /* 「휴관 및 퇴관자」 칸 아래 이름은 파일이 휴관생이라고 말하므로 휴관생으로 등록 */
+        var makePaused = it.row.pausedSection ? true : (missing === 'paused');
+        it.student = attCreateStudent(it.row.name, '', makePaused);
+        out.created++;
+        if (makePaused) { out.createdPaused++; }
+      }
+      var s = it.student, row = it.row;
+      touched[s.id] = true;
+      if (row.day) {
+        if (tuitionDayOf(s) !== row.day || s.tuitionDate) {
+          s.tuitionDay = row.day;
+          delete s.tuitionDate;
+          out.daySet++;
+        }
+      }
+      if (row.course && (!courseOf(s) || mode === 'replace') && courseOf(s) !== row.course) {
+        s.course = row.course;
+        out.courseSet++;
+      }
+      if (row.sibling) {
+        if (!s.siblingDiscount) { s.siblingDiscount = true; out.siblingSet++; }
+      } else if (mode === 'replace' && !row.siblingRaw && s.siblingDiscount) {
+        s.siblingDiscount = false;
+        out.siblingSet++;
+      }
+      if (row.note && tusyAppendNote(s, row.note)) { out.notes++; }
+    });
+    out.students = Object.keys(touched).length;
+
+    /* 2) 교체 모드 — 파일에 나온 달의 그 관원 기록을 먼저 비운다 */
+    if (mode === 'replace') {
+      var covered = {};
+      plan.items.forEach(function (it) {
+        if (!it.student) { return; }
+        Object.keys(it.row.months).forEach(function (mo) {
+          covered[parsed.year + '-' + pad2(parseInt(mo, 10))] = true;
+        });
+      });
+      Object.keys(covered).forEach(function (mk) {
+        var month = app.tuition[mk];
+        if (!month) { return; }
+        Object.keys(month).forEach(function (sid) {
+          if (!touched[sid]) { return; }
+          delete month[sid];
+          out.replaced++;
+        });
+        if (!Object.keys(month).length) { delete app.tuition[mk]; }
+      });
+    }
+
+    /* 3) 월별 기록 (YYYY-MM → studentId) */
+    plan.items.forEach(function (it) {
+      var s = it.student;
+      if (!s) { return; }
+      Object.keys(it.row.months).forEach(function (mo) {
+        var mk = parsed.year + '-' + pad2(parseInt(mo, 10));
+        var rec = it.row.months[mo];
+        if (!app.tuition[mk]) { app.tuition[mk] = {}; }
+        var cur = app.tuition[mk][s.id];
+        if (mode === 'merge' && cur && !tusyEmptyRecord(cur)) {
+          var filled = false;
+          if (typeof rec.amount === 'number' && rec.amount >= 0 && typeof cur.amount !== 'number') {
+            cur.amount = rec.amount; filled = true;
+          }
+          if (rec.status === 'paid' && !isDateKey(cur.paidDate) && isDateKey(rec.paidDate)) {
+            cur.paidDate = rec.paidDate; filled = true;
+          }
+          if (rec.method && !cur.method) { cur.method = rec.method; filled = true; }
+          if (rec.memo && !cur.memo) { cur.memo = rec.memo; filled = true; }
+          if (filled) { out.filled++; } else { out.kept++; }
+          return;
+        }
+        var clean = { status: rec.status };
+        if (rec.status === 'paid') {
+          if (typeof rec.amount === 'number' && rec.amount >= 0) { clean.amount = rec.amount; }
+          if (isDateKey(rec.paidDate)) { clean.paidDate = rec.paidDate; }
+          if (rec.method) { clean.method = rec.method; }
+        }
+        if (rec.memo) { clean.memo = String(rec.memo).slice(0, 40); }
+        app.tuition[mk][s.id] = clean;
+        out.added++;
+        if (rec.status === 'paid') {
+          out.paid++;
+          out.amount += (typeof clean.amount === 'number') ? clean.amount : studentFee(s);
+        } else if (rec.status === 'exempt') {
+          out.exempt++;
+        } else {
+          out.unpaid++;
+        }
+      });
+    });
+    Object.keys(app.tuition).forEach(function (mk) {
+      if (!Object.keys(app.tuition[mk] || {}).length) { delete app.tuition[mk]; }
+    });
+
+    saveStudents();
+    saveTuition();
+    renderAll();
+    renderStudentsTable();
+    renderTuition(true);
+    renderReport(true);
+    return out;
+  }
+
   function fillTuitionSettings() {
     if (el('tu-default-fee')) { el('tu-default-fee').value = String(tuitionDefaultFee()); }
     if (el('tu-due-day')) { el('tu-due-day').value = String(tuitionDueDay()); }
@@ -14428,6 +15036,14 @@
     el('btn-ft-reset').addEventListener('click', resetFeeTable);
     el('btn-ft-recalc').addEventListener('click', recalcAllStudentFees);
     el('btn-tu-csv').addEventListener('click', downloadTuitionCSV);
+    if (el('btn-tu-import')) {
+      el('btn-tu-import').addEventListener('click', function () { el('tu-import-file').click(); });
+      el('tu-import-file').addEventListener('change', function () {
+        var f = el('tu-import-file').files && el('tu-import-file').files[0];
+        el('tu-import-file').value = '';
+        if (f) { openTuitionSync(f); }
+      });
+    }
     el('btn-tu-select-unpaid').addEventListener('click', tuitionSelectUnpaid);
     el('btn-tu-bulk-paid').addEventListener('click', tuitionBulkPaid);
     el('btn-tu-bulk-sms').addEventListener('click', tuitionBulkSms);
@@ -15095,6 +15711,18 @@
       monthLabel: tuitionMonthLabel,
       monthKey: monthKey,
       shiftMonth: shiftMonth
+    },
+    tuitionSync: {
+      parse: parseTuitionSyncRows,
+      match: tuitionSyncMatch,
+      apply: applyTuitionSync,
+      summary: tuitionSyncSummaryHtml,
+      cell: tusyCell,
+      money: tusyMoney,
+      day: tusyDay,
+      course: tusyCourse,
+      open: openTuitionSync,
+      readFile: attReadFile
     },
     messages: {
       kinds: MSG_KINDS,
