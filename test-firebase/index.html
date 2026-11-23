@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 (테스트 버전 전용) — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=7"></script>
-<script src="firebase-sync-ui.js?v=7"></script>
+<script src="firebase-sync.js?v=8"></script>
+<script src="firebase-sync-ui.js?v=8"></script>
 <title>경희대MTA태권도 · Firebase 동기화 테스트</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -636,6 +636,9 @@
   .adm-face-login > .btn{width:100%}
   .adm-face-login .tiny-note{display:block; margin-top:7px; text-align:center; line-height:1.55}
   .adm-face-live{margin-top:11px}
+  .adm-reset{margin-top:13px; padding-top:12px; border-top:1px dashed #e3e8f2}
+  .adm-reset > .btn{width:100%}
+  .adm-reset .tiny-note{display:block; margin-top:7px; line-height:1.55}
   .adm-or{display:flex; align-items:center; gap:9px; color:#98a2b3; font-size:10.5px; font-weight:800; margin:0 0 12px}
   .adm-or::before, .adm-or::after{content:""; flex:1; height:1px; background:#e6ebf4}
   .face-cam.sm{aspect-ratio:1/1; max-width:270px; margin:0 auto 9px; border-radius:14px}
@@ -1646,7 +1649,7 @@
         <div id="admin-settings" class="ov" style="display:none">
           <div class="panel" id="admin-fb-panel">
                 <div class="panel-head">
-                  <h3>🔥 Firebase 실시간 동기화 <span class="chip fb-test-tag">테스트 v7</span></h3>
+                  <h3>🔥 Firebase 실시간 동기화 <span class="chip fb-test-tag">테스트 v8</span></h3>
                   <div class="spacer"></div>
                   <span class="chip wait" id="fb-state">⚪ 미연결(로컬 모드)</span>
                 </div>
@@ -6096,6 +6099,90 @@
     if (app.adminAuthed) { setView('admin'); return; }
     openAdminLogin();
   }
+
+  /* =========================================================
+     2-E-2. 🔓 관리자 계정 초기화 — 관리자(Firebase) 기기에서만
+     · 화면에서 고른 역할이 아니라 Firebase 엔진이 서버 roles 로 확인한
+       유효 권한(effectiveRole)이 'admin' 일 때만 버튼이 보이고 동작한다.
+       (출석 태블릿 · 권한 미확인 기기에서는 버튼도 없고, 직접 불러도 거부)
+     · 관원·출석·원비·차량·설정은 건드리지 않고 tdk.admin.v1 만 기본값으로 되돌린다.
+     ========================================================= */
+  function adminSyncEffectiveRole() {
+    /* 실제 엔진 상태(TDKFB)가 있으면 그것을 먼저 믿는다 — 서버 roles 기준 */
+    try {
+      if (typeof window !== 'undefined' && window.TDKFB) {
+        var f = window.TDKFB.effectiveRole;
+        var v = (typeof f === 'function') ? f() : null;
+        if (v == null && typeof window.TDKFB.engine === 'function') {
+          var eng = window.TDKFB.engine();
+          if (eng && typeof eng.effectiveRole === 'function') { v = eng.effectiveRole(); }
+        }
+        if (v != null) { return String(v); }
+      }
+    } catch (e) { /* 아래 대체 경로로 */ }
+    /* 대체: 동기화 엔진 API 가 화면 훅(__tdk.sync)에 붙어 있는 경우 */
+    try {
+      var s = (typeof window !== 'undefined') ? (window.__tdk && window.__tdk.sync) : null;
+      if (s) {
+        if (typeof s.status === 'function') {
+          var st = s.status() || {};
+          if (typeof st.effectiveRole === 'string') { return st.effectiveRole; }
+          if (typeof st.role === 'string') { return st.role; }
+        }
+        if (typeof s.effectiveRole === 'function') { return String(s.effectiveRole() || ''); }
+      }
+    } catch (e2) { /* 권한 없음으로 본다 */ }
+    return '';
+  }
+  function adminResetAllowed() { return adminSyncEffectiveRole() === 'admin'; }
+  /* 저장한 관리자 계정을 동기화 계층에 바로 올려 달라고 한 번 부탁한다 (없으면 조용히 넘어감) */
+  function adminSyncPushSoon() {
+    try {
+      if (typeof window !== 'undefined' && window.TDKFB && typeof window.TDKFB.flush === 'function') {
+        var p = window.TDKFB.flush();
+        if (p && typeof p.then === 'function') { p.then(function () {}, function () {}); }
+      }
+    } catch (e) {}
+  }
+  function resetAdminAccount(opts) {
+    opts = opts || {};
+    var role = adminSyncEffectiveRole();
+    if (role !== 'admin') {
+      return Promise.resolve({ ok: false, reason: (role === 'tablet') ? 'tablet-role' : 'not-admin-device', role: role });
+    }
+    var ask = '관리자 아이디와 비밀번호를 초기값(admin / 0000)으로 되돌릴까요? 관원·출석·원비·Firebase 설정은 그대로 유지됩니다.';
+    var go = (opts.confirmed === true);
+    if (!go) {
+      var canAsk = false;
+      try { canAsk = (typeof window !== 'undefined' && typeof window.confirm === 'function'); } catch (e) { canAsk = false; }
+      if (!canAsk) { return Promise.resolve({ ok: false, reason: 'no-confirm' }); }
+      try { go = (window.confirm(ask) === true); } catch (e2) { go = false; }
+    }
+    if (!go) { return Promise.resolve({ ok: false, reason: 'canceled' }); }
+    var prev = adminAccount();
+    var salt = randomSalt();
+    return adminHash(DEFAULT_ADMIN_ID, DEFAULT_ADMIN_PW, salt).then(function (h) {
+      app.admin = {
+        id: DEFAULT_ADMIN_ID,
+        salt: salt,
+        hash: h,
+        mustChange: true,
+        autoLock: (prev && prev.autoLock === false) ? false : true,
+        updatedAt: new Date().toISOString()
+      };
+      /* tdk.admin.v1 저장 → 동기화 엔진이 meta/admin 문서로 올린다 */
+      saveAdminAccount();
+      driveTouchData();
+      adminSyncPushSoon();
+      renderAdminAccountState();
+      if (opts.fillInputs !== false) {
+        if (el('adm-id')) { el('adm-id').value = DEFAULT_ADMIN_ID; }
+        if (el('adm-pw')) { el('adm-pw').value = DEFAULT_ADMIN_PW; }
+      }
+      toast('초기화됐어요 · admin / 0000 으로 로그인하세요');
+      return { ok: true, id: DEFAULT_ADMIN_ID, mustChange: true };
+    });
+  }
   function openAdminLogin() {
     var acc = adminAccount();
     var isDefault = !acc || acc.mustChange;
@@ -6117,6 +6204,13 @@
       '</div>' +
       '<div class="adm-or"><span>또는 아이디 · 비밀번호</span></div>';
 
+    var resetBlock = (!isDefault && adminResetAllowed())
+      ? '<div class="adm-reset" id="adm-reset">' +
+        '<button class="btn btn-sm btn-danger" id="adm-reset-btn">🔄 관리자 계정 초기화 (admin / 0000)</button>' +
+        '<div class="tiny-note">이 기기는 <b>Firebase 관리자</b> 권한으로 확인되어 이 버튼이 보입니다. 관원·출석·원비·차량·Firebase 설정은 그대로 두고 관리자 아이디·비밀번호만 되돌려요.</div>' +
+        '</div>'
+      : '';
+
     var done = openModal({
       title: '🔒 관리자 로그인',
       sub: hasFace
@@ -6129,7 +6223,8 @@
         '</div>' +
         (isDefault
           ? '<div class="help" style="margin-top:10px">처음이면 초기 계정 <b>' + esc(DEFAULT_ADMIN_ID) + ' / ' + esc(DEFAULT_ADMIN_PW) + '</b> 로 들어갈 수 있어요.<br>들어간 뒤 「🔐 관리자 계정」에서 <b>꼭 비밀번호를 바꿔 주세요.</b></div>'
-          : '<div class="help" style="margin-top:10px">비밀번호는 SHA-256 해시로만 저장되어 있어요. 열쇠를 잊었다면 마지막 백업 파일의 계정 설정으로 복원할 수 있습니다.</div>'),
+          : '<div class="help" style="margin-top:10px">비밀번호는 SHA-256 해시로만 저장되어 있어요. 열쇠를 잊었다면 마지막 백업 파일의 계정 설정으로 복원할 수 있습니다.</div>') +
+        resetBlock,
       actions: [
         { label: '취소', value: null, kind: 'btn-ghost' },
         { label: '로그인', value: 'login', kind: 'btn-primary' }
@@ -6154,6 +6249,15 @@
     var cancelBtn = el('adm-face-cancel');
     if (cancelBtn) {
       cancelBtn.addEventListener('click', function () { stopAdminFaceLoginCamera(true); });
+    }
+    /* 🔓 관리자 계정 초기화 — 관리자 기기로 확인된 경우에만 그려지고, 클릭해도 권한을 다시 확인한다 */
+    var resetBtn = el('adm-reset-btn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function (e) {
+        if (e && typeof e.preventDefault === 'function') { e.preventDefault(); }
+        if (e && typeof e.stopPropagation === 'function') { e.stopPropagation(); }
+        resetAdminAccount({ fillInputs: true });
+      });
     }
 
     done.then(function (v) {
@@ -16737,6 +16841,10 @@
       lock: lockAdmin,
       request: requestAdmin,
       login: openAdminLogin,
+      /* 🔓 관리자 기기(Firebase effectiveRole=admin)에서만 동작하는 계정 초기화 */
+      canReset: adminResetAllowed,
+      syncRole: adminSyncEffectiveRole,
+      reset: resetAdminAccount,
       state: function () { return { authed: app.adminAuthed, account: adminAccount() }; },
       render: renderAdminAccountState,
       face: {

@@ -356,7 +356,7 @@
     }
     var tag = $('fb-pill-tag');
     if (tag && typeof window.innerWidth === 'number') {
-      tag.textContent = window.innerWidth <= 760 ? '🧪 테스트 v7' : '🧪 Firebase 테스트 v7';
+      tag.textContent = window.innerWidth <= 760 ? '🧪 테스트 v8' : '🧪 Firebase 테스트 v8';
     }
     setText('fb-usage-note', S.engine
       ? (S.engine.usage.snapshot().date + ' 기준 · 이 기기에서 센 추정치 (PC·태블릿 합산 아님)')
@@ -1077,7 +1077,7 @@
     var d = document.createElement('div');
     d.id = 'fb-pill';
     d.className = 'fb-pill';
-    d.innerHTML = '<span class="fb-pill-tag" id="fb-pill-tag">🧪 Firebase 테스트 v7</span><span class="fb-pill-state" id="fb-pill-state">⚪ 미연결(로컬 모드)</span>';
+    d.innerHTML = '<span class="fb-pill-tag" id="fb-pill-tag">🧪 Firebase 테스트 v8</span><span class="fb-pill-state" id="fb-pill-state">⚪ 미연결(로컬 모드)</span>';
     document.body.appendChild(d);
   }
 
