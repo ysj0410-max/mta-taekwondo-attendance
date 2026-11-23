@@ -825,6 +825,8 @@
     /* 서버(dojangs/{도장}/roles/{uid})에서 확인한 역할
          null = 아직 확인 전 · '' = 로그인은 됐는데 roles 문서가 없음 · 'admin' | 'tablet' */
     var verifiedRole = (opts.verifiedRole === 'admin' || opts.verifiedRole === 'tablet') ? opts.verifiedRole : null;
+    /* 시작할 때 서버 roles 를 자동으로 확인할지 (테스트에서 순서를 직접 잡을 때만 false) */
+    var verifyOnStart = opts.verifyOnStart !== false;
     var adapter = opts.adapter || null;
     var shadow = loadShadow();
     var prevValues = {};
@@ -887,8 +889,22 @@
         if (adapter && typeof adapter.setRole === 'function') { try { adapter.setRole(after); } catch (e) {} }
         resubscribe();
         emit('role', { role: after, deviceRole: deviceRole, verified: verifiedRole });
+        /* 잠겨 있는 동안(역할 미확인)에 기기에서 고친 내용을 역할이 풀리는 순간 한 번 훑는다 */
+        if (after === 'admin') { rescanLocal(); }
       }
       return after;
+    }
+
+    /* 역할이 풀린 뒤: 지금 기기의 값을 다시 훑어 서버와 다른 문서만 큐에 올린다 */
+    function rescanLocal() {
+      registry.forEach(function (e) {
+        if (e.kind === 'local') { return; }
+        try {
+          prevValues[e.name] = readValue(e.name);
+          capture(e);
+        } catch (err) { lastError = errorText(err); }
+      });
+      if (outbox.count()) { scheduleFlush(); }
     }
 
     /* 로그인한 계정의 roles/{uid} 문서를 서버에서 직접 읽어 유효 권한을 잠근다 */
@@ -1802,7 +1818,7 @@
           try { onRemote(path, data, meta); } catch (e) { lastError = errorText(e); }
         });
       }
-      if (adapter) { try { verifyRole(); } catch (e) {} }
+      if (adapter && verifyOnStart) { try { verifyRole(); } catch (e) {} }
       /* 태블릿 역할인데 이 기기에 아직 개인정보가 남아 있으면 한 번 알린다 */
       if (isEffectiveTablet()) {
         var privateCount = countPrivateStudents(readValue('students'));
@@ -1834,7 +1850,8 @@
       registry: function () { return registry.map(function (e) { return clone(e); }); },
       basePath: basePath,
       setDevice: function (d) { deviceId = String(d || deviceId); },
-      /* 화면에서 고른 역할 — 유효 권한은 서버 roles 로 잠기므로 이 값만으로는 권한이 생기지 않는다 */
+      /* 화면에서 고른 값은 "어떤 계정으로 로그인할지" 안내용 — 유효 권한은 서버 roles 로 잠기므로
+         이 값만으로는 관리자 권한이 생기지 않는다 */
       setRole: function (r) { return setDeviceRole(r); },
       setDeviceRole: setDeviceRole,
       role: function () { return effectiveRole(); },
@@ -1843,6 +1860,7 @@
       verifiedRole: function () { return verifiedRole; },
       setVerifiedRole: applyVerifiedRole,
       verifyRole: verifyRole,
+      rescanLocal: rescanLocal,
       device: function () { return deviceId; },
       setDojang: function (d) { dojangId = safeId(d || 'mta-tkd'); },
       attachAdapter: attachAdapter,

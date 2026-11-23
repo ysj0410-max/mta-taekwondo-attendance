@@ -9,7 +9,9 @@
    ============================================================= */
 
 var VERSION = 'v3-firebase-test';
-var CACHE_NAME = 'mta-tkd-fb-test-' + VERSION;
+/* 같은 VERSION 안에서 파일 내용만 고칠 때 올리는 빌드 표시 — 기기에 남은 옛 캐시를 새로 받게 한다 */
+var BUILD = 'b2';
+var CACHE_NAME = 'mta-tkd-fb-test-' + VERSION + '-' + BUILD;
 var HTML_TIMEOUT_MS = 6000;
 
 var APP_SHELL = [
