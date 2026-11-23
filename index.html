@@ -903,8 +903,11 @@
   .sh-kbtn{flex:1 1 0; min-width:0; height:30px; border:1px solid #dfe6f0; background:rgba(255,255,255,.7); color:#3a475f; border-radius:6px; padding:0 2px; font-weight:800; font-size:11.5px; cursor:pointer; white-space:nowrap}
   .sh-kbtn.pick.active{background:#e3f6ec; border-color:#12a871; color:#0b7a55}
   .sh-kbtn.drop.active{background:#e6efff; border-color:#2f6fed; color:#155e9c}
-  /* 원생 칸은 목적지·비고와 똑같은 글자 입력칸 하나 (검색·칩 없음) */
-  .sh-td input.sh-riders::placeholder{color:#b6c0d0; font-weight:700}
+  /* 원생 칸은 목적지·비고와 똑같은 글자 입력칸 하나 (검색·칩 없음) — 긴 이름·여러 명은 줄이 늘어난다 */
+  .sh-td textarea.sh-riders{height:auto; min-height:30px; line-height:1.4; padding:3px 6px; white-space:pre-wrap; word-break:break-word; overflow:hidden; resize:vertical; font-family:inherit; vertical-align:middle}
+  .sh-td textarea.sh-riders::placeholder{color:#b6c0d0; font-weight:700}
+  .sh-td.sh-td-time{padding-top:3px; padding-bottom:3px}
+  .sh-time-end{font-size:10px; line-height:1.1; text-align:center; color:#5b6b85; font-weight:800; font-variant-numeric:tabular-nums; margin-top:1px}
   .sh-td-tools{white-space:nowrap; text-align:center}
   .sh-tool{width:21px; height:27px; border:1px solid #dfe6f0; background:rgba(255,255,255,.75); border-radius:5px; color:#5a6880; font-size:11px; font-weight:900; cursor:pointer; padding:0; margin-right:1px; line-height:1}
   .sh-tool:hover{background:#fff; border-color:#c3cfe2; color:#1b2a5b}
@@ -2232,8 +2235,8 @@
           <div class="sh-screen">
             <div class="stats sh-stats">
               <div class="stat"><div class="stat-label">🚌 전체 운행</div><div class="stat-val" id="sh-total">0<small>건</small></div><div class="tu-sub" id="sh-total-sub">등록된 스케줄</div></div>
-              <div class="stat in"><div class="stat-label">🔼 승차</div><div class="stat-val" id="sh-pick">0<small>건</small></div><div class="tu-sub">도장 → 목적지</div></div>
-              <div class="stat out"><div class="stat-label">🔽 하차</div><div class="stat-val" id="sh-drop">0<small>건</small></div><div class="tu-sub">목적지 → 도장</div></div>
+              <div class="stat in"><div class="stat-label">🔼 승차</div><div class="stat-val" id="sh-pick">0<small>건</small></div><div class="tu-sub">정류장 → 도장</div></div>
+              <div class="stat out"><div class="stat-label">🔽 하차</div><div class="stat-val" id="sh-drop">0<small>건</small></div><div class="tu-sub">도장 → 정류장</div></div>
               <div class="stat absent"><div class="stat-label">👦 탑승 등록</div><div class="stat-val" id="sh-riders">0<small>명</small></div><div class="tu-sub">중복 없이 센 인원</div></div>
             </div>
 
@@ -10754,16 +10757,37 @@
   /* 몇시부 — 새 운행은 앞 줄의 부를 이어받고, 필요하면 미지정·임의 값도 보관한다 */
   var SHUTTLE_PARTS = ['1부', '2부', '3부', '4부', '5부', '6부', '7부'];
 
+  /* 「2부\n(2시30분)」·「3부후」·「4」 → 부 이름만 남긴다 (칸 안에 적힌 시간 메모는 버린다) */
   function normShuttlePart(v) {
-    var s = String(v == null ? '' : v).trim().slice(0, 12);
+    var s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 24);
     if (!s || s === '미지정' || s === '없음') { return ''; }
+    var m = s.match(/^(\d{1,2})\s*부\s*(후)?/);
+    if (m) { return m[1] + '부' + (m[2] ? '후' : ''); }
     if (/^\d{1,2}$/.test(s)) { return s + '부'; }
     return s;
   }
 
+  /* 「3부후」도 3부로 친다 — 색·정렬이 3부와 같아진다 */
   function shuttlePartIndex(p) {
-    var m = String(p || '').match(/^(\d{1,2})부$/);
+    var m = String(p || '').match(/^(\d{1,2})부/);
     return m ? parseInt(m[1], 10) : 99;
+  }
+
+  /* 부 목록 — 1~7부 뒤에 실제로 쓰인 「3부후」 같은 이름을 끼워 넣는다 */
+  function shuttlePartList() {
+    var used = {};
+    (app.shuttle || []).forEach(function (r) { if (r && r.part) { used[r.part] = true; } });
+    var out = [];
+    for (var i = 1; i <= 7; i++) {
+      out.push(i + '부');
+      Object.keys(used).forEach(function (p) {
+        if (shuttlePartIndex(p) === i && out.indexOf(p) === -1) { out.push(p); }
+      });
+    }
+    Object.keys(used).forEach(function (p) {
+      if (shuttlePartIndex(p) === 99 && out.indexOf(p) === -1) { out.push(p); }
+    });
+    return out;
   }
 
   function shuttlePartLabel(p) { return p || '미지정'; }
@@ -10796,7 +10820,7 @@
       if (!r || typeof r !== 'object' || Array.isArray(r)) { return; }
       var riders = [];
       (Array.isArray(r.riders) ? r.riders : []).forEach(function (p) {
-        var nm = String(typeof p === 'string' ? p : ((p && p.name) || '')).trim().slice(0, 24);
+        var nm = String(typeof p === 'string' ? p : ((p && p.name) || '')).trim().slice(0, 40);
         var pid = typeof p === 'string' ? '' : String((p && p.id) || '');
         if (!nm) { return; }
         for (var i = 0; i < riders.length; i++) { if (riders[i].name === nm) { return; } }
@@ -10809,6 +10833,7 @@
         part: normShuttlePart(r.part),
         dest: String(r.dest == null ? '' : r.dest).trim().slice(0, 60),
         memo: String(r.memo == null ? '' : r.memo).trim().slice(0, 80),
+        timeEnd: normShuttleTime(r.timeEnd),
         riders: riders
       };
       // 시간도 목적지도 원생도 없는 빈 줄은 보관하지 않는다
@@ -10855,24 +10880,77 @@
     return hit;
   }
 
+  /* 「(월,수,금/5반)」처럼 괄호 안에 든 쉼표·슬래시는 사람 구분이 아니다 — 괄호 밖 구분자로만 나눈다 */
+  function shuttleSplitOutside(text, seps) {
+    var s = String(text == null ? '' : text);
+    var out = [], buf = '', depth = 0;
+    for (var i = 0; i < s.length; i++) {
+      var ch = s.charAt(i);
+      if ('([{（【'.indexOf(ch) !== -1) { depth++; buf += ch; continue; }
+      if (')]}）】'.indexOf(ch) !== -1) { if (depth > 0) { depth--; } buf += ch; continue; }
+      if (depth === 0 && seps.indexOf(ch) !== -1) { out.push(buf); buf = ''; continue; }
+      buf += ch;
+    }
+    out.push(buf);
+    return out.map(function (x) { return x.trim(); }).filter(function (x) { return x !== ''; });
+  }
+
+  /* 괄호·대괄호를 떼어 낸 이름 — 명단에서 찾을 때 쓴다 */
+  function shuttleRiderName(tok) {
+    return String(tok == null ? '' : tok).replace(/\([^()]*\)/g, ' ').replace(/[\[\]{}【】（）]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  /* 「)」바로 뒤에 이름이 붙어 있는 원본(「주이선(월,수,금,)김무주(화,수)」)도 사람 단위로 끊는다 */
+  function shuttleSplitGlued(tok) {
+    var parts = String(tok || '').split(/\)(?![\s)\]}，、;\/|,\-–])/);
+    if (parts.length < 2) { return [tok]; }
+    return parts.map(function (p, i) { return i < parts.length - 1 ? p + ')' : p; });
+  }
+
   /* 「김민준, 이서연」처럼 적은 글자 → riders 배열
-     · 쉼표·세미콜론·슬래시·줄바꿈, 그리고 이름 사이 띄어쓰기로 나눈다
-     · 명단에 있는 이름은 관원 id 를 연결하고 이름을 명단 표기로 맞춘다 */
+     · 괄호 밖 쉼표·슬래시·줄바꿈으로만 사람을 나눈다 — 「(월,수,금)」 안의 쉼표로 쪼개지 않는다
+     · 「없음」은 빈 칸으로 본다
+     · 명단에 있는 이름은 관원 id 를 연결하고, 괄호 메모(요일·반)는 그대로 남긴다 */
   function shuttleRidersFromText(text) {
     var out = [], seen = {};
-    String(text == null ? '' : text).replace(/\r/g, '\n').split(/[,，、;\/\n\t]+/).forEach(function (tok) {
-      var piece = tok.trim();
-      if (!piece) { return; }
-      // 「김 민준」처럼 띄어 쓴 이름도 명단에 있으면 한 사람으로 본다
-      var parts = (studentByName(piece) || piece.indexOf(' ') === -1) ? [piece] : piece.split(/\s+/);
-      parts.forEach(function (part) {
-        var nm = part.trim().slice(0, 24);
-        if (!nm) { return; }
-        var hit = studentByName(nm);
-        var name = hit ? String(hit.name) : nm;
-        if (seen[name]) { return; }
-        seen[name] = true;
-        out.push({ id: hit ? String(hit.id) : '', name: name });
+    var add = function (raw) {
+      var nm = String(raw == null ? '' : raw).replace(/[\[\]{}【】]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+      if (!nm || /^(없음|없다|none|-|x)$/i.test(nm)) { return; }
+      var base = shuttleRiderName(nm);
+      var hit = studentByName(nm) || (base ? studentByName(base) : null);
+      if (!hit && base) {
+        var noNum = base.replace(/\d+$/, '').trim();
+        if (noNum && noNum !== base) { hit = studentByName(noNum); }
+      }
+      // 괄호 메모가 없으면 명단 표기 그대로, 메모가 있으면 적힌 그대로 둔다
+      var name = (hit && !/[()]/.test(nm)) ? String(hit.name) : nm;
+      var key = name.replace(/\s+/g, '');
+      if (seen[key]) { return; }
+      seen[key] = true;
+      out.push({ id: hit ? String(hit.id) : '', name: name });
+    };
+    String(text == null ? '' : text).replace(/\r/g, '\n').split(/\n+/).forEach(function (line) {
+      shuttleSplitOutside(line, '/|｜').forEach(function (chunk) {
+        var expanded = [];
+        var pendingDays = [];
+        shuttleSplitOutside(chunk, ',;、，').forEach(function (tk) {
+          shuttleSplitGlued(tk).forEach(function (sub) { expanded.push(sub); });
+        });
+        expanded.forEach(function (tk) {
+          // 「월,화,목(해찬누리)-장은준」처럼 요일만 적힌 토막은 사람이 아니라 다음 이름의 요일 메모
+          if (/^[월화수목금토일]$/.test(tk)) { pendingDays.push(tk); return; }
+          if (pendingDays.length) { tk = pendingDays.join(',') + ',' + tk; pendingDays = []; }
+          // 괄호 밖 띄어쓰기로 두 사람을 적은 경우 (이서연 김민준)
+          if (!/[(\[]/.test(tk) && /\s/.test(tk) && !studentByName(tk)) {
+            var words = tk.split(/\s+/);
+            if (words.length > 1 && words.every(function (w) { return w.length >= 2; })) {
+              words.forEach(function (w) { add(w); });
+              return;
+            }
+          }
+          add(tk);
+        });
+        if (pendingDays.length) { add(pendingDays.join(',')); pendingDays = []; }
       });
     });
     return out;
@@ -10898,7 +10976,7 @@
         else if ((r.part || '') !== u.part) { return false; }
       }
       if (!q) { return true; }
-      var hay = [r.part, r.time, shuttleKindLabel(r.kind), r.dest, r.memo, shuttleRidersText(r)].join(' ').replace(/\s+/g, '');
+      var hay = [r.part, shuttleTimeText(r), shuttleKindLabel(r.kind), r.dest, r.memo, shuttleRidersText(r)].join(' ').replace(/\s+/g, '');
       if (hay.indexOf(q) !== -1) { return true; }
       if (isChosungQuery(q)) {
         for (var i = 0; i < r.riders.length; i++) {
@@ -10924,6 +11002,21 @@
     }
   }
 
+  /* 부 필터 — 실제로 쓰인 부(「3부후」 같은 이름 포함)를 모두 고를 수 있게 */
+  var shuttlePartFilterKey = '';
+  function renderShuttlePartFilter() {
+    var sel = el('sh-part');
+    if (!sel) { return; }
+    var parts = shuttlePartList();
+    var key = parts.join('|');
+    if (key === shuttlePartFilterKey) { return; }
+    shuttlePartFilterKey = key;
+    var cur = ensureShuttleUI().part || 'all';
+    sel.innerHTML = '<option value="all">전체 부</option><option value="none">미지정</option>' +
+      parts.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+    sel.value = cur;
+  }
+
   function shuttleEmptyHtml() {
     return '<div class="sh-empty">🚌 아직 운행 스케줄이 없어요.<br>' +
       '<b>＋ 운행 추가</b>를 눌러 <b>시간 · 승차/하차 · 목적지</b>를 적고 원생 이름을 적으면 끝이에요.<br>' +
@@ -10931,8 +11024,8 @@
   }
 
   function shuttlePartOptions(cur) {
-    var list = [''].concat(SHUTTLE_PARTS);
     var c = normShuttlePart(cur);
+    var list = [''].concat(shuttlePartList());
     if (c && list.indexOf(c) === -1) { list.push(c); }
     return list.map(function (p) {
       return '<option value="' + esc(p) + '"' + (p === c ? ' selected' : '') + '>' + esc(shuttlePartLabel(p)) + '</option>';
@@ -10951,18 +11044,30 @@
       '</colgroup>';
   }
 
+  /* 원생 칸은 여러 명·긴 이름(요일 메모 포함)도 잘리지 않게 여러 줄로 늘어나는 칸으로 */
+  function shuttleRiderRows(text) {
+    var s = String(text || '');
+    var n = Math.max(1, Math.ceil(s.length / 24));
+    return Math.max(1, Math.min(4, n));
+  }
+
   /* 엑셀 시트처럼 얇은 한 줄 — 칸마다 테두리 있는 입력칸, Tab 으로 옆 칸 이동 */
   function shuttleRowHtml(r) {
+    var riderText = shuttleRidersText(r);
+    var timeTitle = r.time ? (r.time + (r.timeEnd ? '~' + r.timeEnd : '')) : '';
     return '<tr class="sh-row ' + shuttlePartClass(r.part) + '" data-shrow="' + esc(r.id) + '">' +
       '<td class="sh-td sh-td-part">' +
       '<select class="input sh-part" data-shfield="part" data-shid="' + esc(r.id) + '" aria-label="몇시부">' + shuttlePartOptions(r.part) + '</select></td>' +
-      '<td class="sh-td"><input class="input sh-time" type="text" inputmode="numeric" maxlength="5" value="' + esc(r.time) + '" data-shfield="time" data-shid="' + esc(r.id) + '" placeholder="14:00" autocomplete="off" aria-label="운행 시간"></td>' +
+      '<td class="sh-td sh-td-time"><input class="input sh-time" type="text" inputmode="numeric" maxlength="5" value="' + esc(r.time) + '" data-shfield="time" data-shid="' + esc(r.id) + '" placeholder="14:00" autocomplete="off" aria-label="운행 시간"' +
+      (timeTitle ? ' title="' + esc(timeTitle) + '"' : '') + '>' +
+      (r.timeEnd ? '<div class="sh-time-end">~' + esc(r.timeEnd) + '</div>' : '') + '</td>' +
       '<td class="sh-td sh-td-kind" aria-label="승차/하차"><div class="sh-kind">' +
       '<button class="sh-kbtn pick' + (r.kind === 'pick' ? ' active' : '') + '" data-shkind="pick" data-shid="' + esc(r.id) + '" tabindex="-1" title="승차">승차</button>' +
       '<button class="sh-kbtn drop' + (r.kind === 'drop' ? ' active' : '') + '" data-shkind="drop" data-shid="' + esc(r.id) + '" tabindex="-1" title="하차">하차</button>' +
       '</div></td>' +
       '<td class="sh-td"><input class="input" value="' + esc(r.dest) + '" data-shfield="dest" data-shid="' + esc(r.id) + '" placeholder="목적지" aria-label="목적지"></td>' +
-      '<td class="sh-td"><input class="input sh-riders" type="text" value="' + esc(shuttleRidersText(r)) + '" data-shfield="riders" data-shid="' + esc(r.id) + '" placeholder="예: 김민준, 이서연" autocomplete="off" aria-label="탑승 원생"></td>' +
+      '<td class="sh-td"><textarea class="input sh-riders" rows="' + shuttleRiderRows(riderText) + '" data-shfield="riders" data-shid="' + esc(r.id) + '" placeholder="예: 김민준, 이서연" autocomplete="off" aria-label="탑승 원생"' +
+      (riderText ? ' title="' + esc(riderText) + '"' : '') + '>' + esc(riderText) + '</textarea></td>' +
       '<td class="sh-td"><input class="input" value="' + esc(r.memo) + '" data-shfield="memo" data-shid="' + esc(r.id) + '" placeholder="비고" aria-label="비고"></td>' +
       '<td class="sh-td sh-td-tools">' +
       '<button class="sh-tool" data-shup="' + esc(r.id) + '" tabindex="-1" title="위로 옮기기" aria-label="위로 옮기기">▲</button>' +
@@ -10986,6 +11091,7 @@
   function renderShuttle() {
     var u = ensureShuttleUI();
     renderShuttleStats();
+    renderShuttlePartFilter();
     ['all', 'pick', 'drop'].forEach(function (k) {
       var b = el('shf-' + k);
       if (b) { b.classList.toggle('active', u.kind === k); }
@@ -11017,6 +11123,7 @@
       id: uid('sh'),
       // 연속된 운행을 빨리 적을 수 있게 앞 줄의 시간·부에서 시작한다
       time: normShuttleTime(opts.time) || (last ? last.time : ''),
+      timeEnd: '',
       kind: opts.kind === 'drop' ? 'drop' : 'pick',
       part: normShuttlePart(opts.part) || filterPart || (last ? last.part : ''),
       dest: String(opts.dest == null ? '' : opts.dest).trim().slice(0, 60),
@@ -11036,6 +11143,7 @@
     if (!r) { return null; }
     if (field === 'time') {
       r.time = normShuttleTime(value);
+      r.timeEnd = '';
       if (String(value == null ? '' : value).trim() && !r.time) { toast('시간은 00:00 ~ 23:59 형식으로 넣어 주세요.'); }
     } else if (field === 'dest') {
       r.dest = String(value == null ? '' : value).trim().slice(0, 60);
@@ -11120,10 +11228,16 @@
     });
   }
 
+  /* 시간 칸 표기 — 범위가 있으면 「16:28~16:30」 */
+  function shuttleTimeText(r) {
+    var t = (r && r.time) || '';
+    return t + (r && r.timeEnd ? '~' + r.timeEnd : '');
+  }
+
   function shuttleCSVText(list) {
     var lines = [['번호', '부', '시간', '승차/하차', '목적지', '원생', '비고']];
     (list || []).forEach(function (r, i) {
-      lines.push([i + 1, shuttlePartLabel(r.part), r.time || '', shuttleKindLabel(r.kind), r.dest || '', shuttleRidersText(r), r.memo || '']);
+      lines.push([i + 1, shuttlePartLabel(r.part), shuttleTimeText(r), shuttleKindLabel(r.kind), r.dest || '', shuttleRidersText(r), r.memo || '']);
     });
     return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
   }
@@ -11144,7 +11258,7 @@
   /* ---------------- 엑셀 / CSV 올리기 · 양식 내려받기 ---------------- */
   /* 파일의 머리글에서 열을 찾는다 — 부 · 시간 · 승차/하차 · 목적지 · 원생 · 비고 */
   var SHUTTLE_HEADER_KEYS = {
-    part: ['몇시부', '시부', '부', '파트', 'part'],
+    part: ['수업시간', '몇시부', '시부', '부', '파트', 'part'],
     time: ['운행시간', '시간', '시각', '출발', 'time'],
     kind: ['승차/하차', '승차하차', '승하차', '구분', '종류', 'kind'],
     dest: ['목적지', '행선지', '도착지', '장소', 'dest', 'place'],
@@ -11173,27 +11287,76 @@
     return map;
   }
 
-  /* 엑셀·CSV 의 시간 표기(14:00 · 14시 30분 · 오후 2:00 · 0.5833)를 HH:MM 으로 */
-  function parseShuttleTimeCell(v) {
-    var s = String(v == null ? '' : v).trim();
-    if (!s) { return ''; }
-    var direct = normShuttleTime(s);
-    if (direct) { return direct; }
-    var m = s.match(/^(\d{1,2}):(\d{2})(?::\d{1,2})?$/);
-    if (m) { return normShuttleTime(m[1] + ':' + m[2]); }
-    if (/^\d*\.\d+$/.test(s)) {
-      var mins = Math.round(parseFloat(s) * 1440);
-      if (mins >= 0 && mins < 1440) { return pad2(Math.floor(mins / 60)) + ':' + pad2(mins % 60); }
+  /* 시간 한 토막 — 「4시28분」은 {h:4,mi:28}, 「35분」은 시 없이 {mi:35} */
+  function shuttleClockParts(v) {
+    var t = String(v == null ? '' : v).replace(/\s+/g, '');
+    if (!t) { return null; }
+    var pm = /오후|저녁|pm/i.test(t), am = /오전|아침|am/i.test(t);
+    t = t.replace(/오후|오전|저녁|아침|am|pm/gi, '');
+    if (!t) { return null; }
+    var m;
+    if ((m = t.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/))) { return { h: +m[1], mi: +m[2], pm: pm, am: am }; }
+    if ((m = t.match(/^(\d{1,2})시(\d{1,2})?분?$/))) { return { h: +m[1], mi: m[2] ? +m[2] : 0, pm: pm, am: am }; }
+    if ((m = t.match(/^(\d{1,2})분$/))) { return { mi: +m[1], pm: pm, am: am }; }
+    return null;
+  }
+
+  /* 시가 없이 분만 적힌 줄은 앞 줄의 시(hour)를 이어받는다 — 「35분~40분」→ 18:35 */
+  function shuttleClockText(p, prevHour) {
+    if (!p) { return ''; }
+    var h = (p.h == null) ? -1 : p.h;
+    var mi = (p.mi == null) ? 0 : p.mi;
+    if (h < 0) {
+      if (prevHour == null || prevHour < 0) { return ''; }
+      h = prevHour;
+    } else {
+      if (p.pm && h < 12) { h += 12; }
+      if (p.am && h === 12) { h = 0; }
+      /* 도장 차량은 오전/오후 표기가 없는 1~9시를 오후로 본다 (1시40분 → 13:40, 단 10~12시는 그대로) */
+      if (!p.pm && !p.am && h >= 1 && h <= 9) { h += 12; }
     }
-    var pm = /오후|pm/i.test(s), am = /오전|am/i.test(s);
-    var k = s.match(/(\d{1,2})\s*(?:시|:|시\s*)\s*(\d{1,2})?/);
-    if (!k) { return ''; }
-    var h = parseInt(k[1], 10);
-    var mi = k[2] ? parseInt(k[2], 10) : 0;
-    if (pm && h < 12) { h += 12; }
-    if (am && h === 12) { h = 0; }
     if (h < 0 || h > 23 || mi < 0 || mi > 59) { return ''; }
     return pad2(h) + ':' + pad2(mi);
+  }
+
+  /* 「4시28분~30분」→ { time:'16:28', end:'16:30' } · 범위 뒷부분도 잃지 않게 end 로 같이 돌려준다 */
+  function parseShuttleTimeRange(v, prevTime) {
+    var out = { time: '', end: '' };
+    var s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+    if (!s) { return out; }
+    var prevHour = -1;
+    var pm = String(prevTime || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (pm) { prevHour = +pm[1]; }
+    var exact = normShuttleTime(s);
+    if (exact) { out.time = exact; return out; }
+    if (/^\d*\.\d+$/.test(s)) {
+      var mins = Math.round(parseFloat(s) * 1440);
+      if (mins >= 0 && mins < 1440) { out.time = pad2(Math.floor(mins / 60)) + ':' + pad2(mins % 60); }
+      return out;
+    }
+    var chunks = s.split(/\s*[~∼〜\-–]\s*/).filter(function (x) { return x !== ''; });
+    if (!chunks.length) { return out; }
+    var a = shuttleClockParts(chunks[0]);
+    out.time = shuttleClockText(a, prevHour);
+    if (chunks.length > 1) {
+      var b = shuttleClockParts(chunks[1]);
+      var startHour = out.time ? +out.time.slice(0, 2) : prevHour;
+      var end = shuttleClockText(b, startHour);
+      if (end && out.time) {
+        // 분만 적힌 끝 시각이 앞 시각보다 이르면 다음 시(hour)로 본다 (「8시50분~10분」→ 21:10)
+        if (b && b.h == null && +end.slice(3, 5) < +out.time.slice(3, 5) && startHour < 23) {
+          end = pad2(startHour + 1) + ':' + end.slice(3);
+        }
+        if (end === out.time) { end = ''; }
+      }
+      out.end = end;
+    }
+    return out;
+  }
+
+  /* 엑셀·CSV 의 시간 표기(14:00 · 14시 30분 · 오후 2:00 · 0.5833)를 HH:MM 으로 */
+  function parseShuttleTimeCell(v, prevTime) {
+    return parseShuttleTimeRange(v, prevTime).time;
   }
 
   function shuttleKindFromText(v) {
@@ -11207,23 +11370,55 @@
     return shuttleRidersFromText(v);
   }
 
-  /* 2차원 표(엑셀 시트·CSV) → 운행 줄 배열. 머리글이 없으면 부·시간·승차/하차·목적지·원생·비고 순서로 읽는다 */
+  /* 돌봄교실 연락처처럼 정류장이 아닌 메모 줄 — 차량 운행에 넣지 않는다 */
+  function isShuttleContactRow(row) {
+    var cells = (row || []).map(function (c) { return String(c == null ? '' : c).trim(); });
+    var hasCare = cells.some(function (c) { return /^돌봄\s*\d*\s*반?$/.test(c.replace(/\s+/g, '')); });
+    if (!hasCare) { return false; }
+    var hasPhone = cells.some(function (c) {
+      return /(^|\n)\s*0\d{1,2}-\d{3,4}-\d{4}/.test(c) || /^0?\d{1,3}-\d{3,4}-\d{4}$/.test(c);
+    });
+    return hasPhone || cells.filter(function (c) { return c !== ''; }).length <= 2;
+  }
+
+  /* 장소 칸에 적힌 (승차)/(하차) 표시로 승하차를 가른다 — 승차/하차 열이 없는 표에서 */
+  function shuttleKindOfDest(dest) {
+    return /하차|하원|데리|drop/i.test(String(dest == null ? '' : dest)) ? 'drop' : 'pick';
+  }
+
+  /* 장소 칸의 「(승차)」「(하차)」 표시는 승차/하차 칸으로 옮겼으니 목적지에서는 덜어 낸다 */
+  function shuttleCleanDest(dest) {
+    return String(dest == null ? '' : dest)
+      .replace(/\s*[(（]\s*(승차|하차|등원|하원|픽업|드랍)\s*[)）]/g, '')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  /* 2차원 표(엑셀 시트·CSV) → 운행 줄 배열.
+     · 위쪽 10줄 안에서 머리글(수업시간/장소/시간/탑승자…)을 찾는다 — 제목줄이 먼저 있어도 읽힌다
+     · 비어 있는 부 칸은 앞 줄의 부를 이어받는다 (엑셀 병합 셀)
+     · 승차/하차 열이 없으면 장소에 적힌 (승차)/(하차)로 가른다 */
   function shuttleRowsFromTable(rows) {
     var clean = (rows || []).filter(function (row) {
       return row && row.some(function (c) { return String(c == null ? '' : c).trim() !== ''; });
     });
-    if (!clean.length) { return []; }
-    var header = clean[0];
-    var map = shuttleHeaderMap(header);
-    var start = map ? 1 : 0;
+    var out = [];
+    out.skippedContacts = 0;
+    out.headerRow = -1;
+    if (!clean.length) { return out; }
+    var header = null, map = null, start = 0;
+    var limit = Math.min(clean.length, 10);
+    for (var hi = 0; hi < limit; hi++) {
+      var found = shuttleHeaderMap(clean[hi]);
+      if (found) { header = clean[hi]; map = found; start = hi + 1; break; }
+    }
     if (!map) {
-      header = null;
       var c0 = String(clean[0][0] == null ? '' : clean[0][0]).trim();
       var c1 = String(clean[0][1] == null ? '' : clean[0][1]).trim();
       var offset = 0;
       if (/^(번호|no\.?|#)$/i.test(c0) || (/^\d{1,3}$/.test(c0) && /^(\d{1,2}\s*부|미지정)$/.test(c1))) { offset = 1; }
       map = { part: offset, time: offset + 1, kind: offset + 2, dest: offset + 3, riders: offset + 4, memo: offset + 5 };
     }
+    out.headerRow = header ? start - 1 : -1;
     /* 머리글이 중간에 한 번 더 나오면 건너뛴다 (값이 머리글과 똑같은 줄만) */
     var isRepeatedHeader = function (row) {
       if (!header) { return false; }
@@ -11234,26 +11429,34 @@
       });
       return same >= 2;
     };
-    var out = [];
+    var lastPart = '', prevTime = '';
     for (var i = start; i < clean.length; i++) {
       var row = clean[i];
       if (isRepeatedHeader(row)) { continue; }
+      if (isShuttleContactRow(row)) { out.skippedContacts++; continue; }
       var cellOf = function (f) {
         var idx = map[f];
         if (idx === undefined) { return ''; }
         return String(row[idx] == null ? '' : row[idx]).trim();
       };
-      var time = parseShuttleTimeCell(cellOf('time'));
-      var dest = cellOf('dest').slice(0, 60);
+      // 엑셀 병합 셀처럼 부 칸이 비어 있으면 앞 줄의 부를 이어받는다
+      var part = normShuttlePart(cellOf('part')) || lastPart;
+      if (part) { lastPart = part; }
+      var span = parseShuttleTimeRange(cellOf('time'), prevTime);
+      var time = span.time;
+      if (time) { prevTime = time; }
+      var dest = shuttleCleanDest(cellOf('dest')).slice(0, 60);
       var memo = cellOf('memo').slice(0, 80);
       var riders = shuttleRidersFromCell(cellOf('riders'));
-      var part = normShuttlePart(cellOf('part'));
+      var kindCell = cellOf('kind');
+      var kind = kindCell ? shuttleKindFromText(kindCell) : shuttleKindOfDest(dest + ' ' + cellOf('dest'));
       if (!time && !dest && !memo && !riders.length) { continue; }
       out.push({
         id: uid('sh'),
         part: part,
         time: time,
-        kind: shuttleKindFromText(cellOf('kind')),
+        timeEnd: span.end || '',
+        kind: kind,
         dest: dest,
         memo: memo,
         riders: riders
@@ -11272,11 +11475,12 @@
       '운행 <b>' + rows.length + '건</b> · 탑승 원생 <b>' + (known + unknown) + '명</b>' +
       (unknown ? ' (명단에서 못 찾은 이름 ' + unknown + '개는 이름 그대로 들어갑니다)' : '') +
       (noTime ? '<br>시간이 비어 있는 줄 <b>' + noTime + '건</b>은 시간 없이 들어갑니다.' : '') +
+      (rows.skippedContacts ? '<br>돌봄교실 연락처 <b>' + rows.skippedContacts + '줄</b>은 운행이 아니라서 건너뛰었어요.' : '') +
       '</div>';
     var body = rows.slice(0, 6).map(function (r) {
       return '<tr>' +
         '<td>' + esc(shuttlePartLabel(r.part)) + '</td>' +
-        '<td class="c">' + esc(r.time || '-') + '</td>' +
+        '<td class="c">' + esc(r.time || '-') + (r.timeEnd ? '~' + esc(r.timeEnd) : '') + '</td>' +
         '<td class="c">' + esc(shuttleKindLabel(r.kind)) + '</td>' +
         '<td>' + esc(r.dest || '-') + '</td>' +
         '<td>' + esc(shuttleRidersText(r) || '-') + '</td>' +
@@ -11296,7 +11500,7 @@
       openModal({
         title: '운행을 찾지 못했어요',
         sub: fileName || '',
-        body: '<div class="help" style="margin-top:0">첫 줄에 <b>부 · 시간 · 승차/하차 · 목적지 · 원생 · 비고</b> 머리글이 있는지 확인해 주세요. ' +
+        body: '<div class="help" style="margin-top:0">첫 10줄 안에 <b>수업시간(몇시부) · 장소(목적지) · 시간 · 탑승자(원생)</b> 같은 머리글이 있는지 확인해 주세요. ' +
           '「📄 엑셀 양식」으로 받은 파일을 채워 올리면 가장 안전합니다. 엑셀 파일은 내용이 있는 첫 시트를 읽습니다.</div>',
         actions: [{ label: '확인', value: null, kind: 'btn-primary' }]
       });
@@ -11382,10 +11586,14 @@
     }
     var textReader = new FileReader();
     textReader.onload = function (e) {
-      applyShuttleImport(shuttleRowsFromTable(parseCSV(e.target.result)), name);
+      /* 바이트로 읽어 UTF-8(BOM) · CP949/EUC-KR CSV 를 모두 살린다 */
+      var text = '';
+      try { text = attDecodeCsvBytes(e && e.target ? e.target.result : null); } catch (err) { text = ''; }
+      if (!text) { try { text = String((e && e.target ? e.target.result : '') || ''); } catch (err2) { text = ''; } }
+      applyShuttleImport(shuttleRowsFromTable(parseCSV(text)), name);
     };
     textReader.onerror = function () { setShuttleFileNote(''); toast('파일을 읽는 중 오류가 났어요.'); };
-    textReader.readAsText(file, 'utf-8');
+    textReader.readAsArrayBuffer(file);
   }
 
   /* 엑셀 양식 — 엑셀에서 바로 열리는 BOM CSV, 예시 3줄 포함 */
@@ -11420,7 +11628,7 @@
       body.innerHTML = rows.length ? rows.map(function (r, i) {
         return '<tr class="' + shuttlePartClass(r.part) + '">' +
           '<td class="c">' + (i + 1) + '</td>' +
-          '<td class="c">' + esc(shuttlePartLabel(r.part)) + '<br>' + esc(r.time || '-') + '</td>' +
+          '<td class="c">' + esc(shuttlePartLabel(r.part)) + '<br>' + esc(r.time || '-') + (r.timeEnd ? '<br>~' + esc(r.timeEnd) : '') + '</td>' +
           '<td class="c">' + shuttleKindLabel(r.kind) + '</td>' +
           '<td>' + esc(r.dest || '-') + '</td>' +
           '<td class="riders">' + esc(shuttleRidersText(r) || '-') + '</td>' +
@@ -11466,7 +11674,7 @@
       var riders = [];
       var seen = {};
       (Array.isArray(r.riders) ? r.riders : []).forEach(function (p) {
-        var nm = String(typeof p === 'string' ? p : ((p && p.name) || '')).trim().slice(0, 24);
+        var nm = String(typeof p === 'string' ? p : ((p && p.name) || '')).trim().slice(0, 40);
         if (!nm || seen[nm]) { return; }
         seen[nm] = true;
         var m = byOldId[String((p && p.id) || '')] || byName[nm] || null;
@@ -11475,6 +11683,7 @@
       var row = {
         id: String(r.id || uid('sh')),
         time: normShuttleTime(r.time),
+        timeEnd: normShuttleTime(r.timeEnd),
         kind: r.kind === 'drop' ? 'drop' : 'pick',
         part: normShuttlePart(r.part),
         dest: String(r.dest == null ? '' : r.dest).trim().slice(0, 60),
@@ -15057,6 +15266,9 @@
       ui: ensureShuttleUI,
       kinds: SHUTTLE_KINDS,
       parts: function () { return SHUTTLE_PARTS.slice(); },
+      partList: shuttlePartList,
+      partOf: normShuttlePart,
+      partClass: shuttlePartClass,
       partLabel: shuttlePartLabel,
       label: shuttleKindLabel,
       ridersText: shuttleRidersText,
@@ -15065,6 +15277,8 @@
       rowsFromTable: shuttleRowsFromTable,
       headerMap: shuttleHeaderMap,
       timeCell: parseShuttleTimeCell,
+      timeRange: parseShuttleTimeRange,
+      parseCsv: parseCSV,
       kindOfText: shuttleKindFromText,
       importRows: applyShuttleImport,
       readFile: handleShuttleFile,
