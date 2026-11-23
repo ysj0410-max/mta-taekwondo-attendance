@@ -3793,6 +3793,8 @@
   /* 여러 명에게 보낼 때 도장폰이 몰리지 않도록 한 건씩 순서대로 보냅니다 */
   var smsQueue = [];
   var smsBusy = false;
+  /* 지금 이 화면에서 실제로 보내고 있는 로그 id — 「발송 대기」로 멈춘 건과 구분하려고 */
+  var smsInflight = {};
   function finishSmsEntry(entry) {
     saveLogs();
     renderLog();
@@ -3822,6 +3824,7 @@
     if (smsBusy || !smsQueue.length) { return; }
     smsBusy = true;
     var entry = smsQueue.shift();
+    smsInflight[entry.id] = true;
     smsSend(entry.phone, entry.text, entry).then(function (r) {
       entry.status = r.state;
       entry.statusNote = r.note;
@@ -3833,6 +3836,7 @@
       entry.statusNote = '전송오류: ' + errText(err);
     }).then(function () {
       smsBusy = false;
+      delete smsInflight[entry.id];
       finishSmsEntry(entry);
       setTimeout(pumpSms, 700);
     });
@@ -3850,12 +3854,17 @@
     return null;
   }
   function smsRetryable(l) {
-    return !!(l && SMS_RETRY_STATES[l.status] && String(l.phone || '').trim());
+    if (!l || !String(l.phone || '').trim()) { return false; }
+    if (SMS_RETRY_STATES[l.status]) { return true; }
+    /* 앱을 닫았다 열어 「발송 대기」에 멈춘 로그 — 이 화면에서 보내는 중이 아닐 때만 대상 */
+    if (l.status === 'queued') { return !smsInflight[l.id] && !smsRetryQueued(l); }
+    return false;
   }
   function smsRetryTitle(l) {
     if (l.status === 'unverified') { return '보낸 요청이 확인되지 않은 건이에요. 이미 도착했을 수 있으니 도장폰 문자함도 함께 확인하세요.'; }
     if (l.status === 'sim') { return '도장폰 미연동으로 기록만 된 건이에요. 웹훅 URL을 저장한 뒤 다시 보낼 수 있어요.'; }
     if (l.status === 'off') { return '자동발송이 꺼져 있어 기록만 된 건이에요.'; }
+    if (l.status === 'queued') { return '발송하다 멈춘 건이에요. 다시 보내면 이어서 발송합니다.'; }
     return '전송오류 난 문자를 같은 번호로 다시 보냅니다.';
   }
   /* 지금 보이는 발송 로그 중 재전송할 것 — 키오스크는 화면에 그리는 40건, 관리자는 30건 */
@@ -3882,7 +3891,7 @@
       toast(entry.name + ' 보호자 연락처가 없어 문자를 다시 보낼 수 없어요. 원생 관리에서 번호를 넣어 주세요.');
       return null;
     }
-    if (entry.status === 'queued' || smsRetryQueued(entry)) {
+    if (smsRetryQueued(entry) || smsInflight[entry.id]) {
       toast('이미 다시 보내는 중이에요. 잠시만 기다려 주세요.');
       return null;
     }
@@ -3892,9 +3901,10 @@
     entry.retryCount = (entry.retryCount || 0) + 1;
     entry.error = '';
     saveLogs();
+    /* 큐에 먼저 넣고 그린다 — 그리는 순간 이미 「보내는 중」으로 보이게 */
+    smsQueue.push(entry);
     renderLog();
     renderAdminLog();
-    smsQueue.push(entry);
     pumpSms();
     return entry;
   }
@@ -14394,7 +14404,7 @@
       queue: function () { return smsQueue.slice(); },
       busy: function () { return smsBusy; },
       pump: pumpSms,
-      clearQueue: function () { smsQueue = []; smsBusy = false; },
+      clearQueue: function () { smsQueue = []; smsBusy = false; smsInflight = {}; },
       kioskLog: renderLog,
       adminLog: renderAdminLog
     },
