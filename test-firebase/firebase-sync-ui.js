@@ -15,6 +15,8 @@
 
   var CFG_KEY = 'tdk.fbConfig.v1';
   var DEV_KEY = 'tdk.fbDevice.v1';
+  var RELAY_KEY = 'tdk.fbSmsRelay.v1';     /* 태블릿 출석을 관리자 PC가 대신 문자로 보낸 표시 */
+  var RELAY_WINDOW_MS = 60 * 60 * 1000;    /* 한 시간 안에 도착한 출석만 대신 보낸다 */
   var DEFAULT_DOJANG = 'mta-tkd';
 
   var S = {
@@ -124,6 +126,15 @@
       onEvent: function (type, payload) {
         if (type === 'quota-blocked') { showWarn(true); }
         if (type === 'synced') { saveConfig({ lastSyncAt: payload && payload.at }); }
+        if (type === 'remote-event') { relaySms(payload); }
+        if (type === 'tablet-private-data' && payload && payload.count) {
+          S.msg = '⚠️ 이 태블릿에 원생 개인정보가 ' + payload.count + '명분 남아 있습니다. 태블릿에는 이름·띠만 있으면 되니, 개인정보를 지우려면 「💾 도장 데이터 전체 백업」을 받아 두고 이 브라우저의 사이트 데이터를 지운 뒤 다시 연결하세요.';
+          S.msgKind = 'warn';
+        }
+        if (type === 'blocked-local') {
+          S.msg = '이 기기는 「출석 태블릿」 역할이라 원생·원비·설정을 Firestore로 올리지 않습니다(출결만 올립니다).';
+          S.msgKind = 'warn';
+        }
         if (type === 'usage' && payload && payload.level >= 1) {
           S.msg = payload.level >= 2
             ? '🔴 무료 한도를 모두 사용했습니다 — 동기화를 잠시 멈추고 기기에 보관합니다.'
@@ -193,6 +204,47 @@
     renderAll();
   }
 
+  /* ---------- 태블릿 출석 → 관리자 PC 문자 대행 ----------
+     태블릿에는 보호자 전화번호가 없다(개인정보 분리). 그래서 켜져 있는 관리자 PC가
+     다른 기기가 찍은 출석을 받아 그 원생의 보호자에게 문자를 보낸다.
+     · 오늘 것 + 한 시간 안에 도착한 것만 (며칠 지난 기록을 몰아 보내지 않는다)
+     · 같은 출석(date_studentId_in|out)은 한 번만 (발송표시를 기기에 남긴다) */
+  function relayLog() {
+    var v = readJSON(RELAY_KEY, {});
+    return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+  }
+  function saveRelayLog(log) {
+    var keys = Object.keys(log);
+    if (keys.length > 800) {
+      keys.sort(function (a, b) {
+        return String((log[a] && log[a].at) || '').localeCompare(String((log[b] && log[b].at) || ''));
+      }).slice(0, keys.length - 800).forEach(function (k) { delete log[k]; });
+    }
+    writeJSON(RELAY_KEY, log);
+  }
+  function relaySms(ev) {
+    if (!ev || S.cfg.role !== 'admin') { return; }
+    if (!ev.studentId || !ev.time || !ev.date) { return; }
+    var today = new Date();
+    var todayKey = today.getFullYear() + '-' + ('0' + (today.getMonth() + 1)).slice(-2) + '-' + ('0' + today.getDate()).slice(-2);
+    if (ev.date !== todayKey) { return; }
+    var at = Date.parse(String(ev.updatedAt || ''));
+    if (!isFinite(at) || (Date.now() - at) > RELAY_WINDOW_MS) { return; }
+    var key = ev.date + '_' + ev.studentId + '_' + (ev.eventKind === 'out' ? 'out' : 'in');
+    var log = relayLog();
+    if (log[key]) { return; }
+    var hook = (window.__tdk && window.__tdk.kiosk && window.__tdk.kiosk.notifyAttendance);
+    if (typeof hook !== 'function') { return; }
+    var r = null;
+    try { r = hook(ev.date, ev.studentId, ev.eventKind, ev.time); } catch (e) { r = null; }
+    if (r && r.sent) {
+      log[key] = { at: new Date().toISOString(), by: String(ev.by || ''), kind: ev.eventKind, name: String(r.name || '') };
+      saveRelayLog(log);
+      S.msg = '📨 다른 기기에서 온 출석을 받아 ' + (r.name || '원생') + ' 보호자에게 문자를 보냈습니다.';
+      S.msgKind = 'ok';
+    }
+  }
+
   /* ---------- 상태 표시 ---------- */
   function chipFor(state) {
     if (state === 'online') { return 'ok'; }
@@ -228,7 +280,9 @@
     if (tag && typeof window.innerWidth === 'number') {
       tag.textContent = window.innerWidth <= 760 ? '🧪 테스트' : '🧪 Firebase 테스트 버전';
     }
-    setText('fb-usage-note', S.engine ? (S.engine.usage.snapshot().date + ' 기준 · 기기에서 센 추정치') : '동기화를 켜면 표시됩니다');
+    setText('fb-usage-note', S.engine
+      ? (S.engine.usage.snapshot().date + ' 기준 · 이 기기에서 센 추정치 (PC·태블릿 합산 아님)')
+      : '동기화를 켜면 표시됩니다');
     var lastSync = (S.engine && S.engine.errors().lastSyncAt) || S.cfg.lastSyncAt || '';
     setText('fb-sync-note', '마지막 동기화: ' + (lastSync ? nowText(lastSync) : '아직 없음') +
       (S.engine ? ' · 기기 ID ' + deviceId() : ''));
@@ -263,8 +317,18 @@
       setText(txtId, numText(snap[k]) + ' / ' + numText(snap.limits[k]) + '  (' + Math.floor((snap.pct[k] || 0) * 100) + '%)');
     });
     var note = $('fb-usage-note');
-    if (note && snap.level >= 2) { note.textContent = '한도 초과 — 동기화를 멈추고 기기에 보관 중'; }
-    else if (note && snap.level >= 1) { note.textContent = '무료 한도의 80%를 넘었습니다 — 남은 양을 확인하세요'; }
+    if (note && snap.level >= 2) { note.textContent = '한도 초과 — 동기화를 멈추고 기기에 보관 중 (전체 사용량은 콘솔에서 확인)'; }
+    else if (note && snap.level >= 1) { note.textContent = '이 기기 기준 80%를 넘었습니다 — 콘솔에서 전체 사용량을 확인하세요'; }
+    var link = $('fb-console-link');
+    if (link) {
+      var pid = (S.cfg.config && S.cfg.config.projectId) || '';
+      link.href = pid
+        ? ('https://console.firebase.google.com/project/' + encodeURIComponent(pid) + '/firestore/usage')
+        : 'https://console.firebase.google.com/';
+      link.textContent = pid
+        ? ('Firebase 콘솔 · ' + pid + ' Firestore 사용량 열기')
+        : 'Firebase 콘솔 열기 (프로젝트를 고르면 Firestore → 사용량)';
+    }
   }
 
   function renderQueue() {
@@ -306,43 +370,70 @@
     if (wrap) { wrap.style.display = ''; }
     var rows = S.plan.keys.map(function (k) {
       var isLocal = k.localOnly;
-      return '<tr><td>' + k.icon + ' <b>' + k.label + '</b><br><span class="tiny-note">' + k.key + '</span></td>' +
+      var tag = k.derived ? ' <span class="chip wait" style="font-size:9.5px">자동 생성</span>' : '';
+      return '<tr><td>' + k.icon + ' <b>' + k.label + '</b>' + tag + '<br><span class="tiny-note">' + k.key + '</span></td>' +
         '<td class="tiny-note">' + (isLocal ? '🚫 기기 로컬 전용 (보내지 않음)' : k.desc) + '</td>' +
         '<td class="num"><b>' + (isLocal ? '—' : numText(k.count)) + '</b>' + (isLocal ? '' : '건') + '</td></tr>';
     }).join('');
     setHtml('fb-mig-table', rows);
     setText('fb-mig-note', '모두 ' + numText(S.plan.total) + '건 · Firestore 배치 ' + S.plan.batches + '회' +
+      ' · 저장 키 ' + (S.plan.keyCount || 0) + '개' +
+      (S.plan.derivedKeys ? ' + 자동 생성 사본 ' + S.plan.derivedKeys + '종 ' + numText(S.plan.derived) + '건' : '') +
       (S.plan.localOnly ? ' · 로컬 전용 ' + S.plan.localOnly + '개 키 제외' : ''));
     var run = $('fb-mig-run');
     if (run) { run.disabled = !(S.engine && S.engine.adapter && S.plan.total >= 0) || S.cfg.role === 'tablet' || S.busy; }
   }
 
+  function roleLabel(r) {
+    return r === 'admin' ? '관리자 PC' : (r === 'tablet' ? '출석 태블릿' : String(r || '역할 없음'));
+  }
+
   function renderAuth() {
     var a = S.auth;
+    var dev = S.cfg.role;
     var el = $('fb-auth');
     if (el) {
-      var label = '로그인 안 됨';
-      if (a) {
-        var roleText = a.role === 'admin' ? '관리자' : (a.role === 'tablet' ? '출석 태블릿' : a.role);
-        label = '✅ 로그인: ' + (a.email || a.uid) + (roleText ? (' · 역할: ' + roleText) : '');
-      }
-      el.textContent = label;
+      el.textContent = a
+        ? ('✅ 로그인: ' + (a.email || a.uid) + ' · ' + roleLabel(a.role || a.expect))
+        : '로그인 안 됨';
       el.className = 'tiny-note';
     }
-    var note = $('fb-role-state');
-    if (note) {
-      if (!S.adapter || S.adapter.mode !== 'firestore') {
-        note.textContent = '실제 Firebase 모드에서만 로그인합니다. (모의 모드는 로그인 없이 시험)';
-      } else if (a && a.role === 'admin') {
-        note.textContent = '이 계정은 관리자 권한입니다 — 모든 데이터를 읽고 쓸 수 있습니다.';
-      } else if (a && a.role) {
-        note.textContent = '이 계정의 역할은 「' + a.role + '」입니다. 쓰기 권한이 제한됩니다.';
-      } else if (a) {
-        note.textContent = '⚠️ roles 문서가 없습니다 — Firestore에 dojangs/' + S.cfg.dojangId + '/roles/' + a.uid + ' 문서를 만들고 role: "admin" 을 넣어 주세요.';
-      } else {
-        note.textContent = 'Firebase 콘솔 → Authentication 에서 만든 관리자 이메일/비밀번호로 로그인하세요.';
-      }
+    var cardA = $('fb-login-card-admin');
+    var cardT = $('fb-login-card-tablet');
+    if (cardA) { cardA.className = 'fb-login-card' + (dev === 'admin' ? ' active' : ''); }
+    if (cardT) { cardT.className = 'fb-login-card' + (dev === 'tablet' ? ' active' : ''); }
+    var hint = $('fb-role-hint');
+    if (hint) {
+      hint.innerHTML = '이 기기의 역할은 <b>' + roleLabel(dev) + '</b> 입니다 — 아래 <b>' +
+        (dev === 'tablet' ? '출석 태블릿 계정' : '관리자 PC 계정') + '</b>으로 로그인하세요.' +
+        (dev === 'tablet' ? ' 태블릿에는 이름·띠·출결만 내려옵니다.' : '');
     }
+    var note = $('fb-role-state');
+    if (!note) { return; }
+    if (!S.adapter || S.adapter.mode !== 'firestore') {
+      note.textContent = '실제 Firebase 모드에서만 로그인합니다. (모의 모드는 로그인 없이 시험)';
+      return;
+    }
+    if (!a) {
+      note.textContent = '역할에 맞는 계정으로 로그인하세요 — 관리자 PC 계정과 출석 태블릿 계정은 서로 다른 계정이어야 합니다.';
+      return;
+    }
+    if (!a.role) {
+      note.textContent = '⚠️ 이 계정에는 roles 문서가 없습니다 — dojangs/' + S.cfg.dojangId + '/roles/' + a.uid +
+        ' 에 role: "' + (a.expect || dev) + '" 을 만들어 주세요.';
+      return;
+    }
+    if (a.role !== dev) {
+      note.textContent = '⚠️ 이 계정의 역할은 「' + roleLabel(a.role) + '」인데 이 기기는 「' + roleLabel(dev) + '」입니다. ' +
+        '위 「이 기기 역할」을 맞추거나 ' + roleLabel(dev) + ' 계정으로 다시 로그인하세요.' +
+        (dev === 'tablet' && a.role === 'admin'
+          ? ' (관리자 계정으로 로그인되어 이 태블릿이 규칙상 개인정보를 읽을 수 있는 상태입니다 — 태블릿 전용 계정을 꼭 쓰세요.)'
+          : '');
+      return;
+    }
+    note.textContent = a.role === 'admin'
+      ? '✅ 관리자 PC 계정입니다 — 모든 데이터를 읽고 쓸 수 있습니다.'
+      : '✅ 출석 태블릿 계정입니다 — 출석 화면 최소 정보(kioskStudents)와 출결만 읽고, 출결 새로 만들기만 할 수 있습니다.';
   }
 
   function renderAll() {
@@ -352,6 +443,10 @@
     if (roleSel) { roleSel.value = S.cfg.role; }
     var dj = $('fb-dojang');
     if (dj && !dj.value) { dj.value = S.cfg.dojangId; }
+    var emailA = $('fb-admin-email');
+    if (emailA && !emailA.value && S.cfg.adminEmail) { emailA.value = S.cfg.adminEmail; }
+    var emailT = $('fb-tablet-email');
+    if (emailT && !emailT.value && S.cfg.tabletEmail) { emailT.value = S.cfg.tabletEmail; }
     var cfgArea = $('fb-config');
     if (cfgArea && !cfgArea.value && S.cfg.config) {
       cfgArea.value = FB.stableStringify(S.cfg.config).replace(/,"/g, ',\n  "').replace(/^\{/, '{\n  ').replace(/\}$/, '\n}');
@@ -436,40 +531,66 @@
     });
   }
 
-  function onLogin() {
+  /* 역할별 로그인 — 관리자 PC 계정과 출석 태블릿 계정을 따로 받는다 */
+  function loginAs(expect) {
     if (!S.adapter || S.adapter.mode !== 'firestore' || !S.adapter.signInEmail) {
       S.msg = '실제 Firebase 모드에서만 로그인할 수 있습니다. (모의 모드는 로그인 없이 시험)';
       S.msgKind = 'warn';
       renderAll();
       return;
     }
-    var email = val('fb-email').trim(), pw = val('fb-pw');
+    var emailId = expect === 'tablet' ? 'fb-tablet-email' : 'fb-admin-email';
+    var pwId = expect === 'tablet' ? 'fb-tablet-pw' : 'fb-admin-pw';
+    var email = val(emailId).trim();
+    var pw = val(pwId);
     if (!email || !pw) {
-      S.msg = '이메일과 비밀번호를 입력해 주세요.';
+      S.msg = '「' + roleLabel(expect) + '」 계정의 이메일과 비밀번호를 입력해 주세요.';
       S.msgKind = 'warn';
       renderAll();
       return;
     }
-    S.msg = '로그인 중…';
+    S.msg = roleLabel(expect) + ' 계정으로 로그인 중…';
     renderAll();
     S.adapter.signInEmail(email, pw).then(function (u) {
-      var pwEl = $('fb-pw');
+      var pwEl = $(pwId);
       if (pwEl) { pwEl.value = ''; }
-      S.auth = { uid: u.uid, email: u.email, role: '' };
+      S.auth = { uid: u.uid, email: u.email, role: '', expect: expect };
+      if (expect === 'tablet') { saveConfig({ tabletEmail: email }); } else { saveConfig({ adminEmail: email }); }
       return S.adapter.getDoc('dojangs/' + S.cfg.dojangId + '/roles/' + u.uid).then(function (r) {
         S.auth.role = r && r.exists && r.data ? String(r.data.role || '') : '';
-        S.msg = S.auth.role === 'admin' ? '✅ 관리자로 로그인했습니다.' : '로그인은 됐지만 roles 문서의 role 을 확인해 주세요.';
-        S.msgKind = S.auth.role === 'admin' ? 'ok' : 'warn';
+        if (!S.auth.role) {
+          S.msg = '⚠️ 로그인은 됐지만 roles 문서가 없습니다 — dojangs/' + S.cfg.dojangId + '/roles/' + u.uid +
+            ' 문서에 role: "' + expect + '" 을 만들어 주세요.';
+          S.msgKind = 'warn';
+        } else if (S.auth.role !== expect) {
+          S.msg = '⚠️ 이 계정의 역할은 「' + roleLabel(S.auth.role) + '」입니다 — 「' + roleLabel(expect) + '」 계정으로 로그인해 주세요.';
+          S.msgKind = 'warn';
+        } else if (S.auth.role !== S.cfg.role) {
+          S.msg = '✅ ' + roleLabel(expect) + ' 계정으로 로그인했습니다. 다만 이 기기의 역할 설정은 「' + roleLabel(S.cfg.role) +
+            '」입니다 — 위 「이 기기 역할」을 「' + roleLabel(expect) + '」로 맞춰 주세요.';
+          S.msgKind = 'warn';
+        } else {
+          S.msg = '✅ ' + roleLabel(expect) + ' 계정으로 로그인했습니다.';
+          S.msgKind = 'ok';
+        }
         renderAll();
       }, function () { renderAll(); });
     }, function (err) {
-      S.msg = '⚠️ 로그인 실패: ' + FB.errorText(err) + ' (Firebase Authentication 에서 이메일/비밀번호 로그인을 켜고 계정을 만들어 주세요)';
+      S.msg = '⚠️ 로그인 실패: ' + FB.errorText(err) +
+        ' (Firebase Authentication 에서 이메일/비밀번호 로그인을 켜고 「' + roleLabel(expect) + '」 계정을 만들어 주세요)';
       S.msgKind = 'warn';
       renderAll();
     });
   }
 
-  function onLogout() {
+  function logoutAs(expect) {
+    if (!S.auth || (S.auth.expect && S.auth.expect !== expect)) {
+      if (!S.auth) {
+        S.msg = '로그인된 계정이 없습니다.';
+        renderAll();
+        return;
+      }
+    }
     if (S.adapter && S.adapter.signOut) { S.adapter.signOut().then(function () {}, function () {}); }
     S.auth = null;
     S.msg = '로그아웃했습니다.';
@@ -603,7 +724,10 @@
   function bind() {
     var map = [
       ['fb-save', onSave], ['fb-test', onTest], ['fb-mock', connectMock],
-      ['fb-login', onLogin], ['fb-logout', onLogout],
+      ['fb-admin-login', function () { loginAs('admin'); }],
+      ['fb-tablet-login', function () { loginAs('tablet'); }],
+      ['fb-admin-logout', function () { logoutAs('admin'); }],
+      ['fb-tablet-logout', function () { logoutAs('tablet'); }],
       ['fb-mig-preview', onPreview], ['fb-mig-run', onMigrate],
       ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-usage-reset', onUsageReset],
       ['fb-guide', onGuide]
@@ -653,6 +777,12 @@
   }
 
   window.TDKFB = {
+    /* 이 기기의 역할(admin|tablet) — 앱의 문자 발송이 태블릿에서 직접 나가지 않게 하는 데 쓴다 */
+    deviceRole: function () { return S.cfg.role; },
+    roleLabel: function (r) { return roleLabel(r); },
+    loginAs: loginAs,
+    auth: function () { return S.auth ? { uid: S.auth.uid, email: S.auth.email, role: S.auth.role } : null; },
+    relayLog: function () { return relayLog(); },
     engine: function () { return S.engine; },
     adapter: function () { return S.adapter; },
     server: function () { return S.server; },

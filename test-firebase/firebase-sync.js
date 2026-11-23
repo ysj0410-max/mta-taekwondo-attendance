@@ -5,7 +5,8 @@
      운영 버전(index.html v28)은 이 파일을 읽지 않으며, 이 파일이 운영 데이터에
      영향을 주는 경로는 전혀 없습니다.
    · 저장 구조
-       dojangs/{dojangId}/students/{studentId}          원생 1명 = 문서 1개
+       dojangs/{dojangId}/students/{studentId}          원생 1명 = 문서 1개 (개인정보 포함 · 관리자 전용)
+       dojangs/{dojangId}/kioskStudents/{studentId}     출석 화면용 최소 정보 사본 (개인정보 없음 · 태블릿 읽기)
        dojangs/{dojangId}/attendanceEvents/{eventId}     출결 1건 = 문서 1개
                                                          eventId = {날짜}_{원생ID}_{in|out}
        dojangs/{dojangId}/tuition/{YYYY-MM}_{studentId}  원생·월 원비 1건 = 문서 1개
@@ -27,7 +28,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.0.0-test';
+  var VERSION = '1.1.0-test';
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -378,8 +379,68 @@
     { name: 'logs', key: 'tdk.logs.v1', label: '문자 발송 로그(최근 200)', icon: '📨', kind: 'value', meta: 'logs', union: true, desc: 'meta/logs · 항목 합집합' },
     { name: 'muted', key: 'tdk.muted.v1', label: '효과음 끔', icon: '🔇', kind: 'value', meta: 'muted', desc: 'meta/muted' },
     { name: 'faces', key: 'tdk.faces.v1', label: '원생 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' },
-    { name: 'adminFace', key: 'tdk.adminFace.v1', label: '관리자 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' }
+    { name: 'adminFace', key: 'tdk.adminFace.v1', label: '관리자 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' },
+    /* ↓ 자동으로 만들어지는 파생 문서 — 키는 위 항목과 같은 것을 읽는다(저장 키가 늘어나는 것은 아님) */
+    { name: 'kioskStudents', key: 'tdk.students.v1', label: '출석 화면용 최소 정보', icon: '📱', kind: 'kiosk', coll: 'kioskStudents', derivedFrom: 'students', desc: 'students 에서 개인정보를 뺀 사본 · 태블릿이 읽는 곳' },
+    { name: 'kioskConfig', key: 'tdk.settings.v1', label: '출석 화면 최소 설정', icon: '🎛', kind: 'object', meta: 'kioskConfig', derivedFrom: 'settings', transform: 'kioskConfig', desc: 'meta/kioskConfig · 태블릿이 읽는 최소 설정' }
   ];
+
+  /* =========================================================================
+     3-1. kioskStudents — 태블릿에 보여 줄 최소 정보만 남긴 사본
+     -------------------------------------------------------------------------
+     · 담는 칸: id · name · division · course · belt · status (+ 엔진 메타 _ver 등)
+     · 절대 담지 않는 칸: phone · birthDate · tconId · note · tuitionDay ·
+       siblingDiscount · firstRegDate · monthlyFee · attendCount 등
+       (firestore.rules 의 noPrivateFields() 가 서버에서도 한 번 더 막는다)
+     ========================================================================= */
+  var KIOSK_FIELDS = ['id', 'name', 'division', 'course', 'belt', 'status'];
+  var PRIVATE_STUDENT_FIELDS = ['phone', 'birthDate', 'tconId', 'note', 'tuitionDay', 'siblingDiscount', 'firstRegDate'];
+
+  function kioskStudentBody(s) {
+    if (!isPlain(s)) { return null; }
+    var id = String(s.id == null ? '' : s.id).trim();
+    var name = String(s.name == null ? '' : s.name).trim();
+    if (!id && !name) { return null; }
+    return {
+      id: id || name,
+      name: name,
+      division: String(s.division == null ? '' : s.division),
+      course: String(s.course == null ? '' : s.course),
+      belt: String(s.belt == null ? '' : s.belt),
+      status: (s.status === 'paused') ? 'paused' : 'active'
+    };
+  }
+  function kioskDocsOf(list, base) {
+    var out = [];
+    (Array.isArray(list) ? list : []).forEach(function (s) {
+      var body = kioskStudentBody(s);
+      if (!body) { return; }
+      var id = safeId(body.id);
+      out.push({ id: id, path: base + '/kioskStudents/' + id, body: body });
+    });
+    return out;
+  }
+  /* 태블릿이 읽는 최소 설정 — 도장 이름과 "문자는 관리자 PC가 보낸다" 정도만 */
+  function kioskConfigBody(settings) {
+    var s = isPlain(settings) ? settings : {};
+    return {
+      dojoName: String(s.dojoName == null ? '' : s.dojoName),
+      kioskEnabled: true,
+      smsByAdmin: true
+    };
+  }
+  /* 이 도장 데이터에 개인정보가 들어 있는 원생이 몇 명인지 (태블릿 안내용) */
+  function countPrivateStudents(list) {
+    var n = 0;
+    (Array.isArray(list) ? list : []).forEach(function (s) {
+      if (!isPlain(s)) { return; }
+      for (var i = 0; i < PRIVATE_STUDENT_FIELDS.length; i++) {
+        var v = s[PRIVATE_STUDENT_FIELDS[i]];
+        if (v !== undefined && v !== null && String(v).trim() !== '') { n++; return; }
+      }
+    });
+    return n;
+  }
 
   /* 엔진이 스스로 저장하는 기기 로컬 키 (동기화 대상 아님) */
   var LOCAL_KEYS = {
@@ -486,8 +547,18 @@
 
     if (entry.kind === 'object') {
       var body = isPlain(value) ? value : {};
+      if (entry.transform === 'kioskConfig') {
+        /* 설정 원본이 없는 기기에서는 만들지 않는다(빈 문서 방지) */
+        if (!isPlain(value)) { return docs; }
+        body = kioskConfigBody(value);
+      }
       docs.push({ id: entry.meta, path: base + '/meta/' + safeId(entry.meta), body: body });
       return docs;
+    }
+
+    /* 출석 화면용 최소 정보 사본 — 원생 1명 = kioskStudents 문서 1개 */
+    if (entry.kind === 'kiosk') {
+      return kioskDocsOf(value, base);
     }
 
     if (entry.kind === 'value') {
@@ -892,25 +963,44 @@
       scheduleFlush();
     }
 
+    /* 이 키에서 자동으로 따라 만들어지는 문서(파생 사본)의 목록 */
+    function derivedEntriesOf(name) {
+      return registry.filter(function (e) { return e.derivedFrom === name; });
+    }
+    function liveDocsOf(entry, base) {
+      if (entry.kind === 'events') {
+        var map = unionEventDocs(readValue('attendance'), readValue('records'), base);
+        return Object.keys(map).map(function (p) { return map[p]; });
+      }
+      /* 파생 항목은 원본 키를 그대로 쓴다 — 방금 저장된 값이 있으면 그것으로 만든다 */
+      var value;
+      if (entry.derivedFrom) {
+        value = (prevValues[entry.derivedFrom] !== undefined) ? prevValues[entry.derivedFrom] : readValue(entry.name);
+      } else {
+        value = prevValues[entry.name];
+      }
+      return docsForEntry(entry, value, base);
+    }
+
     function capture(entry) {
       var base = basePath();
       var changes = [];
       var live = {};
+      /* 원본(students/settings) + 파생 사본(kioskStudents/kioskConfig)을 함께 만든다 */
+      var sources = [entry].concat(derivedEntriesOf(entry.name));
 
-      if (entry.kind === 'events') {
-        var map = unionEventDocs(readValue('attendance'), readValue('records'), base);
-        Object.keys(map).forEach(function (p) { live[p] = map[p]; });
-      } else {
-        docsForEntry(entry, prevValues[entry.name], base).forEach(function (d) { live[d.path] = d; });
-      }
+      sources.forEach(function (src) {
+        liveDocsOf(src, base).forEach(function (d) { live[d.path] = { doc: d, entry: src }; });
+      });
 
       Object.keys(live).forEach(function (p) {
-        var d = live[p];
+        var d = live[p].doc;
+        var src = live[p].entry;
         var body = clone(d.body) || {};
         var h = contentHash(body);
         var sh = shadow[p];
         if (sh && !sh.d && sh.h === h) { return; }          /* 내용이 그대로 → 보내지 않음 */
-        if (entry.kind === 'events') {
+        if (src.kind === 'events') {
           var dup = duplicateEvent(p, body);
           if (dup) { return; }
         }
@@ -924,10 +1014,10 @@
         doc._fieldMeta = meta;
         shadow[p] = {
           v: ver, m: meta, u: doc._updatedAt, by: deviceId, h: h, d: false,
-          b: entry.kind === 'events' ? null : mergeMetaBody(body, meta),
+          b: src.kind === 'events' ? null : mergeMetaBody(body, meta),
           t: body.time
         };
-        changes.push({ path: p, body: doc });
+        changes.push({ path: p, body: doc, entry: src.name });
       });
 
       /* 사라진 문서 → 삭제 표시(툼스톤) */
@@ -935,9 +1025,15 @@
         if (e.kind === 'object' || e.kind === 'value') { return base + '/meta/' + safeId(e.meta); }
         return base + '/' + e.coll;
       };
-      var prefix = prefixOf(entry);
+      var prefixes = sources.map(prefixOf);
+      var underAny = function (p) {
+        for (var i = 0; i < prefixes.length; i++) {
+          if (p === prefixes[i] || p.indexOf(prefixes[i] + '/') === 0) { return true; }
+        }
+        return false;
+      };
       Object.keys(shadow).forEach(function (p) {
-        if (p !== prefix && p.indexOf(prefix + '/') !== 0) { return; }
+        if (!underAny(p)) { return; }
         if (live[p]) { return; }
         var sh2 = shadow[p];
         if (!sh2 || sh2.d) { return; }
@@ -1032,6 +1128,8 @@
       if (merged.deleted) { needLocal = !(localSh && localSh.d); }
       else if (kind === 'events') { needLocal = String(mergedBody.time || '') !== String((localSh && localSh.t) || ''); }
       else { needLocal = stableStringify(mergedBody) !== stableStringify(localBody); }
+      /* kioskStudents/kioskConfig 사본은 태블릿 화면용이다 — 관리자 PC는 원본을 그대로 쓴다 */
+      if (kind === 'kiosk' && role !== 'tablet') { needLocal = false; }
       var needRemote = merged.deleted ? !remoteDoc._deleted : stableStringify(mergedBody) !== stableStringify(remoteBody);
 
       if (needLocal) {
@@ -1051,6 +1149,21 @@
         scheduleFlush();
       } else {
         updateShadowFromMerged(path, merged, kind, null);
+      }
+      /* 다른 기기가 찍은 출결이 도착하면 알린다 — 관리자 PC가 보호자 문자를 대신 보내는 데 쓴다 */
+      if (kind === 'events' && !merged.deleted) {
+        var by = String(remoteDoc._updatedBy || '');
+        if (by && by !== deviceId) {
+          emit('remote-event', {
+            path: path,
+            date: String(mergedBody.date || ''),
+            studentId: String(mergedBody.studentId || ''),
+            eventKind: String(mergedBody.kind || ''),
+            time: String(mergedBody.time || ''),
+            by: by,
+            updatedAt: String(remoteDoc._updatedAt || '')
+          });
+        }
       }
       lastSyncAt = isoOf(now());
     }
@@ -1087,6 +1200,28 @@
       var body = merged.body || {};
       var seg = String(path).split('/');
       var docKey = seg[seg.length - 1];
+
+      /* kioskStudents 사본 — 태블릿 화면이 읽는 최소 정보만 이 기기의 원생 명단에 반영한다 */
+      if (entry.kind === 'kiosk') {
+        if (role !== 'tablet') { return; }          /* 관리자 PC 는 원본 students 를 그대로 쓴다 */
+        var list = readValue('students');
+        if (!Array.isArray(list)) { list = []; }
+        var at = -1;
+        for (var q = 0; q < list.length; q++) {
+          if (list[q] && safeId(list[q].id) === docKey) { at = q; break; }
+        }
+        if (deleted) {
+          if (at >= 0) { list.splice(at, 1); writeValue('students', list); }
+          return;
+        }
+        var min = kioskStudentBody(body) || {};
+        var nextItem = {};
+        if (at >= 0) { nextItem = clone(list[at]) || {}; }   /* 원래 있던 칸은 지우지 않는다 */
+        KIOSK_FIELDS.forEach(function (f) { if (hasOwn(min, f)) { nextItem[f] = min[f]; } });
+        if (at >= 0) { list[at] = nextItem; } else { list.push(nextItem); }
+        writeValue('students', list);
+        return;
+      }
 
       if (entry.kind === 'docs') {
         var arr = readValue(entry.name);
@@ -1337,10 +1472,15 @@
     /* ---------- 이전(마이그레이션) ---------- */
     function migrationPlan() {
       var base = basePath();
-      var plan = { keys: [], docs: [], total: 0, batches: 0, synced: 0, localOnly: 0 };
+      var plan = { keys: [], docs: [], total: 0, batches: 0, synced: 0, localOnly: 0, derived: 0, keyCount: 0, derivedKeys: 0 };
       var all = [];
+      var seenKeys = {};
       registry.forEach(function (e) {
-        var row = { name: e.name, key: e.key, label: e.label, icon: e.icon, kind: e.kind, desc: e.desc, count: 0, localOnly: e.kind === 'local' };
+        var row = {
+          name: e.name, key: e.key, label: e.label, icon: e.icon, kind: e.kind, desc: e.desc,
+          count: 0, localOnly: e.kind === 'local', derived: !!e.derivedFrom, coll: e.coll || '', meta: e.meta || ''
+        };
+        if (!seenKeys[e.key]) { seenKeys[e.key] = 1; plan.keyCount++; }
         if (e.kind !== 'local') {
           var docs = docsForEntry(e, readValue(e.name), base);
           row.count = docs.length;
@@ -1361,10 +1501,13 @@
       plan.total = plan.docs.length;
       plan.synced = plan.total;
       plan.batches = Math.ceil(plan.total / SPARK.maxBatch);
-      /* 키별 실제 업로드 건수 재계산 */
+      /* 키별 실제 업로드 건수 재계산 (파생 사본은 따로 센다) */
       var perKey = {};
       plan.docs.forEach(function (it) { perKey[it.entry.name] = (perKey[it.entry.name] || 0) + 1; });
-      plan.keys.forEach(function (row) { row.count = perKey[row.name] || 0; });
+      plan.keys.forEach(function (row) {
+        row.count = perKey[row.name] || 0;
+        if (row.derived) { plan.derived += row.count; plan.derivedKeys++; }
+      });
       return plan;
     }
 
@@ -1521,6 +1664,11 @@
         unsub = adapter.subscribe(function (path, data, meta) {
           try { onRemote(path, data, meta); } catch (e) { lastError = errorText(e); }
         });
+      }
+      /* 태블릿 역할인데 이 기기에 아직 개인정보가 남아 있으면 한 번 알린다 */
+      if (role === 'tablet') {
+        var privateCount = countPrivateStudents(readValue('students'));
+        if (privateCount > 0) { emit('tablet-private-data', { count: privateCount }); }
       }
       emit('status', status());
       return api;
@@ -1729,6 +1877,7 @@
     opts = opts || {};
     var mods = null, app = null, db = null, auth = null;
     var sdkVersion = (cfg && cfg.sdkVersion) || '11.0.2';
+    var role = opts.role === 'tablet' ? 'tablet' : 'admin';
     var unsubs = [];
 
     function connect() {
@@ -1795,16 +1944,21 @@
         var basePath = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
         var since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
         var sinceIso = since.toISOString().slice(0, 10);
-        var specs = [
-          { path: basePath + '/students' },
-          { path: basePath + '/counsel' },
-          { path: basePath + '/shuttle' },
-          { path: basePath + '/coupons' },
-          { path: basePath + '/meta' },
-          { path: basePath + '/tuition' },
-          /* 출결은 최근 7일만 실시간 구독 — 오래된 기록까지 매번 읽지 않아 무료 한도를 아낀다 */
-          { path: basePath + '/attendanceEvents', where: { field: 'date', op: '>=', value: sinceIso } }
-        ];
+        /* 출결은 최근 7일만 실시간 구독 — 오래된 기록까지 매번 읽지 않아 무료 한도를 아낀다 */
+        var eventSpec = { path: basePath + '/attendanceEvents', where: { field: 'date', op: '>=', value: sinceIso } };
+        /* 태블릿은 원생 개인정보(students)·원비·상담·설정을 아예 구독하지 않는다.
+           이 역할이 읽을 수 있는 것은 kioskStudents(최소 정보)와 attendanceEvents 둘뿐이다. */
+        var specs = (role === 'tablet')
+          ? [{ path: basePath + '/kioskStudents' }, eventSpec]
+          : [
+            { path: basePath + '/students' },
+            { path: basePath + '/counsel' },
+            { path: basePath + '/shuttle' },
+            { path: basePath + '/coupons' },
+            { path: basePath + '/meta' },
+            { path: basePath + '/tuition' },
+            eventSpec
+          ];
         specs.forEach(function (spec) {
           var coll = fs.collection(db, spec.path);
           var q = coll;
@@ -1825,8 +1979,10 @@
       },
       test: function () {
         if (!db) { return Promise.resolve({ ok: false, message: '아직 연결되지 않았습니다' }); }
-        /* 규칙상 읽기가 막혀 있어도 "연결 자체"는 확인된다 — 존재하지 않는 문서 읽기 1회 */
-        return api.getDoc(opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd')) + '/meta/settings')
+        /* 규칙상 읽기가 막혀 있어도 "연결 자체"는 확인된다 — 이 역할이 읽어도 되는 문서 1건 */
+        var probe = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
+        probe += (role === 'tablet') ? '/meta/kioskConfig' : '/meta/settings';
+        return api.getDoc(probe)
           .then(function (r) { return { ok: true, message: r.exists ? '연결됨 · 설정 문서 있음' : '연결됨 · 아직 데이터 없음' }; },
             function (err) { return { ok: false, message: errorText(err) }; });
       },
@@ -1882,6 +2038,11 @@
     SPARK: SPARK,
     QUOTA_MESSAGE: QUOTA_MESSAGE,
     KEY_TABLE: KEY_TABLE,
+    KIOSK_FIELDS: KIOSK_FIELDS,
+    PRIVATE_STUDENT_FIELDS: PRIVATE_STUDENT_FIELDS,
+    kioskStudentBody: kioskStudentBody,
+    kioskConfigBody: kioskConfigBody,
+    countPrivateStudents: countPrivateStudents,
     LOCAL_KEYS: LOCAL_KEYS,
     buildRegistry: buildRegistry,
     createEngine: createEngine,
