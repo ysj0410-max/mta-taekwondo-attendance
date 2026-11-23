@@ -7601,7 +7601,8 @@
      · 가로 달력형: 이름 + 1~31일(또는 날짜) 열 — O/○/✓/출석/1/시간 이면 출석
      · 저장 전 미리보기 → 합치기(기본) / 교체 선택 → 누적 출석 재집계
      ========================================================= */
-  var ATT_NAME_KEYS = ['이름', '성명', '관원명', '관원', '수련생', '학생', '회원명', '회원', '원생', 'name'];
+  var ATT_NAME_KEYS = ['이름', '성명', '관원명', '관원', '수련생', '학생', '학생명', '회원명', '회원', '원생', '원생명', '이름성명', '성함', 'name', 'studentname'];
+  var ATT_PHONE_KEYS = ['휴대전화', '휴대폰', '핸드폰', '전화번호', '연락처', '전화', '일반전화', 'phone', 'mobile', 'tel', 'hp'];
   var ATT_DATE_KEYS = ['날짜', '일자', '수업일', '출석일', '등원일', 'date', 'day'];
   var ATT_IN_KEYS = ['등원시간', '등원시각', '등원', '입관', 'intime', 'in'];
   var ATT_OUT_KEYS = ['하원시간', '하원시각', '하원', '퇴관', 'outtime', 'out'];
@@ -7611,6 +7612,22 @@
     return String(v == null ? '' : v).toLowerCase().replace(/[\s()\[\]]/g, '');
   }
   function attNameKey(name) { return String(name == null ? '' : name).replace(/\s+/g, '').trim(); }
+  /* 전화번호에서 숫자만 (동명이인 구분용) */
+  function attPhoneDigits(v) { return String(v == null ? '' : v).replace(/\D/g, ''); }
+  /* 이름이 같은 관원이 여럿일 때 전화번호로 고른다 — 전체 일치 → 뒷자리 일치 → 첫 번째 */
+  function attPickByPhone(list, phone) {
+    if (!list || !list.length) { return null; }
+    var d = attPhoneDigits(phone);
+    if (!d) { return list[0]; }
+    var byFull = null, byLast = null;
+    for (var i = 0; i < list.length; i++) {
+      var sd = attPhoneDigits(list[i].phone);
+      if (!sd) { continue; }
+      if (sd === d) { byFull = list[i]; break; }
+      if (!byLast && sd.length >= 4 && d.length >= 4 && sd.slice(-4) === d.slice(-4)) { byLast = list[i]; }
+    }
+    return byFull || byLast || list[0];
+  }
   function attMakeDate(y, m, d) {
     if (!(y >= 1900 && y <= 2100) || !(m >= 1 && m <= 12) || !(d >= 1 && d <= 31)) { return ''; }
     var dt = new Date(y, m - 1, d);
@@ -7687,9 +7704,11 @@
     if (/^(결석|미출석|무단|결과|휴원|휴관|x|×|n|no|0)$/i.test(s)) { return { present: false }; }
     var t = attTimeText(s);
     if (t) { return { present: true, inTime: t }; }
-    if (/^(출석|등원|참석|o|○|●|✓|✔|√|v|y|예|on|true|1)$/i.test(s)) { return { present: true }; }
+    if (/^(출석|출|등원|참석|o|○|●|✓|✔|√|v|y|예|on|true|1|★|☆|◆|■|▲)$/i.test(s)) { return { present: true }; }
     if (/결석/.test(s)) { return { present: false }; }
     if (/출석|등원|참석/.test(s)) { return { present: true }; }
+    /* 별·도형 표시가 섞여 있어도 출석으로 본다 (예: ★, ★출석) */
+    if (/[★☆◆■▲]/.test(s)) { return { present: true }; }
     return null;
   }
   /* 머리글 칸이 '1일'·'11/05' 같은 날짜 열이면 그 정보를 돌려준다 */
@@ -7720,12 +7739,13 @@
     return null;
   }
   function attHeaderInfo(row) {
-    var info = { name: -1, date: -1, inTime: -1, outTime: -1, status: -1, days: [] };
+    var info = { name: -1, date: -1, inTime: -1, outTime: -1, status: -1, phone: -1, days: [] };
     (row || []).forEach(function (cell, i) {
       var t = attNormHeader(cell);
       if (!t) { return; }
       if (info.name < 0 && ATT_NAME_KEYS.indexOf(t) !== -1) { info.name = i; return; }
       if (info.date < 0 && ATT_DATE_KEYS.indexOf(t) !== -1) { info.date = i; return; }
+      if (info.phone < 0 && ATT_PHONE_KEYS.indexOf(t) !== -1) { info.phone = i; return; }
       if (info.inTime < 0 && ATT_IN_KEYS.indexOf(t) !== -1) { info.inTime = i; return; }
       if (info.outTime < 0 && ATT_OUT_KEYS.indexOf(t) !== -1) { info.outTime = i; return; }
       if (info.status < 0 && ATT_STATUS_KEYS.indexOf(t) !== -1) { info.status = i; return; }
@@ -7734,14 +7754,119 @@
     });
     return info;
   }
-  /* 파일 이름에서 연·월 추정: 2026년 3월, 2026-03, 26.03 … */
-  function attMonthFromFile(fileName) {
+  /* 파일 이름에서 연·월 추정: 2026년 3월, 2026-03, 26.03, 1월 … */
+  function attMonthFromFile(fileName, baseYear) {
     var s = String(fileName || '');
     var m = s.match(/(20\d{2})\s*[년.\-_\/]?\s*(\d{1,2})\s*월/);
     if (m) { return m[1] + '-' + pad2(Number(m[2])); }
     m = s.match(/(20\d{2})[.\-_\/]?(0[1-9]|1[0-2])(?![0-9])/);
     if (m) { return m[1] + '-' + m[2]; }
+    /* 연도 없이 「1월」「12월」만 있는 파일 — 그해로 채운다 */
+    m = s.match(/(?:^|[^0-9])(\d{1,2})\s*월/);
+    if (m) {
+      var mo = Number(m[1]);
+      if (mo >= 1 && mo <= 12) { return (Number(baseYear) || new Date().getFullYear()) + '-' + pad2(mo); }
+    }
     return '';
+  }
+  /* 요일 이름 → 0(일)~6(토), 아니면 -1 */
+  function attWeekdayNum(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) { return -1; }
+    var ko = '일월화수목금토';
+    if (s.length === 1 && ko.indexOf(s) !== -1) { return ko.indexOf(s); }
+    var en = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    var m = s.toLowerCase().match(/^(sun|mon|tue|wed|thu|fri|sat)/);
+    return m ? en.indexOf(m[1]) : -1;
+  }
+  /* 1~31일 열 아래의 요일 줄로 그 달의 연도를 고른다 (못 고르면 0) */
+  function attGuessWeekdayYear(list, info, headerRow, month, baseYear) {
+    var pairs = [];
+    var scanTo = Math.min(list.length, headerRow + 6);
+    for (var r = headerRow + 1; r < scanTo; r++) {
+      var row = list[r];
+      if (!row) { continue; }
+      var nm = info.name >= 0 ? String(row[info.name] == null ? '' : row[info.name]).trim() : '';
+      if (nm) { break; }
+      var found = [];
+      for (var c = 0; c < info.days.length; c++) {
+        var wd = attWeekdayNum(row[info.days[c].index]);
+        if (wd >= 0) { found.push({ day: info.days[c].day, wd: wd }); }
+      }
+      if (found.length >= 5) { pairs = found; break; }
+    }
+    if (pairs.length < 5) { return 0; }
+    var base = Number(baseYear) || new Date().getFullYear();
+    var years = [base, base - 1, base + 1];
+    var best = 0, bestScore = -1;
+    for (var y = 0; y < years.length; y++) {
+      var score = 0;
+      for (var p = 0; p < pairs.length; p++) {
+        if (!attMakeDate(years[y], month, pairs[p].day)) { continue; }
+        var d = new Date(years[y], month - 1, pairs[p].day);
+        if (d.getDay() === pairs[p].wd) { score++; }
+      }
+      if (score > bestScore) { bestScore = score; best = years[y]; }
+    }
+    return (bestScore >= Math.ceil(pairs.length * 0.6)) ? best : 0;
+  }
+  /* 파일 이름으로 월을 읽고, 요일 줄이 있으면 연도를 다듬어 YYYY-MM 을 돌려준다 */
+  function attMonthGuess(rows, fileName, baseYear) {
+    var guess = attMonthFromFile(fileName, baseYear);
+    if (!guess) { return ''; }
+    var s = String(fileName || '');
+    if (/(20\d{2})\s*[년.\-_\/]?\s*(\d{1,2})\s*월/.test(s) ||
+        /(20\d{2})[.\-_\/]?(0[1-9]|1[0-2])(?![0-9])/.test(s)) { return guess; }
+    var list = attRowList(rows);
+    if (!list.length) { return guess; }
+    var loc = attLocateHeader(list);
+    if (!loc || loc.info.date >= 0 || loc.info.days.length < 2) { return guess; }
+    var year = attGuessWeekdayYear(list, loc.info, loc.headerRow, Number(guess.slice(5, 7)), baseYear);
+    return year ? (year + '-' + guess.slice(5)) : guess;
+  }
+  /* CSV 바이트 → 글자 — UTF-8(BOM 포함) · UTF-16 BOM · EUC-KR/CP949 */
+  function attDecodeCsvBytes(buf) {
+    if (buf == null || typeof TextDecoder === 'undefined') { return ''; }
+    var bytes = (buf instanceof Uint8Array) ? buf : new Uint8Array(buf);
+    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
+      return attTryDecode(bytes.subarray(2), 'utf-16le') || '';
+    }
+    if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
+      return attTryDecode(bytes.subarray(2), 'utf-16be') || '';
+    }
+    var start = (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) ? 3 : 0;
+    var body = start ? bytes.subarray(start) : bytes;
+    var utf8 = attTryDecode(body, 'utf-8', true);
+    if (utf8 !== null) { return utf8; }
+    var kr = attTryDecode(body, 'euc-kr');
+    if (kr !== null) { return kr; }
+    return attTryDecode(body, 'utf-8') || '';
+  }
+  function attTryDecode(bytes, label, fatal) {
+    try { return new TextDecoder(label, fatal ? { fatal: true } : undefined).decode(bytes); }
+    catch (e) { return null; }
+  }
+  /* 빈 줄을 걷어낸 2차원 배열 */
+  function attRowList(rows) {
+    var list = [];
+    (rows || []).forEach(function (r) {
+      if (!r) { return; }
+      for (var i = 0; i < r.length; i++) {
+        if (String(r[i] == null ? '' : r[i]).trim() !== '') { list.push(r); return; }
+      }
+    });
+    return list;
+  }
+  /* 머리글 줄(이름 + 날짜 또는 1~31일 열) 찾기 */
+  function attLocateHeader(list) {
+    var limit = Math.min(list.length, 20);
+    for (var hi = 0; hi < limit; hi++) {
+      var cand = attHeaderInfo(list[hi]);
+      if (cand.name >= 0 && (cand.date >= 0 || cand.days.length >= 2)) {
+        return { info: cand, headerRow: hi };
+      }
+    }
+    return null;
   }
 
   /* rows(2차원 배열) → { format, records[], names, dates, months, minDate, maxDate, skipped, needMonth } */
@@ -7751,40 +7876,30 @@
       format: 'none', records: [], nameCount: 0, dateCount: 0,
       months: [], minDate: '', maxDate: '', skipped: 0, needMonth: false, headerRow: -1
     };
-    var list = [];
-    (rows || []).forEach(function (r) {
-      if (!r) { return; }
-      var any = false;
-      for (var i = 0; i < r.length; i++) {
-        if (String(r[i] == null ? '' : r[i]).trim() !== '') { any = true; break; }
-      }
-      if (any) { list.push(r); }
-    });
+    var list = attRowList(rows);
     if (!list.length) { return out; }
 
     var info = null, headerRow = -1;
-    var limit = Math.min(list.length, 20);
-    for (var hi = 0; hi < limit; hi++) {
-      var cand = attHeaderInfo(list[hi]);
-      if (cand.name >= 0 && (cand.date >= 0 || cand.days.length >= 2)) { info = cand; headerRow = hi; break; }
-    }
+    var loc = attLocateHeader(list);
+    if (loc) { info = loc.info; headerRow = loc.headerRow; }
     if (!info) {
-      info = { name: 0, date: 1, inTime: 2, outTime: 3, status: -1, days: [] };
+      info = { name: 0, date: 1, inTime: 2, outTime: 3, status: -1, phone: -1, days: [] };
       headerRow = -1;
     }
     out.headerRow = headerRow;
     var fallbackMonth = /^\d{4}-\d{2}$/.test(String(opts.month || '')) ? String(opts.month) : '';
     var seen = {};
-    var pushRec = function (name, dateKey, inTime, outTime) {
+    var pushRec = function (name, dateKey, inTime, outTime, phone) {
       if (!dateKey || !name) { return; }
-      var key = attNameKey(name) + '|' + dateKey;
+      var key = attNameKey(name) + '|' + dateKey + (phone ? '|' + attPhoneDigits(phone) : '');
       if (seen[key]) {
         var prev = seen[key];
         if (!prev.inTime && inTime) { prev.inTime = inTime; }
         if (!prev.outTime && outTime) { prev.outTime = outTime; }
+        if (!prev.phone && phone) { prev.phone = phone; }
         return;
       }
-      var rec = { name: name, date: dateKey, inTime: inTime || '', outTime: outTime || '' };
+      var rec = { name: name, date: dateKey, inTime: inTime || '', outTime: outTime || '', phone: phone || '' };
       seen[key] = rec;
       out.records.push(rec);
     };
@@ -7806,12 +7921,13 @@
         var row = list[r2];
         var nm = String(row[info.name] == null ? '' : row[info.name]).trim();
         if (!nm || attNormHeader(nm) === '이름') { continue; }
+        var rowPhone = info.phone >= 0 ? String(row[info.phone] == null ? '' : row[info.phone]).trim() : '';
         for (var c2 = 0; c2 < info.days.length; c2++) {
           var dk = colDates[c2];
           if (!dk) { continue; }
           var st = attCellState(row[info.days[c2].index]);
           if (!st || !st.present) { continue; }
-          pushRec(nm, dk, st.inTime, st.outTime);
+          pushRec(nm, dk, st.inTime, st.outTime, rowPhone);
         }
       }
     } else {
@@ -7825,7 +7941,8 @@
         if (stateCol && !stateCol.present) { out.skipped++; continue; }
         var inT = info.inTime >= 0 ? attTimeText(row3[info.inTime]) : (stateCol ? (stateCol.inTime || '') : '');
         var outT = info.outTime >= 0 ? attTimeText(row3[info.outTime]) : (stateCol ? (stateCol.outTime || '') : '');
-        pushRec(name3, dateKey, inT, outT);
+        var phone3 = info.phone >= 0 ? String(row3[info.phone] == null ? '' : row3[info.phone]).trim() : '';
+        pushRec(name3, dateKey, inT, outT, phone3);
       }
     }
 
@@ -7846,9 +7963,9 @@
   function attFindStudent(name, byName) {
     return byName[attNameKey(name)] || null;
   }
-  function attCreateStudent(name) {
+  function attCreateStudent(name, phone) {
     var s = {
-      id: uid('stu'), name: String(name).trim(), phone: '', className: '', division: '초등부',
+      id: uid('stu'), name: String(name).trim(), phone: String(phone || '').trim(), className: '', division: '초등부',
       course: '', siblingDiscount: false, belt: '흰띠', attendCount: 0, lastAttendanceDate: '',
       grade: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '',
       monthlyFee: null, status: 'active', pausedDate: '', pauseReason: ''
@@ -7864,17 +7981,30 @@
     var out = { added: 0, filled: 0, kept: 0, skipped: 0, created: 0, students: 0, cleared: 0, records: 0 };
     if (!parsed || !parsed.records || !parsed.records.length) { return out; }
 
-    var byName = {};
-    app.students.forEach(function (s) { byName[attNameKey(s.name)] = s; });
+    var byName = {}, nameLists = {};
+    app.students.forEach(function (s) {
+      var k = attNameKey(s.name);
+      if (!byName[k]) { byName[k] = s; }
+      (nameLists[k] = nameLists[k] || []).push(s);
+    });
+    /* 같은 이름이 여럿이면 전화번호로 고른다 */
+    var findStudent = function (rec) {
+      var k = attNameKey(rec.name);
+      var list = nameLists[k];
+      if (list && list.length > 1) { return attPickByPhone(list, rec.phone); }
+      return byName[k] || (list ? list[0] : null);
+    };
     var touched = {};
 
     /* 1) 이름 매칭 (필요하면 명단 외 관원 생성) */
     var plan = [];
     parsed.records.forEach(function (rec) {
-      var s = attFindStudent(rec.name, byName);
+      var s = findStudent(rec);
       if (!s && opts.createMissing) {
-        s = attCreateStudent(rec.name);
-        byName[attNameKey(rec.name)] = s;
+        s = attCreateStudent(rec.name, rec.phone);
+        var nk = attNameKey(rec.name);
+        byName[nk] = byName[nk] || s;
+        (nameLists[nk] = nameLists[nk] || []).push(s);
         out.created++;
       }
       if (!s) { out.skipped++; return; }
@@ -7979,9 +8109,20 @@
       return;
     }
     var tr = new FileReader();
-    tr.onload = function (e) { cb(parseCSV(e.target.result), name); };
     tr.onerror = function () { toast('파일을 읽는 중 오류가 났어요.'); };
-    tr.readAsText(file, 'utf-8');
+    tr.onload = function (e) {
+      var text = '';
+      try { text = attDecodeCsvBytes(e && e.target ? e.target.result : ''); } catch (err) { text = ''; }
+      cb(parseCSV(text), name);
+    };
+    /* TextDecoder가 없는 환경에서는 기존처럼 글자로 읽는다 */
+    if (typeof TextDecoder === 'undefined' || typeof tr.readAsArrayBuffer !== 'function') {
+      tr.onload = function (e) { cb(parseCSV(String(e && e.target ? e.target.result : '')), name); };
+      tr.readAsText(file, 'utf-8');
+      return;
+    }
+    /* 바이트로 읽어 UTF-8 · EUC-KR(CP949) 을 가려 낸다 */
+    tr.readAsArrayBuffer(file);
   }
 
   /* 미리보기 문구 */
@@ -8012,7 +8153,8 @@
   function openAttendanceImport(file) {
     if (!file) { return; }
     attReadFile(file, function (rows, fileName) {
-      var guessMonth = attMonthFromFile(fileName);
+      var guessMonth = attMonthGuess(rows, fileName);
+      var usedMonth = guessMonth;
       var parsed = parseAttendanceRows(rows, { month: guessMonth });
       if (!parsed.records.length && !parsed.needMonth) {
         openModal({
@@ -8033,7 +8175,7 @@
         '<option value="create">관원으로 새로 등록</option>' +
         '</select></div>' +
         '</div>' +
-        '<div class="field"><label>달력형 파일의 연·월 (날짜 열이 숫자만 있을 때)</label>' +
+        '<div class="field"><label>달력형 파일의 연·월 (파일에서 읽은 값 — 다르면 바꿔 주세요)</label>' +
         '<input class="input" id="attimp-month" type="month" value="' + esc(guessMonth || (parsed.needMonth ? monthKey(new Date()) : '')) + '"></div>' +
         '<div class="help">저장하면 <b>누적 출석(회)</b>과 <b>최근 출석일</b>이 이 기기에 저장된 출석 이력 기준으로 다시 계산됩니다.</div>';
       var chosen = { mode: 'merge', createMissing: false, month: '' };
@@ -8055,12 +8197,17 @@
         }
       }).then(function (value) {
         if (value !== 'go') { return; }
+        if (chosen.month && chosen.month !== usedMonth) {
+          parsed = parseAttendanceRows(rows, { month: chosen.month });
+          usedMonth = chosen.month;
+        }
         if (parsed.needMonth) {
           if (!chosen.month) {
             toast('달력형 파일은 연·월을 골라야 날짜를 계산할 수 있어요.');
             return;
           }
           parsed = parseAttendanceRows(rows, { month: chosen.month });
+          usedMonth = chosen.month;
         }
         var res = applyAttendanceImport(parsed, chosen);
         renderAll();
@@ -14492,6 +14639,10 @@
       open: openAttendanceImport,
       template: downloadAttendanceTemplate,
       monthFromFile: attMonthFromFile,
+      monthGuess: attMonthGuess,
+      weekdayYear: attGuessWeekdayYear,
+      decode: attDecodeCsvBytes,
+      phoneDigits: attPhoneDigits,
       dateOf: attParseDate,
       timeOf: attTimeText,
       cell: attCellState,
