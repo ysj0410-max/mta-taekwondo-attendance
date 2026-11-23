@@ -475,14 +475,22 @@
     }).length;
   }
 
-  /* 이 도장 데이터에 개인정보가 들어 있는 원생이 몇 명인지 (태블릿 안내용) */
+  /* 이 도장 데이터에 개인정보가 들어 있는 원생이 몇 명인지 (태블릿 안내용)
+     · 빈 칸('')·기본값(false·0)은 개인정보로 세지 않는다 — 앱은 원생을 불러올 때
+       phone·note 를 '' 로, siblingDiscount 를 false 로, tuitionDay 를 0 으로 채워 두기 때문이다. */
+  function hasPrivateValue(v) {
+    if (v === undefined || v === null) { return false; }
+    if (typeof v === 'boolean') { return v; }
+    if (typeof v === 'number') { return isFinite(v) && v !== 0; }
+    var s = String(v).trim();
+    return s !== '' && s !== '0' && s !== 'false' && s !== 'null' && s !== 'undefined';
+  }
   function countPrivateStudents(list) {
     var n = 0;
     (Array.isArray(list) ? list : []).forEach(function (s) {
       if (!isPlain(s)) { return; }
       for (var i = 0; i < PRIVATE_STUDENT_FIELDS.length; i++) {
-        var v = s[PRIVATE_STUDENT_FIELDS[i]];
-        if (v !== undefined && v !== null && String(v).trim() !== '') { n++; return; }
+        if (hasPrivateValue(s[PRIVATE_STUDENT_FIELDS[i]])) { n++; return; }
       }
     });
     return n;
