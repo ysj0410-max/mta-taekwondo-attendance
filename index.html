@@ -925,20 +925,33 @@
     .sh-tablehint{display:block; font-size:11px; color:#7a88a0; font-weight:800; padding:0 2px 5px}
   }
   .sh-print{display:none}
+  /* A4 세로 · 여백은 넉넉하되 낭비 없이 (인쇄 장수를 줄이려고 위아래 8mm) */
+  @page{size:A4 portrait; margin:8mm 9mm}
   @media print{
+    html, body{background:#fff}
     .sh-screen{display:none !important}
     #toast, #banner, #modal-root{display:none !important}
-    .sh-print{display:block !important; color:#000; padding:0 6mm}
-    .sh-print-title{font-size:19pt; font-weight:900; text-align:center; margin:0 0 3mm; letter-spacing:-.4px}
-    .sh-print-meta{font-size:9.5pt; color:#333; text-align:center; margin:0 0 5mm}
-    .sh-print-table{width:100%; border-collapse:collapse; font-size:10pt; table-layout:fixed}
+    .sh-print{display:block !important; color:#000; padding:0}
+    .sh-print-title{font-size:13.5pt; font-weight:900; text-align:center; margin:0 0 1mm; letter-spacing:-.4px; line-height:1.15}
+    .sh-print-meta{font-size:8pt; color:#333; text-align:center; margin:0 0 1.8mm; line-height:1.2}
+    .sh-print-table{width:100%; border-collapse:collapse; table-layout:fixed; font-size:11px; line-height:1.26; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+    /* 열 너비 — 부(좁게) · 시간(한 줄 고정) · 승차/하차 · 목적지 · 원생(가장 넓게) · 비고 */
+    .sh-print-table col.sh-c-part{width:11mm}
+    .sh-print-table col.sh-c-time{width:21mm}
+    .sh-print-table col.sh-c-kind{width:13mm}
+    .sh-print-table col.sh-c-dest{width:37mm}
+    .sh-print-table col.sh-c-riders{width:auto}
+    .sh-print-table col.sh-c-memo{width:21mm}
     .sh-print-table thead{display:table-header-group}
-    .sh-print-table th, .sh-print-table td{border:1px solid #555; padding:4px 6px; vertical-align:top; text-align:left; word-break:break-word}
-    .sh-print-table th{background:#eef1f6 !important; text-align:center; font-weight:900; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+    .sh-print-table th, .sh-print-table td{border:1px solid #64748b; padding:3px 5px; vertical-align:middle; text-align:left; word-break:break-word; overflow-wrap:anywhere}
+    .sh-print-table th{background:#e4e9f2 !important; text-align:center; font-weight:900; font-size:9.5px; line-height:1.15; padding:3px 2px; -webkit-print-color-adjust:exact; print-color-adjust:exact}
     .sh-print-table td.c{text-align:center; white-space:nowrap}
-    .sh-print-table td.riders{line-height:1.5}
+    /* 부 열: 연속된 같은 부는 세로 병합(rowspan) — 이름은 가운데, 배경은 그 부 색 */
+    .sh-print-table td.part{text-align:center; white-space:nowrap; font-weight:900; font-size:11.5px; letter-spacing:-.2px; padding:2px 1px}
+    /* 시간 열: 부 이름 없이 시간만, 시작~끝은 16:28~16:30 처럼 한 줄 */
+    .sh-print-table td.time{text-align:center; white-space:nowrap; font-weight:800; font-variant-numeric:tabular-nums; padding:3px 1px; letter-spacing:-.1px}
+    .sh-print-table td.riders{line-height:1.2}
     .sh-print-table tr{break-inside:avoid; page-break-inside:avoid}
-    .sh-print-table{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
     .sh-print-table tr.sh-p1 td{background:#f2f4f8 !important}
     .sh-print-table tr.sh-p2 td{background:#e9f3ff !important}
     .sh-print-table tr.sh-p3 td{background:#e6f8f0 !important}
@@ -946,15 +959,14 @@
     .sh-print-table tr.sh-p5 td{background:#ffefe4 !important}
     .sh-print-table tr.sh-p6 td{background:#f2ecfd !important}
     .sh-print-table tr.sh-p7 td{background:#fde9f1 !important}
-    .sh-print-table tr.sh-p1 td:first-child{border-left:3px solid #94a3b8}
-    .sh-print-table tr.sh-p2 td:first-child{border-left:3px solid #2f80d8}
-    .sh-print-table tr.sh-p3 td:first-child{border-left:3px solid #159d77}
-    .sh-print-table tr.sh-p4 td:first-child{border-left:3px solid #c79a12}
-    .sh-print-table tr.sh-p5 td:first-child{border-left:3px solid #e07b3a}
-    .sh-print-table tr.sh-p6 td:first-child{border-left:3px solid #7c5cd0}
-    .sh-print-table tr.sh-p7 td:first-child{border-left:3px solid #c74b83}
-    .sh-print-table thead th{background:#e4e9f2 !important}
-    .sh-print-foot{margin-top:4mm; font-size:9pt; color:#444; display:flex; justify-content:space-between; gap:8mm}
+    .sh-print-table tr.sh-p1 td.part{border-left:2.5px solid #94a3b8}
+    .sh-print-table tr.sh-p2 td.part{border-left:2.5px solid #2f80d8}
+    .sh-print-table tr.sh-p3 td.part{border-left:2.5px solid #159d77}
+    .sh-print-table tr.sh-p4 td.part{border-left:2.5px solid #c79a12}
+    .sh-print-table tr.sh-p5 td.part{border-left:2.5px solid #e07b3a}
+    .sh-print-table tr.sh-p6 td.part{border-left:2.5px solid #7c5cd0}
+    .sh-print-table tr.sh-p7 td.part{border-left:2.5px solid #c74b83}
+    .sh-print-foot{margin-top:2mm; font-size:8pt; color:#444; display:flex; justify-content:space-between; gap:8mm}
   }
 
   /* ---------- 📈 수납 리포트 ---------- */
@@ -2287,9 +2299,12 @@
             <div class="sh-print-title" id="sh-print-title">경희대MTA태권도 차량운행 스케줄표</div>
             <div class="sh-print-meta" id="sh-print-meta"></div>
             <table class="sh-print-table">
+              <colgroup>
+                <col class="sh-c-part"><col class="sh-c-time"><col class="sh-c-kind"><col class="sh-c-dest"><col class="sh-c-riders"><col class="sh-c-memo">
+              </colgroup>
               <thead>
                 <tr>
-                  <th style="width:11mm">번호</th><th style="width:24mm">부 · 시간</th><th style="width:20mm">승차/하차</th>
+                  <th>부</th><th>시간</th><th>승차<br>하차</th>
                   <th>목적지</th><th>원생</th><th>비고</th>
                 </tr>
               </thead>
@@ -11631,16 +11646,33 @@
     var rows = shuttleRows();
     var body = el('sh-print-body');
     if (body) {
-      body.innerHTML = rows.length ? rows.map(function (r, i) {
-        return '<tr class="' + shuttlePartClass(r.part) + '">' +
-          '<td class="c">' + (i + 1) + '</td>' +
-          '<td class="c">' + esc(shuttlePartLabel(r.part)) + '<br>' + esc(r.time || '-') + (r.timeEnd ? '<br>~' + esc(r.timeEnd) : '') + '</td>' +
-          '<td class="c">' + shuttleKindLabel(r.kind) + '</td>' +
-          '<td>' + esc(r.dest || '-') + '</td>' +
-          '<td class="riders">' + esc(shuttleRidersText(r) || '-') + '</td>' +
-          '<td>' + esc(r.memo || '') + '</td>' +
-          '</tr>';
-      }).join('') : '<tr><td class="c" colspan="6">등록된 운행이 없습니다.</td></tr>';
+      if (!rows.length) {
+        body.innerHTML = '<tr><td class="c" colspan="6">등록된 운행이 없습니다.</td></tr>';
+      } else {
+        /* 연속된 같은 부끼리 한 칸으로 세로 병합(rowspan)하고, 시간 열은 시간만 한 줄로 적는다 */
+        var out = [];
+        var i = 0;
+        while (i < rows.length) {
+          var part = String(rows[i].part || '');
+          var j = i + 1;
+          while (j < rows.length && String(rows[j].part || '') === part) { j++; }
+          var span = j - i;
+          for (var k = i; k < j; k++) {
+            var r = rows[k];
+            var timeText = shuttleTimeText(r);
+            out.push('<tr class="' + shuttlePartClass(r.part) + '">' +
+              (k === i ? '<td class="part" rowspan="' + span + '">' + esc(shuttlePartLabel(r.part)) + '</td>' : '') +
+              '<td class="c time">' + esc(timeText || '-') + '</td>' +
+              '<td class="c">' + esc(shuttleKindLabel(r.kind)) + '</td>' +
+              '<td>' + esc(r.dest || '-') + '</td>' +
+              '<td class="riders">' + esc(shuttleRidersText(r) || '-') + '</td>' +
+              '<td>' + esc(r.memo || '') + '</td>' +
+              '</tr>');
+          }
+          i = j;
+        }
+        body.innerHTML = out.join('');
+      }
     }
     var now = new Date();
     var dojo = (app.settings && app.settings.dojoName) ? app.settings.dojoName : '경희대MTA태권도';
