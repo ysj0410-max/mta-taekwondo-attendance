@@ -135,6 +135,10 @@
       },
       onEvent: function (type, payload) {
         if (type === 'quota-blocked') { showWarn(true); }
+        if (type === 'storage-full') {
+          S.msg = '⚠️ 이 기기의 브라우저 저장 공간(localStorage)이 가득 찼습니다 — 동기화 그림자는 IndexedDB로 옮겨 두었지만, 남은 공간이 부족하면 새 기록이 기기에 남지 않습니다. 「💾 도장 데이터 전체 백업」을 받아 두고 사이트 데이터를 정리해 주세요.';
+          S.msgKind = 'warn';
+        }
         if (type === 'synced') { saveConfig({ lastSyncAt: payload && payload.at }); }
         if (type === 'remote-event') { relaySms(payload); }
         if (type === 'tablet-private-data' && payload && payload.count) {
@@ -351,7 +355,7 @@
     }
     var tag = $('fb-pill-tag');
     if (tag && typeof window.innerWidth === 'number') {
-      tag.textContent = window.innerWidth <= 760 ? '🧪 테스트 v6' : '🧪 Firebase 테스트 v6';
+      tag.textContent = window.innerWidth <= 760 ? '🧪 테스트 v7' : '🧪 Firebase 테스트 v7';
     }
     setText('fb-usage-note', S.engine
       ? (S.engine.usage.snapshot().date + ' 기준 · 이 기기에서 센 추정치 (PC·태블릿 합산 아님)')
@@ -1072,7 +1076,7 @@
     var d = document.createElement('div');
     d.id = 'fb-pill';
     d.className = 'fb-pill';
-    d.innerHTML = '<span class="fb-pill-tag" id="fb-pill-tag">🧪 Firebase 테스트 v6</span><span class="fb-pill-state" id="fb-pill-state">⚪ 미연결(로컬 모드)</span>';
+    d.innerHTML = '<span class="fb-pill-tag" id="fb-pill-tag">🧪 Firebase 테스트 v7</span><span class="fb-pill-state" id="fb-pill-state">⚪ 미연결(로컬 모드)</span>';
     document.body.appendChild(d);
   }
 
@@ -1126,9 +1130,21 @@
       tries++;
       var ok = window.__tdk && window.__tdk.app;
       if (!ok && tries < 60) { setTimeout(ready, 150); return; }
-      if (S.cfg.mode === 'mock') { connectMock(); }
-      else if (S.cfg.mode === 'firestore') { connectFirestore(); }
-      else { renderAll(); }
+      /* 연결을 하지 않는(로컬) 모드에서도 옛 동기화 그림자를 IndexedDB 로 옮겨
+         localStorage 5MB 한도를 먼저 비운다 — 앱 데이터 저장이 "저장공간 부족"으로 멈추지 않게 */
+      function afterShadowMigrate(r) {
+        if (r && r.migrated) {
+          S.msg = '💾 동기화 내부 기록(그림자)을 IndexedDB 로 옮기고 localStorage ' +
+            Math.max(1, Math.round((r.bytesFreed || 0) / 1024)) + 'KB 를 비웠습니다 — 이제 저장공간이 부족해 멈추지 않습니다.';
+          S.msgKind = 'ok';
+        }
+        if (S.cfg.mode === 'mock') { connectMock(); }
+        else if (S.cfg.mode === 'firestore') { connectFirestore(); }
+        else { renderAll(); }
+      }
+      var migrating = null;
+      try { migrating = FB.migrateShadowCache(localStorage); } catch (e) { migrating = null; }
+      Promise.resolve(migrating).then(function (r) { afterShadowMigrate(r); }, function () { afterShadowMigrate(null); });
       if (S.timer) { clearInterval(S.timer); }
       S.timer = setInterval(function () { renderStatus(); renderUsage(); renderQueue(); }, 2000);
     })();

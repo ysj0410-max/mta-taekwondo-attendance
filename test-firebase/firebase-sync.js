@@ -178,6 +178,173 @@
     return e.code === 'resource-exhausted' || /resource[- ]exhausted|quota|daily limit/i.test(e.message);
   }
 
+  /* ---------- 브라우저 저장공간(localStorage)이 가득 찼을 때 ----------
+     QuotaExceededError 는 Firestore 무료 한도(resource-exhausted)와 전혀 다른 오류다.
+     저장에 실패해도 앱·동기화가 멈추지 않도록 여기서 조용히 걸러 낸다. */
+  function isStorageQuotaError(err) {
+    if (!err) { return false; }
+    var name = String(err.name || '');
+    var code = Number(err.code);
+    var msg = String(err.message || err || '');
+    return name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      code === 22 || code === 1014 || /quota|exceeded the quota/i.test(msg);
+  }
+
+  /* localStorage 쓰기를 한 곳으로 모은다 — 실패해도 예외를 밖으로 던지지 않는다.
+     opts.onError(err, key) 로 엔진이 화면·상태에 알린다. */
+  function setItemSafe(storage, key, value, opts) {
+    try {
+      storage.setItem(key, value);
+      return true;
+    } catch (err) {
+      if (opts && typeof opts.onError === 'function') {
+        try { opts.onError(err, key); } catch (e) {}
+      }
+      try {
+        console.warn('[TDK 동기화] ' + key + ' 저장 실패 — 이번 값은 기기에 남기지 못했습니다 (' +
+          String((err && (err.name || err.message)) || err) + ')');
+      } catch (e) {}
+      return false;
+    }
+  }
+
+  /* =========================================================================
+     1-2. 그림자(tdk.fbShadow.v1) 보관소 — IndexedDB (localStorage 5MB 한도 밖)
+     -------------------------------------------------------------------------
+     · 그림자는 앱 데이터와 거의 같은 크기라 localStorage 에 함께 두면 한도가 터진다.
+     · 인메모리 객체가 정본이고, IndexedDB(tdk_fb_cache)는 앱을 다시 열었을 때
+       되살리는 사본이다.
+     · IndexedDB 가 없는 환경(Node·QuickJS 테스트)에서는 인메모리만으로 똑같이 동작한다.
+     ========================================================================= */
+  var SHADOW_LS_KEY = 'tdk.fbShadow.v1';
+  var IDB_NAME = 'tdk_fb_cache';
+  var IDB_STORE = 'kv';
+  var IDB_SHADOW_ITEM = 'shadow';
+  var SHADOW_PERSIST_MS = 300;        /* 연속 저장을 한 번으로 모으는 시간 */
+  var SHADOW_OPEN_TIMEOUT_MS = 4000;  /* IndexedDB 가 응답하지 않으면 그림자 없이 계속 */
+  var SHADOW_MAX_ENTRIES = 30000;     /* 오래된 출결 그림자 정리 기준 */
+
+  function idbFactory() {
+    try { return root.indexedDB || root.webkitIndexedDB || root.mozIndexedDB || null; } catch (e) { return null; }
+  }
+  function idbSupported() { return !!idbFactory(); }
+
+  /* ---------- 엔진 없이(로컬 모드 부팅) 옛 그림자만 옮기는 길 ----------
+     연결을 하지 않은 기기에서도 localStorage 5MB 한도를 비울 수 있어야 한다.
+     엔진과 달리 한 번만 쓰고 끝나므로 상태를 따로 둔다. */
+  var rawIdb = { db: null, promise: null, disabled: false };
+
+  function rawOpenDb() {
+    if (rawIdb.db) { return Promise.resolve(rawIdb.db); }
+    if (rawIdb.promise) { return rawIdb.promise; }
+    var f = idbFactory();
+    if (!f) { return Promise.reject(new Error('indexedDB 없음')); }
+    rawIdb.promise = new Promise(function (resolve, reject) {
+      var settled = false;
+      function fail(err) {
+        if (settled) { return; }
+        settled = true;
+        rawIdb.promise = null;
+        rawIdb.disabled = true;
+        reject(err || new Error('indexedDB 열기 실패'));
+      }
+      var req;
+      try { req = f.open(IDB_NAME, 1); } catch (e) { fail(e); return; }
+      req.onupgradeneeded = function () {
+        try {
+          var db = req.result;
+          if (db && db.objectStoreNames && !db.objectStoreNames.contains(IDB_STORE)) { db.createObjectStore(IDB_STORE); }
+        } catch (e) {}
+      };
+      req.onsuccess = function () {
+        if (settled) { return; }
+        settled = true;
+        rawIdb.db = req.result;
+        resolve(req.result);
+      };
+      req.onerror = function () { fail(req.error); };
+      req.onblocked = function () { fail(new Error('indexedDB 차단됨')); };
+      try { setTimeout(function () { fail(new Error('indexedDB 응답 없음')); }, SHADOW_OPEN_TIMEOUT_MS); } catch (e) {}
+    });
+    return rawIdb.promise;
+  }
+
+  function rawReadShadow() {
+    if (rawIdb.disabled || !idbSupported()) { return Promise.resolve(null); }
+    return rawOpenDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var req;
+        try {
+          var tx = db.transaction(IDB_STORE, 'readonly');
+          req = tx.objectStore(IDB_STORE).get(IDB_SHADOW_ITEM);
+        } catch (e) { reject(e); return; }
+        req.onsuccess = function () {
+          var v = req.result;
+          if (typeof v === 'string' || isPlain(v)) { resolve(v); return; }
+          resolve(null);
+        };
+        req.onerror = function () { reject(req.error); };
+      });
+    });
+  }
+
+  function rawWriteShadow(json) {
+    if (rawIdb.disabled || !idbSupported()) { return Promise.resolve(false); }
+    return rawOpenDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var settled = false;
+        function finish(ok, err) {
+          if (settled) { return; }
+          settled = true;
+          if (ok) { resolve(true); } else { reject(err); }
+        }
+        try {
+          var tx = db.transaction(IDB_STORE, 'readwrite');
+          var req = tx.objectStore(IDB_STORE).put(json, IDB_SHADOW_ITEM);
+          req.onsuccess = function () { finish(true); };
+          req.onerror = function () { finish(false, req.error); };
+        } catch (e) { finish(false, e); }
+      });
+    });
+  }
+
+  /* 옛 localStorage 그림자를 IndexedDB 로 옮기고 localStorage 를 비운다 (엔진 없이 호출 가능) */
+  function migrateShadowCache(storage) {
+    var st = storage || root.localStorage;
+    if (!st) { return Promise.resolve({ ok: false, reason: 'no-storage' }); }
+    var raw = null;
+    try { raw = st.getItem(SHADOW_LS_KEY); } catch (e) { raw = null; }
+    if (raw == null) { return Promise.resolve({ ok: true, migrated: false }); }
+    var legacy = null;
+    try { legacy = JSON.parse(raw); } catch (e) { legacy = null; }
+    if (!isPlain(legacy)) { legacy = {}; }
+    function finish(saved) {
+      var removed = false;
+      try { st.removeItem(SHADOW_LS_KEY); removed = true; } catch (e) { removed = false; }
+      return {
+        ok: true, migrated: true, entries: Object.keys(legacy).length,
+        saved: saved === true, removed: removed, bytesFreed: String(raw).length
+      };
+    }
+    if (!idbSupported()) { return Promise.resolve(finish(false)); }
+    return rawReadShadow().then(function (existing) {
+      var merged = {};
+      function add(o) {
+        if (!isPlain(o)) { return; }
+        Object.keys(o).forEach(function (k) {
+          var b = o[k];
+          if (!isPlain(b)) { return; }
+          var a = merged[k];
+          if (!a || num(b.v) > num(a.v)) { merged[k] = b; }
+        });
+      }
+      add(legacy);
+      if (typeof existing === 'string') { try { add(JSON.parse(existing)); } catch (e) {} }
+      else { add(existing); }
+      return rawWriteShadow(JSON.stringify(merged)).then(function () { return finish(true); }, function () { return finish(false); });
+    }, function () { return finish(false); });
+  }
+
   /* =========================================================================
      2. 필드 단위 병합 (Field-level merge)
      -------------------------------------------------------------------------
@@ -694,7 +861,8 @@
       }
       return false;
     }
-    function persist() { try { storage.setItem(key, JSON.stringify(state)); } catch (e) {} }
+    /* 사용량은 "있으면 좋은" 기록 — 저장에 실패해도 동기화를 멈추지 않는다 */
+    function persist() { setItemSafe(storage, key, JSON.stringify(state), opts); }
 
     return {
       record: function (kind, n) {
@@ -761,7 +929,8 @@
       if (!isPlain(s) || !Array.isArray(s.items)) { s = { items: [] }; }
       return s;
     }
-    function persist() { try { storage.setItem(key, JSON.stringify(state)); } catch (e) {} }
+    /* 큐는 메모리에 항상 살아 있고, 저장만 실패해도 계속 쓸 수 있다 */
+    function persist() { setItemSafe(storage, key, JSON.stringify(state), opts); }
 
     return {
       list: function () { return clone(state.items) || []; },
@@ -842,8 +1011,9 @@
     if (!storage) { throw new Error('storage 가 필요합니다'); }
     var now = opts.now || function () { return Date.now(); };
     var registry = buildRegistry(opts.keys);
-    var usage = createUsage(storage, { now: now, limits: opts.limits });
-    var outbox = createOutbox(storage, { now: now });
+    /* 저장 공간이 가득 차도 화면·상태로만 알리고 기능은 계속한다 */
+    var usage = createUsage(storage, { now: now, limits: opts.limits, onError: noteStorageError });
+    var outbox = createOutbox(storage, { now: now, onError: noteStorageError });
     /* 사용량이 경고(80%)·차단(100%) 단계로 넘어가면 화면에 바로 알린다 */
     var rawUsageRecord = usage.record;
     usage.record = function (kind, n) {
@@ -864,7 +1034,49 @@
     /* 시작할 때 서버 roles 를 자동으로 확인할지 (테스트에서 순서를 직접 잡을 때만 false) */
     var verifyOnStart = opts.verifyOnStart !== false;
     var adapter = opts.adapter || null;
-    var shadow = loadShadow();
+
+    /* ---------- 그림자(shadow) 상태 ----------
+       정본은 인메모리 shadow · 사본은 IndexedDB. localStorage 는 부팅 때 옛 값을 옮기고 비운다. */
+    var shadow = {};
+    var shadowLoaded = false;
+    var shadowSaveTimer = null;
+    var shadowDirty = false;
+    var shadowWriting = false;
+    var shadowWritePromise = null;
+    var shadowWriteFails = 0;
+    var idbDb = null;
+    var idbOpenPromise = null;
+    var idbDisabled = false;
+    var queuedCaptures = {};
+    var shadowReadyResolve = null;
+    var shadowReadyPromise = new Promise(function (resolve) { shadowReadyResolve = resolve; });
+
+    /* localStorage 저장 실패 상태 (화면 표시·진단용) */
+    var storageFull = false;
+    var storageFailed = 0;
+    var storageLastKey = '';
+    var storageLastError = '';
+    var storageLastAt = '';
+    var notingStorageError = false;
+    function noteStorageError(err, key) {
+      storageFailed++;
+      if (notingStorageError) { return; }
+      notingStorageError = true;
+      try {
+        storageLastKey = String(key || '');
+        storageLastError = isStorageQuotaError(err)
+          ? '이 기기의 브라우저 저장 공간이 가득 찼습니다'
+          : ('저장소에 쓰지 못했습니다 (' + String((err && (err.name || err.message)) || err) + ')');
+        storageLastAt = isoOf(now());
+        if (!isStorageQuotaError(err)) { return; }
+        var wasFull = storageFull;
+        storageFull = true;
+        if (!wasFull) { emit('storage-full', { key: storageLastKey, message: storageLastError }); }
+      } finally {
+        notingStorageError = false;
+      }
+    }
+
     var prevValues = {};
     var listeners = [];
     var applying = false;
@@ -1046,23 +1258,232 @@
       return null;
     }
 
-    /* ---------- shadow(문서별 마지막으로 아는 상태) ---------- */
-    function loadShadow() {
+    /* ---------- shadow(문서별 마지막으로 아는 상태) ----------
+       · 저장: 인메모리에 즉시, IndexedDB(tdk_fb_cache)에 비동기(300ms 모음)
+       · localStorage 에는 절대 쓰지 않는다 — 5MB 한도를 잡아먹던 장본인이다  */
+    function trimShadow() {
+      var keys = Object.keys(shadow);
+      if (keys.length <= SHADOW_MAX_ENTRIES) { return; }
+      /* 너무 커지면 오래된 출결 문서부터 정리 (원격은 그대로 남아 있음) */
+      keys.sort(function (a, b) {
+        return String((shadow[a] && shadow[a].u) || '').localeCompare(String((shadow[b] && shadow[b].u) || ''));
+      }).slice(0, keys.length - SHADOW_MAX_ENTRIES).forEach(function (k) { delete shadow[k]; });
+    }
+
+    /* 버전(_ver)이 높은 쪽을 남긴다 — 인메모리에 이미 seedShadow 가 채운 값(v0)이 있을 수 있다 */
+    function mergeShadowInto(target, extra) {
+      if (!isPlain(extra)) { return 0; }
+      var taken = 0;
+      Object.keys(extra).forEach(function (p) {
+        var e = extra[p];
+        if (!isPlain(e)) { return; }
+        var cur = target[p];
+        if (!cur) { target[p] = e; taken++; return; }
+        if (num(e.v) > num(cur.v)) { target[p] = e; taken++; }
+      });
+      return taken;
+    }
+
+    function readLegacyShadow() {
       var raw = null;
-      try { raw = storage.getItem('tdk.fbShadow.v1'); } catch (e) { raw = null; }
+      try { raw = storage.getItem(SHADOW_LS_KEY); } catch (e) { raw = null; }
+      if (raw == null) { return null; }
       var s = null;
-      try { s = raw ? JSON.parse(raw) : null; } catch (e) { s = null; }
+      try { s = JSON.parse(raw); } catch (e) { s = null; }
       return isPlain(s) ? s : {};
     }
-    function saveShadow() {
-      var keys = Object.keys(shadow);
-      if (keys.length > 30000) {
-        /* 너무 커지면 오래된 출결 문서부터 정리 (원격은 그대로 남아 있음) */
-        keys.sort(function (a, b) {
-          return String((shadow[a] && shadow[a].u) || '').localeCompare(String((shadow[b] && shadow[b].u) || ''));
-        }).slice(0, keys.length - 30000).forEach(function (k) { delete shadow[k]; });
+
+    function openShadowDb() {
+      if (idbDb) { return Promise.resolve(idbDb); }
+      if (idbOpenPromise) { return idbOpenPromise; }
+      var f = idbFactory();
+      if (!f) { return Promise.reject(new Error('indexedDB 없음')); }
+      idbOpenPromise = new Promise(function (resolve, reject) {
+        var settled = false;
+        function fail(err) {
+          if (settled) { return; }
+          settled = true;
+          idbOpenPromise = null;
+          idbDisabled = true;
+          reject(err || new Error('indexedDB 열기 실패'));
+        }
+        function ok(db) {
+          if (settled) { return; }
+          settled = true;
+          idbDb = db;
+          resolve(db);
+        }
+        var req;
+        try { req = f.open(IDB_NAME, 1); } catch (e) { fail(e); return; }
+        req.onupgradeneeded = function () {
+          try {
+            var db = req.result;
+            if (db && db.objectStoreNames && !db.objectStoreNames.contains(IDB_STORE)) { db.createObjectStore(IDB_STORE); }
+          } catch (e) {}
+        };
+        req.onsuccess = function () { ok(req.result); };
+        req.onerror = function () { fail(req.error); };
+        req.onblocked = function () { fail(new Error('indexedDB 차단됨')); };
+        /* 사생활 보호 모드처럼 응답이 없는 경우 — 그림자 없이(인메모리로) 계속 간다 */
+        try { setTimeout(function () { fail(new Error('indexedDB 응답 없음')); }, SHADOW_OPEN_TIMEOUT_MS); } catch (e) {}
+      });
+      return idbOpenPromise;
+    }
+
+    function idbReadShadow() {
+      if (idbDisabled || !idbSupported()) { return Promise.resolve(null); }
+      return openShadowDb().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var req;
+          try {
+            var tx = db.transaction(IDB_STORE, 'readonly');
+            req = tx.objectStore(IDB_STORE).get(IDB_SHADOW_ITEM);
+          } catch (e) { reject(e); return; }
+          req.onsuccess = function () {
+            var v = req.result;
+            if (typeof v === 'string' || isPlain(v)) { resolve(v); return; }
+            resolve(null);
+          };
+          req.onerror = function () { reject(req.error); };
+        });
+      });
+    }
+
+    function idbWriteShadow(json) {
+      if (idbDisabled || !idbSupported()) { return Promise.resolve(false); }
+      return openShadowDb().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var settled = false;
+          function finish(ok, err) {
+            if (settled) { return; }
+            settled = true;
+            if (ok) { resolve(true); } else { reject(err); }
+          }
+          try {
+            var tx = db.transaction(IDB_STORE, 'readwrite');
+            var req = tx.objectStore(IDB_STORE).put(json, IDB_SHADOW_ITEM);
+            req.onsuccess = function () { finish(true); };
+            req.onerror = function () { finish(false, req.error); };
+            tx.oncomplete = function () { finish(true); };
+            tx.onerror = function () { finish(false, tx.error); };
+            tx.onabort = function () { finish(false, tx.error); };
+          } catch (e) { finish(false, e); }
+        });
+      });
+    }
+
+    /* 지금 그림자를 IndexedDB 에 바로 쓴다 (모아 둔 예약은 취소) */
+    function flushShadowPersist() {
+      if (shadowSaveTimer) { try { clearTimeout(shadowSaveTimer); } catch (e) {} shadowSaveTimer = null; }
+      if (!shadowDirty) { return Promise.resolve(false); }
+      if (idbDisabled || !idbSupported()) {
+        /* IndexedDB 가 없으면 인메모리만으로 동작한다 (Node·QuickJS 테스트) */
+        shadowDirty = false;
+        return Promise.resolve(false);
       }
-      try { storage.setItem('tdk.fbShadow.v1', JSON.stringify(shadow)); } catch (e) {}
+      /* 저장 중이면 그 저장이 끝난 뒤에 다시 시도한다 */
+      if (shadowWriting) {
+        return Promise.resolve(shadowWritePromise).then(function () { return flushShadowPersist(); });
+      }
+      var json = null;
+      try { json = JSON.stringify(shadow); } catch (e) { json = null; }
+      shadowDirty = false;
+      if (json == null) { return Promise.resolve(false); }
+      shadowWriting = true;
+      var p = idbWriteShadow(json).then(function () {
+        shadowWriting = false;
+        shadowWriteFails = 0;
+        if (shadowDirty) { return flushShadowPersist(); }   /* 쓰는 사이 또 바뀌었으면 이어서 */
+        return true;
+      }, function (err) {
+        shadowWriting = false;
+        shadowDirty = true;               /* 다음 저장 때 다시 시도 */
+        shadowWriteFails++;
+        if (shadowWriteFails >= 3) { idbDisabled = true; }
+        try {
+          console.warn('[TDK 동기화] 그림자를 IndexedDB 에 저장하지 못했습니다 — 이번 실행은 메모리로 계속합니다 (' +
+            String((err && (err.name || err.message)) || err) + ')');
+        } catch (e) {}
+        return false;
+      });
+      shadowWritePromise = p;
+      return p;
+    }
+
+    function scheduleShadowPersist() {
+      shadowDirty = true;
+      if (!idbSupported() || idbDisabled) { return; }
+      if (shadowSaveTimer) { return; }
+      try {
+        shadowSaveTimer = setTimeout(function () { shadowSaveTimer = null; flushShadowPersist(); }, SHADOW_PERSIST_MS);
+      } catch (e) { shadowSaveTimer = null; }
+    }
+
+    function saveShadow() {
+      trimShadow();
+      scheduleShadowPersist();
+    }
+
+    /* 부팅: 옛 localStorage 그림자 + IndexedDB 그림자를 메모리로 합치고 localStorage 를 비운다 */
+    function finishShadowHydration(storedRaw, legacyCount) {
+      if (shadowLoaded) { return; }
+      var stored = null;
+      if (typeof storedRaw === 'string') { try { stored = JSON.parse(storedRaw); } catch (e) { stored = null; } }
+      else if (isPlain(storedRaw)) { stored = storedRaw; }
+      var storedCount = mergeShadowInto(shadow, stored);
+      var hadLegacy = false;
+      try { hadLegacy = storage.getItem(SHADOW_LS_KEY) != null; } catch (e) { hadLegacy = false; }
+      if (hadLegacy) {
+        /* 옮긴 뒤 즉시 지운다 — localStorage 5MB 한도를 바로 비운다 */
+        try { rawRemove(SHADOW_LS_KEY); } catch (e) { try { storage.removeItem(SHADOW_LS_KEY); } catch (e2) {} }
+        shadowDirty = true;
+        flushShadowPersist();
+      }
+      shadowLoaded = true;
+      runQueuedCaptures();
+      if (hadLegacy) {
+        emit('shadow-migrated', {
+          entries: Object.keys(shadow).length, legacy: legacyCount, cache: storedCount,
+          backend: (idbSupported() && !idbDisabled) ? 'indexeddb' : 'memory'
+        });
+      }
+      if (shadowReadyResolve) {
+        shadowReadyResolve({
+          loaded: true, entries: Object.keys(shadow).length,
+          backend: (idbSupported() && !idbDisabled) ? 'indexeddb' : 'memory',
+          fromLocalStorage: hadLegacy, fromCache: storedCount
+        });
+        shadowReadyResolve = null;
+      }
+    }
+
+    function hydrateShadow() {
+      var legacy = readLegacyShadow();
+      var legacyCount = mergeShadowInto(shadow, legacy);
+      if (!idbSupported() || idbDisabled) {
+        /* IndexedDB 없는 환경: 옛 localStorage 값만 옮기고 바로 준비 완료 */
+        finishShadowHydration(null, legacyCount);
+        return shadowReadyPromise;
+      }
+      idbReadShadow().then(function (v) {
+        finishShadowHydration(v, legacyCount);
+      }, function () {
+        finishShadowHydration(null, legacyCount);
+      });
+      return shadowReadyPromise;
+    }
+
+    /* 그림자를 읽기 전에 들어온 변경은 잠시 모아 두었다가 읽은 뒤 차례로 처리한다
+       (빈 그림자로 v1 을 만들어 서버의 높은 버전을 덮어쓰는 일을 막는다) */
+    function runQueuedCaptures() {
+      var names = Object.keys(queuedCaptures);
+      queuedCaptures = {};
+      names.forEach(function (n) {
+        var e = entryByName(n);
+        if (!e) { return; }
+        try { capture(e); } catch (err) { lastError = errorText(err); }
+      });
+      if (names.length && outbox.count()) { scheduleFlush(); }
     }
     function shadowDoc(path) {
       var s = shadow[path];
@@ -1133,8 +1554,15 @@
       return true;
     }
     function rawSet(k, v) {
-      if (originals && originals.set) { originals.set.call(storage, k, v); return; }
-      storage.setItem(k, v);
+      /* 저장 실패(한도 초과)는 던지지 않고 false 로 알린다 — 앱·동기화를 멈추지 않는다 */
+      try {
+        if (originals && originals.set) { originals.set.call(storage, k, v); return true; }
+        storage.setItem(k, v);
+        return true;
+      } catch (err) {
+        noteStorageError(err, k);
+        return false;
+      }
     }
     function rawRemove(k) {
       if (originals && originals.remove) { originals.remove.call(storage, k); return; }
@@ -1152,12 +1580,14 @@
     }
     function writeValue(name, value) {
       var e = entryByName(name);
-      if (!e) { return; }
+      if (!e) { return false; }
       var was = applying;
       applying = true;
-      try { rawSet(e.key, JSON.stringify(value)); } catch (err) {}
+      var ok = false;
+      try { ok = rawSet(e.key, JSON.stringify(value)); } catch (err) { ok = false; }
       applying = was;
       prevValues[name] = value;
+      return ok;
     }
 
     /* ---------- 로컬 변경 감지 ---------- */
@@ -1176,6 +1606,11 @@
       var value = null;
       if (rawValue != null) { try { value = JSON.parse(rawValue); } catch (e) { value = null; } }
       prevValues[entry.name] = value;
+      if (!shadowLoaded) {
+        /* 그림자를 읽어 오기 전이면 잠시 모아 두었다가 읽은 뒤 차례로 처리한다 */
+        queuedCaptures[entry.name] = 1;
+        return;
+      }
       capture(entry);
       scheduleFlush();
     }
@@ -1693,7 +2128,7 @@
     function emit(type, payload) {
       var st = null;
       try { st = status(); } catch (e) { st = null; }
-      listeners.forEach(function (fn) { try { fn(type, payload, st); } catch (e) {} });
+      (listeners || []).forEach(function (fn) { try { fn(type, payload, st); } catch (e) {} });
       if (typeof opts.onEvent === 'function') {
         try { opts.onEvent(type, payload, st); } catch (e) {}
       }
@@ -1924,6 +2359,9 @@
       }
       if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
       if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+      /* 마지막 그림자 상태를 IndexedDB 에 남기고, 남은 타이머가 나중에 덮어쓰지 않게 정리 */
+      if (shadowSaveTimer) { try { clearTimeout(shadowSaveTimer); } catch (e) {} shadowSaveTimer = null; }
+      if (shadowDirty) { flushShadowPersist(); }
     }
 
     /* ---------- 테스트/UI용 ---------- */
@@ -1976,14 +2414,34 @@
         if (path) { return clone(shadow[path]) || null; }
         return clone(shadow) || {};
       },
+      /* 그림자가 준비될 때까지 기다리는 약속 — 테스트·진단용 */
+      shadowReady: function () { return shadowReadyPromise; },
+      shadowInfo: function () {
+        return {
+          backend: (idbSupported() && !idbDisabled) ? 'indexeddb' : 'memory',
+          loaded: shadowLoaded, entities: Object.keys(shadow).length,
+          dirty: shadowDirty, writing: shadowWriting, disabled: idbDisabled,
+          fails: shadowWriteFails, db: IDB_NAME, store: IDB_STORE, item: IDB_SHADOW_ITEM
+        };
+      },
+      /* 그림자를 IndexedDB 에 즉시 쓴다 (테스트·진단용) */
+      saveShadowNow: function () {
+        shadowDirty = true;
+        return flushShadowPersist();
+      },
+      storageState: function () {
+        return { full: storageFull, failed: storageFailed, lastKey: storageLastKey, lastError: storageLastError, at: storageLastAt };
+      },
       resetShadow: function () { shadow = {}; saveShadow(); },
       seedShadow: function () { seedShadow(); return Object.keys(shadow).length; },
-      setValue: function (name, value) { writeValue(name, value); },
+      setValue: function (name, value) { return writeValue(name, value); },
       applyRemoteNow: flushReload,
       simulateRemote: function (path, data) { onRemote(path, data, null); },
       mergeDocs: mergeDocs,
       errors: function () { return { lastError: lastError, lastSyncAt: lastSyncAt }; }
     };
+    /* 옛 localStorage 그림자를 IndexedDB·인메모리로 옮기고 localStorage 를 비운다 */
+    hydrateShadow();
     return api;
   }
 
@@ -2373,6 +2831,7 @@
     createFirestoreAdapter: createFirestoreAdapter,
     loadFirebaseModules: loadFirebaseModules,
     createMemoryStorage: createMemoryStorage,
+    migrateShadowCache: migrateShadowCache,
     validateConfig: validateConfig,
     mergeDocs: mergeDocs,
     stampFields: stampFields,
