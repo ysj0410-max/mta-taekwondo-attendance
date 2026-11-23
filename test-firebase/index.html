@@ -14273,7 +14273,7 @@
     resetStudentForm();
     fillSmsForm();
     el('dojo-name').value = app.settings.dojoName;
-    document.title = app.settings.dojoName + ' · AI 출석 알림';
+    document.title = app.settings.dojoName + ' · AI 출석 알림 (Firebase 테스트)';
     el('mode-in').classList.toggle('active', app.settings.mode !== 'out');
     el('mode-out').classList.toggle('active', app.settings.mode === 'out');
     renderAll();
@@ -16032,7 +16032,7 @@
     app._renderedDay = todayKey();
 
     el('dojo-name').value = app.settings.dojoName;
-    document.title = app.settings.dojoName + ' · AI 출석 알림';
+    document.title = app.settings.dojoName + ' · AI 출석 알림 (Firebase 테스트)';
     el('mode-in').classList.toggle('active', app.settings.mode !== 'out');
     el('mode-out').classList.toggle('active', app.settings.mode === 'out');
 
