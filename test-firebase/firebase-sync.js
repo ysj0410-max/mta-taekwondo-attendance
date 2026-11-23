@@ -1537,6 +1537,8 @@
 
     function runMigration(opts2) {
       opts2 = opts2 || {};
+      /* 이전은 관리자 기기에서만 — 태블릿은 원생 개인정보를 올릴 수도, 읽을 수도 없다 */
+      if (role === 'tablet') { return Promise.resolve({ ok: false, reason: 'tablet-role', message: '출석 태블릿 역할에서는 이전하지 않습니다 — 관리자 PC에서 해 주세요.' }); }
       if (!adapter) { return Promise.resolve({ ok: false, reason: 'no-adapter' }); }
       if (usage.blocked()) { return Promise.resolve({ ok: false, reason: 'quota', message: QUOTA_MESSAGE }); }
       var docs = buildMigrationDocs();

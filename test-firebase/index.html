@@ -3949,11 +3949,13 @@
 
   /* 토스트·모달에 붙는 상태 문구 */
   function smsToastTail() {
+    if (tabletSmsRelay()) { return '를 기록했어요 (태블릿 역할 — 관리자 PC가 대신 발송)'; }
     if (!smsConfigured()) { return '를 발송 로그에 기록했어요 (도장폰 미연동 · 시뮬레이션)'; }
     if (!smsAutoOn()) { return '를 발송 로그에 기록했어요 (자동발송 꺼짐)'; }
     return '를 도장폰 무료문자로 발송 요청했어요';
   }
   function smsModalNote() {
+    if (tabletSmsRelay()) { return '태블릿에는 보호자 번호가 없어, 켜져 있는 관리자 PC가 이 출석을 받아 대신 문자를 보냅니다.'; }
     if (!smsConfigured()) { return '지금은 도장폰 미연동이라 로그에만 기록되고, 발송 로그의 [문자앱으로] 버튼으로 직접 보낼 수 있어요.'; }
     if (!smsAutoOn()) { return '자동발송이 꺼져 있어 로그에만 기록됩니다.'; }
     return '도장폰 무료문자로 한 명씩 차례로 발송합니다.';
