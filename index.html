@@ -281,6 +281,21 @@
     padding:3px 9px; border-radius:999px; white-space:nowrap; display:inline-block;
   }
   .sms-link:hover{background:var(--sms-2)}
+  /* 문자 재전송 — 개별(작은 칩) · 실패·미전송 일괄(주황 버튼) */
+  .sms-retry{
+    font-family:inherit; font-size:10px; font-weight:800; color:#0b7a55; background:#e6f7f0;
+    border:1px solid #bfe9d4; padding:2px 8px; border-radius:999px; cursor:pointer;
+    white-space:nowrap; line-height:1.5;
+  }
+  .sms-retry:hover{background:#d3f2e4}
+  .sms-retry:active{transform:translateY(1px)}
+  .sms-retryall{
+    font-family:inherit; font-size:10.5px; font-weight:800; color:#fff; background:#d98300;
+    border:none; padding:5px 11px; border-radius:999px; cursor:pointer; white-space:nowrap; line-height:1.4;
+  }
+  .sms-retryall:hover{background:#c07300}
+  .sms-retryall:active{transform:translateY(1px)}
+  .log-actions{display:flex; gap:5px; align-items:center; justify-content:flex-end; flex-wrap:wrap}
   .sms-test-result:empty{display:none}
   .sms-test-result{margin-top:10px; font-size:11.5px; font-weight:700; border-radius:11px; padding:9px 12px; line-height:1.6; word-break:break-all}
   .sms-test-result.ok{background:#e9f9f1; color:#0b7a55; border:1px solid #bfe9d4}
@@ -1087,6 +1102,8 @@
     .log-scroll{padding:8px; gap:8px}
     .sms-bubble{font-size:12px; padding:9px 11px 7px}
     .log-empty{padding:16px 12px; font-size:11.5px}
+    .sms-retryall{font-size:10px; padding:4px 9px}
+    .sms-retryall .lbl-long{display:none}
 
     /* 하단 공개 정보 바: 한 줄 가로 스크롤 */
     .kiosk-info{grid-column:auto; flex:0 0 auto; gap:7px; overflow-x:auto; scrollbar-width:none}
@@ -1290,6 +1307,7 @@
           <div class="card-head">
             <div class="card-title"><span class="dot" style="background:var(--sms)"></span>문자 발송 로그</div>
             <div class="spacer"></div>
+            <button type="button" class="sms-retryall" id="btn-sms-retry-kiosk" style="display:none" title="아직 도장폰으로 나가지 않은 문자만 다시 보냅니다">🔄 <span class="lbl-long">실패·미전송 </span>다시 보내기 (0건)</button>
             <span class="log-count" id="log-count">0건</span>
           </div>
           <div class="log-scroll" id="log-scroll"></div>
@@ -1362,10 +1380,10 @@
               </div>
 
               <div class="panel">
-                <div class="panel-head"><h3>💬 문자 발송 로그 (전체)</h3><div class="spacer"></div><span class="tiny-note" id="admin-log-count">0건</span></div>
+                <div class="panel-head"><h3>💬 문자 발송 로그 (전체)</h3><div class="spacer"></div><button type="button" class="sms-retryall" id="btn-sms-retry-admin" style="display:none" title="아직 도장폰으로 나가지 않은 문자만 다시 보냅니다">🔄 <span class="lbl-long">실패·미전송 </span>다시 보내기 (0건)</button><span class="tiny-note" id="admin-log-count">0건</span></div>
                 <div class="tablewrap" style="max-height:300px; overflow:auto">
                   <table class="tb">
-                    <thead><tr><th style="width:62px">시간</th><th>관원</th><th style="width:56px">구분</th><th>문구</th><th style="width:104px">발송 상태</th><th style="width:64px"></th></tr></thead>
+                    <thead><tr><th style="width:62px">시간</th><th style="min-width:66px">관원</th><th style="width:56px">구분</th><th>문구</th><th style="width:104px">발송 상태</th><th style="width:136px"></th></tr></thead>
                     <tbody id="admin-log-table"></tbody>
                   </table>
                 </div>
@@ -3819,6 +3837,110 @@
       setTimeout(pumpSms, 700);
     });
   }
+  /* ---------- 문자 재전송 ----------
+     · 대상: 아직 정상 발송되지 않은 로그만 (error · unverified · off · sim)
+       이미 sent 로 나간 건과 테스트 발송은 대상이 아니라 중복 발송되지 않는다.
+     · 자동발송(smsAutoOn)이 꺼져 있어도 관장님이 직접 누른 것이므로 웹훅으로 바로 보낸다.
+     · 성공하면 같은 로그 항목을 sent 로, 실패하면 error 로 고쳐 저장한다. */
+  var SMS_RETRY_STATES = { error: true, unverified: true, off: true, sim: true };
+  function findLog(id) {
+    for (var i = 0; i < app.logs.length; i++) {
+      if (app.logs[i] && app.logs[i].id === id) { return app.logs[i]; }
+    }
+    return null;
+  }
+  function smsRetryable(l) {
+    return !!(l && SMS_RETRY_STATES[l.status] && String(l.phone || '').trim());
+  }
+  function smsRetryTitle(l) {
+    if (l.status === 'unverified') { return '보낸 요청이 확인되지 않은 건이에요. 이미 도착했을 수 있으니 도장폰 문자함도 함께 확인하세요.'; }
+    if (l.status === 'sim') { return '도장폰 미연동으로 기록만 된 건이에요. 웹훅 URL을 저장한 뒤 다시 보낼 수 있어요.'; }
+    if (l.status === 'off') { return '자동발송이 꺼져 있어 기록만 된 건이에요.'; }
+    return '전송오류 난 문자를 같은 번호로 다시 보냅니다.';
+  }
+  /* 지금 보이는 발송 로그 중 재전송할 것 — 키오스크는 화면에 그리는 40건, 관리자는 30건 */
+  function smsRetryTargets(scope) {
+    var list = (scope === 'admin') ? app.logs.slice(0, 30) : app.logs.filter(logVisible).slice(0, 40);
+    return list.filter(smsRetryable);
+  }
+  function smsRetryQueued(entry) {
+    for (var i = 0; i < smsQueue.length; i++) {
+      if (smsQueue[i] === entry) { return true; }
+    }
+    return false;
+  }
+  function retrySmsEntry(entry) {
+    if (!entry) {
+      toast('다시 보낼 발송 기록을 찾지 못했어요. 화면을 새로 고쳐 주세요.');
+      return null;
+    }
+    if (!smsConfigured()) {
+      toast('먼저 도장폰 웹훅 URL을 저장해 주세요. 그전엔 「문자앱으로」 버튼을 쓰시면 돼요.');
+      return null;
+    }
+    if (!String(entry.phone || '').trim()) {
+      toast(entry.name + ' 보호자 연락처가 없어 문자를 다시 보낼 수 없어요. 원생 관리에서 번호를 넣어 주세요.');
+      return null;
+    }
+    if (entry.status === 'queued' || smsRetryQueued(entry)) {
+      toast('이미 다시 보내는 중이에요. 잠시만 기다려 주세요.');
+      return null;
+    }
+    entry.status = 'queued';
+    entry.statusNote = '재전송 대기';
+    entry.retryAt = new Date().toISOString();
+    entry.retryCount = (entry.retryCount || 0) + 1;
+    entry.error = '';
+    saveLogs();
+    renderLog();
+    renderAdminLog();
+    smsQueue.push(entry);
+    pumpSms();
+    return entry;
+  }
+  function retrySmsById(id) {
+    return retrySmsEntry(findLog(id));
+  }
+  function renderSmsRetryAll() {
+    [['btn-sms-retry-kiosk', 'kiosk'], ['btn-sms-retry-admin', 'admin']].forEach(function (pair) {
+      var b = el(pair[0]);
+      if (!b) { return; }
+      var n = smsRetryTargets(pair[1]).length;
+      b.style.display = n ? '' : 'none';
+      b.innerHTML = '🔄 <span class="lbl-long">실패·미전송 </span>다시 보내기 (' + n + '건)';
+    });
+  }
+  function retryVisibleSms(scope) {
+    if (!smsConfigured()) {
+      toast('먼저 도장폰 웹훅 URL을 저장해 주세요. 그전엔 「문자앱으로」 버튼을 쓰시면 돼요.');
+      return null;
+    }
+    var list = smsRetryTargets(scope);
+    if (!list.length) {
+      toast('다시 보낼 실패·미전송 문자가 없어요.');
+      return null;
+    }
+    return openModal({
+      title: '실패·미전송 문자 ' + list.length + '건을 도장폰으로 다시 보낼까요?',
+      sub: '이미 나간 문자는 빼고, 아직 안 나간 ' + list.length + '건만 다시 보냅니다',
+      body: '<div class="help" style="margin-top:0">' +
+        list.slice(0, 6).map(function (l) {
+          return '· ' + esc(l.name || '테스트') + ' · ' + esc(smsStatusOf(l).label) + ' · ' + esc(maskPhone(l.phone));
+        }).join('<br>') +
+        (list.length > 6 ? '<br>… 외 ' + (list.length - 6) + '건' : '') +
+        '<br><br>도장폰 웹훅으로 0.7초 간격으로 차례대로 보냅니다. 끝나면 로그 상태가 바뀝니다.</div>',
+      actions: [
+        { label: '취소', value: false, kind: 'btn-ghost' },
+        { label: list.length + '건 다시 보내기', value: true, kind: 'btn-primary' }
+      ]
+    }).then(function (ok) {
+      if (!ok) { return 0; }
+      var n = 0;
+      list.forEach(function (l) { if (retrySmsEntry(l)) { n++; } });
+      if (n) { toast(n + '건을 다시 보내기 시작했어요 · 끝나면 로그 상태가 바뀝니다'); }
+      return n;
+    });
+  }
 
   function addLog(student, mode, timeStr, opts) {
     opts = opts || {};
@@ -3866,6 +3988,14 @@
     var label = compact ? '📲 문자' : '📲 문자앱으로';
     return '<a class="sms-link" href="' + esc(smsHref(l.phone, l.text)) + '" title="기본 문자 앱으로 이 문구를 보냅니다">' + label + '</a>';
   }
+  /* 개별 재전송 버튼 — 아직 정상 발송되지 않은 항목에만 붙는다 */
+  function smsRetryBtnHtml(l) {
+    return '<button type="button" class="sms-retry" data-sms-retry="' + esc(l.id) + '" title="' +
+      esc(smsRetryTitle(l)) + '">🔄 재전송</button>';
+  }
+  function smsRetryCell(l, compact) {
+    return '<div class="log-actions">' + smsLinkHtml(l, compact) + (smsRetryable(l) ? smsRetryBtnHtml(l) : '') + '</div>';
+  }
 
   function renderLog() {
     var wrap = el('log-scroll');
@@ -3877,6 +4007,7 @@
       ? '<div class="log-private">🔒 비공개 항목 ' + hidden + '건은 관장님(관리자) 화면에만 보입니다</div>'
       : '';
     el('log-count').textContent = todayVisible.length + '건';
+    renderSmsRetryAll();
     if (!visible.length) {
       wrap.innerHTML = note + (hidden > 0
         ? '<div class="log-empty"><span>🔒</span>오늘 알림은 모두 비공개로 설정되어<br>관장님 화면에만 보입니다.</div>'
@@ -3903,6 +4034,7 @@
         '<div class="sms-meta">' +
         '<span>→ ' + esc(maskPhone(l.phone)) + '</span>' +
         logStatusChip(l) +
+        (smsRetryable(l) ? smsRetryBtnHtml(l) : '') +
         '<span class="spacer"></span>' +
         smsLinkHtml(l) +
         '</div>' +
@@ -4813,6 +4945,7 @@
     var tbody = el('admin-log-table');
     if (!tbody) { return; }
     el('admin-log-count').textContent = app.logs.length + '건';
+    renderSmsRetryAll();
     if (!app.logs.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="6">아직 발송한 문자가 없어요</td></tr>';
       return;
@@ -4831,7 +4964,7 @@
         '<td><span class="chip">' + label + '</span></td>' +
         '<td class="sub" style="white-space:normal">' + esc(text) + '</td>' +
         '<td>' + logStatusChip(l) + '</td>' +
-        '<td>' + smsLinkHtml(l, true) + '</td>' +
+        '<td>' + smsRetryCell(l, true) + '</td>' +
         '</tr>';
     }).join('');
   }
@@ -9576,7 +9709,7 @@
         '<td class="nm">' + esc(l.name) + '</td>' +
         '<td class="sub" style="white-space:normal">' + esc(short) + '</td>' +
         '<td>' + logStatusChip(l) + '</td>' +
-        '<td>' + smsLinkHtml(l, true) + '</td>' +
+        '<td>' + smsRetryCell(l, true) + '</td>' +
         '</tr>';
     }).join('');
   }
@@ -13968,6 +14101,24 @@
       if (f) { f.addEventListener('change', function () { readSmsForm(); renderLog(); }); }
     });
 
+    /* 문자 발송 로그: 개별 재전송(로그 안 버튼) · 실패·미전송 일괄 재전송 */
+    ['log-scroll', 'admin-log-table', 'bs-history'].forEach(function (id) {
+      var box = el(id);
+      if (!box) { return; }
+      box.addEventListener('click', function (e) {
+        var t = e.target;
+        var btn = (t && t.closest) ? t.closest('[data-sms-retry]') : null;
+        if (!btn) { return; }
+        retrySmsById(btn.getAttribute('data-sms-retry'));
+      });
+    });
+    if (el('btn-sms-retry-kiosk')) {
+      el('btn-sms-retry-kiosk').addEventListener('click', function () { retryVisibleSms('kiosk'); });
+    }
+    if (el('btn-sms-retry-admin')) {
+      el('btn-sms-retry-admin').addEventListener('click', function () { retryVisibleSms('admin'); });
+    }
+
     // AI 얼굴인식 설정
     if (el('face-threshold')) {
       el('face-threshold').addEventListener('input', function () {
@@ -14226,6 +14377,27 @@
   window.__tdk = {
     app: app,
     LS: LS,
+    sms: {
+      conf: smsConf,
+      configured: smsConfigured,
+      autoOn: smsAutoOn,
+      send: smsSend,
+      href: smsHref,
+      statusOf: smsStatusOf,
+      retryable: smsRetryable,
+      targets: smsRetryTargets,
+      retryOne: retrySmsEntry,
+      retryById: retrySmsById,
+      retryAll: retryVisibleSms,
+      renderRetryAll: renderSmsRetryAll,
+      findLog: findLog,
+      queue: function () { return smsQueue.slice(); },
+      busy: function () { return smsBusy; },
+      pump: pumpSms,
+      clearQueue: function () { smsQueue = []; smsBusy = false; },
+      kioskLog: renderLog,
+      adminLog: renderAdminLog
+    },
     face: {
       euclideanDistance: euclideanDistance,
       bestFaceMatch: bestFaceMatch,
