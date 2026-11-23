@@ -355,7 +355,7 @@
   .tu-charge{font-variant-numeric:tabular-nums; font-weight:800; color:#1b2a5b; white-space:nowrap}
   .tu-charge small{display:block; font-size:10px; font-weight:700; color:#0b7a55}
   .tu-charge.zero{color:#c0392b}
-  .tu-tablewrap > table.tub{min-width:1000px}
+  .tu-tablewrap > table.tub{min-width:1084px}
   .empty-row td{text-align:center; color:#9aa4b5; padding:22px; font-weight:600}
 
   .field{margin-bottom:11px}
@@ -681,6 +681,7 @@
   table.tub .tub-belt i{width:9px; height:9px}
   .tu-fee{width:96px; text-align:right; font-variant-numeric:tabular-nums; font-weight:800}
   .tu-date{width:128px}
+  table.tub select.tu-tday{width:84px; min-width:84px; height:30px; font-size:12px; font-weight:700; padding:0 4px; text-align:center}
   .tu-memo{width:100%; min-width:96px}
   .tu-mgroup{display:flex; gap:4px}
   .tu-mbtn{border:1px solid #e3e8f2; background:#f8fafd; color:#5b6b85; font-weight:800; font-size:10.5px; padding:5px 7px; border-radius:9px; cursor:pointer; white-space:nowrap; line-height:1.2}
@@ -2043,6 +2044,7 @@
                   <tr>
                     <th style="width:28px"><input type="checkbox" class="ck" id="tu-check-all" aria-label="전체 선택"></th>
                     <th>관원</th>
+                    <th style="width:84px">원비 날짜</th>
                     <th style="width:104px">기본 원비</th>
                     <th style="width:190px">차감 (금액 · 사유)</th>
                     <th style="width:112px">실 청구액</th>
@@ -2059,7 +2061,7 @@
             <div class="panel-body" style="border-top:1px solid #eef1f6">
               <div class="help" style="margin-top:0">
                 <b>결제 수단을 누르면 바로 완납</b>으로 처리되고 납부일이 오늘로 찍힙니다. 이미 완납된 관원은 누른 수단으로 바뀌기만 해요.
-                칸에서 금액·납부일·메모를 직접 고칠 수 있고, <b>✅ 완납</b>으로 미납↔완납을 오갈 수 있습니다(미납으로 되돌리면 납부일·수단이 지워집니다).
+                칸에서 금액·납부일·메모를 직접 고칠 수 있고, <b>원비 날짜</b> 칸에서 매달 원비 내는 날(1~31일)을 바로 바꾸면 <b>🥋 원생 관리</b>에도 함께 저장됩니다(이미 찍힌 납부일·납부 상태는 건드리지 않아요). <b>✅ 완납</b>으로 미납↔완납을 오갈 수 있습니다(미납으로 되돌리면 납부일·수단이 지워집니다).
                 <b>차감</b> 칸에 금액과 사유(예: 결석 2회, 이월 정산)를 적으면 <b>실 청구액 = 기본 원비 − 차감</b>으로 바로 다시 계산되고, 위 요약·수납 리포트·CSV까지 함께 바뀝니다.<br>
                 <b>면제·휴원</b>은 예상 원비·수납률 계산에서 빠집니다.<br>
                 위 <b>수단별 집계</b>는 부서 필터·검색 기준이고, 수단 칩을 누르면 그 수단으로 낸 관원만 표에 남습니다(다시 누르면 해제).
@@ -8493,7 +8495,7 @@
     var mk = u.month;
     var act = document.activeElement;
     if (!force && act && act.getAttribute) {
-      var f = ['data-tfee', 'data-tdate', 'data-tmemo', 'data-tstatus', 'data-tcheck', 'data-tded', 'data-tdedreason'];
+      var f = ['data-tfee', 'data-tdate', 'data-tmemo', 'data-tstatus', 'data-tcheck', 'data-tded', 'data-tdedreason', 'data-ttday'];
       for (var i = 0; i < f.length; i++) {
         if (act.getAttribute(f[i])) { return; }
       }
@@ -8561,7 +8563,7 @@
     var rows = tuitionTableRows();
     var selMap = u.selected || {};
     if (!rows.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="10">' +
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="11">' +
         (app.students.length ? '조건에 맞는 관원이 없어요. 부서·상태 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다') +
         '</td></tr>';
     } else {
@@ -8585,6 +8587,8 @@
           '<td class="nm"><div class="nm-line">' + esc(s.name) +
           '<span class="belt-badge tub-belt">' + beltSwatchHtml(s.belt) + esc(s.belt || '미지정') + '</span></div>' +
           '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) + '</div></td>' +
+          '<td><select class="input mini tu-tday" data-ttday="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 원비 날짜') + '"' +
+          ' title="원비 날짜(매달 원비 내는 날) · 원생 관리와 함께 바뀝니다">' + tuitionDayOptions(tuitionDayOf(s)) + '</select></td>' +
           '<td><input class="input mini tu-fee" type="number" min="0" step="1000" inputmode="numeric" value="' + base + '"' +
           ' data-tfee="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 기본 월 원비') + '"></td>' +
           '<td><div class="tu-dedcell">' +
@@ -15082,6 +15086,25 @@
         var cid = ck.getAttribute('data-tcheck');
         if (t.checked) { u.selected[cid] = true; } else { delete u.selected[cid]; }
         renderTuitionBulk();
+        return;
+      }
+      var dy = t.closest('[data-ttday]');
+      if (dy) {
+        var yd = dy.getAttribute('data-ttday'), ys = byId(yd);
+        if (!ys) { return; }
+        var rawDy = String(dy.value == null ? '' : dy.value).trim();
+        var nd = parseInt(rawDy, 10);
+        if (isNaN(nd) || nd < 1 || nd > 31) { nd = 0; }
+        var wasDay = tuitionDayOf(ys);
+        if (nd) { ys.tuitionDay = nd; } else { delete ys.tuitionDay; }
+        delete ys.tuitionDate;
+        saveStudents();
+        renderStudentsTable();
+        renderTuition(true);
+        if (nd === wasDay) { return; }
+        toast(nd
+          ? (ys.name + ' · 원비 날짜 ' + dayLabel(nd) + ' → 원생 관리에도 저장했어요 (납부일·납부 상태는 그대로)')
+          : (ys.name + ' · 원비 날짜를 비웠어요'));
         return;
       }
       var st = t.closest('[data-tstatus]');
