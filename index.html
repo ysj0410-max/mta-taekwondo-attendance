@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=29"></script>
-<script src="firebase-sync-ui.js?v=29"></script>
+<script src="firebase-sync.js?v=30"></script>
+<script src="firebase-sync-ui.js?v=30"></script>
 <title>경희대MTA태권도 · AI 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1541,6 +1541,14 @@
                 <button class="pchip" data-sfilter="all" id="sf-all">전체</button>
                 <input class="input" id="stu-q" type="search" placeholder="🔍 이름·초성·전화 뒷자리 검색" autocomplete="off" spellcheck="false" aria-label="재원생 명단 이름·초성·전화 뒷자리 검색">
                 <div class="spacer"></div>
+                <select class="input mon-select" id="stu-sort" aria-label="원생 명단 정렬 방식" title="명단 정렬 — 띠는 「띠 체계 설정」 순서대로">
+                  <option value="name">이름순 (가나다)</option>
+                  <option value="beltLow">띠순 (낮은 띠→높은 띠)</option>
+                  <option value="beltHigh">띠순 (높은 띠→낮은 띠)</option>
+                  <option value="division">부서·수업별</option>
+                  <option value="tuitionDay">원비 날짜순 (1일~31일)</option>
+                  <option value="firstReg">첫 등록일순 (최근순)</option>
+                </select>
                 <span class="tiny-note" id="stu-filter-note"></span>
               </div>
               <div class="stu-tablehint" id="stu-tablehint">← → 옆으로 밀면 특이사항·비고까지 볼 수 있어요</div>
@@ -2002,6 +2010,13 @@
                     <button class="pchip active" data-pfilter="all">전체</button>
                     <button class="pchip" data-pfilter="target">심사 대상</button>
                     <button class="pchip" data-pfilter="waiting">최고 띠</button>
+                    <div class="spacer"></div>
+                    <select class="input mon-select" id="promo-sort" aria-label="승급심사 정렬 방식" title="심사 명단 정렬 — 띠는 「띠 체계 설정」 순서대로">
+                      <option value="name">이름순 (가나다)</option>
+                      <option value="beltHigh">띠순 (높은 띠부터)</option>
+                      <option value="beltLow">띠순 (낮은 띠부터)</option>
+                      <option value="division">부서·수업별</option>
+                    </select>
                   </div>
                   <div class="bulk-bar" id="promo-bulk" style="display:none">
                     <b id="promo-bulk-count">0명 선택</b>
@@ -2073,6 +2088,14 @@
             <div class="admin-col">
               <div class="panel">
                 <div class="panel-head"><h3>🏅 국기원 승품·승단 심사</h3><div class="spacer"></div><span class="tiny-note" id="gk-note">-</span><button class="btn btn-sm" id="btn-gk-csv">📥 심사 명단 CSV</button></div>
+                <div class="promo-filters" id="guk-filters" style="padding:11px 16px 0; margin-bottom:9px">
+                  <select class="input mon-select" id="guk-sort" aria-label="국기원 명단 정렬 방식" title="국기원 명단 정렬 — 품·단 보유자가 위로 옵니다">
+                    <option value="name">이름순 (가나다)</option>
+                    <option value="poomdan">구분·품·단순 (품 → 단 → 급)</option>
+                    <option value="beltLow">띠순 (낮은 띠→높은 띠)</option>
+                    <option value="status">심사 상태별</option>
+                  </select>
+                </div>
                 <div class="tablewrap">
                   <table class="tb">
                     <thead><tr><th>관원</th><th>생년월일</th><th>티콘 ID</th><th>현재 품·단</th><th>급수</th><th>목표</th><th>응시 상태</th><th>심사일</th><th style="width:132px"></th></tr></thead>
@@ -2609,7 +2632,13 @@
           <div class="panel" style="margin-top:13px">
             <div class="panel-head"><h3>🎟️ 쿠폰 지급 현황</h3><div class="spacer"></div>
               <span class="tiny-note" id="cp-note">-</span>
-              <button class="btn btn-sm" id="btn-cp-sort" title="이름 가나다순 / 상태별로 정렬">🔤 가나다순</button>
+              <select class="input mon-select" id="cp-sort" aria-label="쿠폰 정렬 방식" style="height:34px" title="쿠폰 표 정렬">
+                <option value="name">이름순 (가나다)</option>
+                <option value="status">상태별 (미사용→사용→종료)</option>
+                <option value="type">쿠폰 종류별</option>
+                <option value="givenDate">지급일순 (최근)</option>
+                <option value="endDate">만료일순 (빠른 순)</option>
+              </select>
               <button class="btn btn-sm" id="btn-cp-csv" title="지금 표를 엑셀에서 열 수 있는 CSV로 내려받습니다">📤 쿠폰 CSV</button>
             </div>
             <div class="promo-filters cp-filters" id="cp-filters">
@@ -2687,6 +2716,12 @@
             <div class="mon-nav"><div class="mon-label" id="pz-label">휴관생</div></div>
             <div class="spacer"></div>
             <input class="input pz-search" id="pz-search" placeholder="🔍 이름·초성 검색" autocomplete="off" aria-label="휴관생 이름 검색">
+            <select class="input mon-select" id="pz-sort" aria-label="휴관생 정렬 방식" title="휴관생 명단 정렬 — 띠는 「띠 체계 설정」 순서대로">
+              <option value="name">이름순 (가나다)</option>
+              <option value="pausedRecent">휴관일 최근순</option>
+              <option value="beltLow">띠순 (낮은 띠→높은 띠)</option>
+              <option value="division">부서·수업별</option>
+            </select>
             <select class="input mon-select" id="pz-import-mode" aria-label="가져오기 방식" style="min-width:214px">
               <option value="sync">합치기 · 기존 명단에 동기화</option>
               <option value="replace">교체 · 휴관생 명단을 파일로 교체</option>
@@ -2930,6 +2965,170 @@
   function rosterSort(a, b) {
     return String(a.name).localeCompare(String(b.name), 'ko');
   }
+
+  /* =========================================================
+     표 정렬 — 탭마다 「이름 · 띠 · 부서·수업 · 종류」 중 고른 순서
+     · 화면에 보이는 순서만 바꾼다. 저장 데이터(tdk.*)는 건드리지 않는다.
+     · 같은 값이면 언제나 이름 가나다순으로 2차 정렬한다.
+     ========================================================= */
+  var SORT_OPTIONS = {
+    promo: {
+      name: '이름순 (가나다)',
+      beltHigh: '띠순 (높은 띠부터)',
+      beltLow: '띠순 (낮은 띠부터)',
+      division: '부서·수업별'
+    },
+    stu: {
+      name: '이름순 (가나다)',
+      beltLow: '띠순 (낮은 띠→높은 띠)',
+      beltHigh: '띠순 (높은 띠→낮은 띠)',
+      division: '부서·수업별',
+      tuitionDay: '원비 날짜순 (1일~31일)',
+      firstReg: '첫 등록일순 (최근순)'
+    },
+    pz: {
+      name: '이름순 (가나다)',
+      pausedRecent: '휴관일 최근순',
+      beltLow: '띠순 (낮은 띠→높은 띠)',
+      division: '부서·수업별'
+    },
+    guk: {
+      name: '이름순 (가나다)',
+      poomdan: '구분·품·단순 (품 → 단 → 급)',
+      beltLow: '띠순 (낮은 띠→높은 띠)',
+      status: '심사 상태별'
+    }
+  };
+  /* 탭 접두사 → 그 표를 다시 그리는 함수 */
+  var SORT_RENDER = {
+    promo: function () { renderPromotion(); },
+    stu: function () { renderStudentsTable(); },
+    pz: function () { renderPaused(true); },
+    guk: function () { renderGukgiwon(); }
+  };
+  function ensureSortUI() {
+    if (!app.sortUI || typeof app.sortUI !== 'object' || Array.isArray(app.sortUI)) { app.sortUI = {}; }
+    var u = app.sortUI;
+    Object.keys(SORT_OPTIONS).forEach(function (k) {
+      if (!SORT_OPTIONS[k][u[k]]) { u[k] = 'name'; }
+    });
+    return u;
+  }
+  function sortMode(tab) {
+    var u = ensureSortUI();
+    return (SORT_OPTIONS[tab] && SORT_OPTIONS[tab][u[tab]]) ? u[tab] : 'name';
+  }
+  function setSortMode(tab, v) {
+    var u = ensureSortUI();
+    u[tab] = (SORT_OPTIONS[tab] && SORT_OPTIONS[tab][v]) ? v : 'name';
+    return u[tab];
+  }
+  function sortLabelOf(tab) {
+    var m = sortMode(tab);
+    return (SORT_OPTIONS[tab] && SORT_OPTIONS[tab][m]) ? SORT_OPTIONS[tab][m] : '이름순 (가나다)';
+  }
+  /* 띠 순서 = app.settings.belts 배열 순서(0 = 첫 띠). 목록에 없는 띠·미지정은 맨 뒤. */
+  function beltRankOf(belt) {
+    var i = beltIndex(belt || '');
+    return i === -1 ? belts().length + 1 : i;
+  }
+  function beltOrder(a, b, desc) {
+    var ka = beltIndex(a.belt || '') !== -1, kb = beltIndex(b.belt || '') !== -1;
+    if (ka !== kb) { return ka ? -1 : 1; }   /* 미지정·목록 외 띠는 어느 방향이든 맨 뒤 */
+    var ra = beltIndex(a.belt || ''), rb = beltIndex(b.belt || '');
+    if (ra !== rb) { return desc ? rb - ra : ra - rb; }
+    return rosterSort(a, b);
+  }
+  function divisionOrder(a, b) {
+    var da = divisionRank(divisionOf(a)), db = divisionRank(divisionOf(b));
+    if (da !== db) { return da - db; }
+    var ca = courseRank(courseOf(a)), cb = courseRank(courseOf(b));
+    if (ca !== cb) { return ca - cb; }
+    return rosterSort(a, b);
+  }
+  function promoOrder(a, b) {
+    var m = sortMode('promo');
+    if (m === 'beltHigh') { return beltOrder(a, b, true); }
+    if (m === 'beltLow') { return beltOrder(a, b, false); }
+    if (m === 'division') { return divisionOrder(a, b); }
+    return rosterSort(a, b);
+  }
+  function studentOrder(a, b) {
+    var m = sortMode('stu');
+    if (m === 'beltLow') { return beltOrder(a, b, false); }
+    if (m === 'beltHigh') { return beltOrder(a, b, true); }
+    if (m === 'division') { return divisionOrder(a, b); }
+    if (m === 'tuitionDay') {
+      var da = tuitionDayOf(a), db = tuitionDayOf(b);
+      if (!da && db) { return 1; }
+      if (da && !db) { return -1; }
+      if (da !== db) { return da - db; }
+      return rosterSort(a, b);
+    }
+    if (m === 'firstReg') {
+      var fa = firstRegOf(a), fb = firstRegOf(b);
+      if (fa !== fb) {
+        if (!fa) { return 1; }
+        if (!fb) { return -1; }
+        return fa < fb ? 1 : -1;   /* 최근 등록이 위 */
+      }
+      return rosterSort(a, b);
+    }
+    return rosterSort(a, b);
+  }
+  function pausedOrder(a, b) {
+    var m = sortMode('pz');
+    if (m === 'pausedRecent') {
+      var pa = isDateKey(a.pausedDate) ? String(a.pausedDate) : '';
+      var pb = isDateKey(b.pausedDate) ? String(b.pausedDate) : '';
+      if (pa !== pb) {
+        if (!pa) { return 1; }
+        if (!pb) { return -1; }
+        return pa < pb ? 1 : -1;   /* 최근 휴관이 위 */
+      }
+      return rosterSort(a, b);
+    }
+    if (m === 'beltLow') { return beltOrder(a, b, false); }
+    if (m === 'division') { return divisionOrder(a, b); }
+    return rosterSort(a, b);
+  }
+  /* 국기원: 유품자(품 보유) → 유단자(단 보유) → 유급자, 그 안에서 1품·1단 … 번호 순 */
+  function poomDanRank(r) {
+    var i = POOM_DAN.indexOf(String(r && r.poomDan || '없음'));
+    return i < 0 ? 0 : i;   /* 0 = 없음 */
+  }
+  function holderGroupOf(s) {
+    var i = poomDanRank(s);
+    if (i <= 0) { return 2; }                       /* 유급자 */
+    return String(s.poomDan).indexOf('단') !== -1 ? 1 : 0;   /* 0 유품자 · 1 유단자 */
+  }
+  function gukOrder(a, b) {
+    var m = sortMode('guk');
+    if (m === 'poomdan') {
+      var ga = holderGroupOf(a), gb = holderGroupOf(b);
+      if (ga !== gb) { return ga - gb; }
+      var ra = poomDanRank(a), rb = poomDanRank(b);
+      if (ra !== rb) { return ra - rb; }
+      return rosterSort(a, b);
+    }
+    if (m === 'beltLow') { return beltOrder(a, b, false); }
+    if (m === 'status') {
+      var sa = GK_STATUS_ORDER.indexOf(gkStatusOf(a)), sb = GK_STATUS_ORDER.indexOf(gkStatusOf(b));
+      if (sa !== sb) { return sa - sb; }
+      return rosterSort(a, b);
+    }
+    return rosterSort(a, b);
+  }
+  function bindSortSelects() {
+    Object.keys(SORT_OPTIONS).forEach(function (tab) {
+      var s = el(tab + '-sort');
+      if (!s) { return; }
+      s.addEventListener('change', function () {
+        setSortMode(tab, s.value);
+        SORT_RENDER[tab]();
+      });
+    });
+  }
   function siblingBadge(s) {
     var d = siblingDiscountAmount();
     if (!siblingOf(s) || d <= 0) { return ''; }
@@ -3108,6 +3307,7 @@
     smsTemplates: [],
     stuFilter: 'active',   // 기본은 재원생만 — 휴관생은 「🛌 휴관생 관리」·「휴관생」 칩에서 따로 본다
     stuQuery: '',          // 「📋 재원생 전체 명단」 실시간 검색어(이름·초성·전화 뒷자리)
+    sortUI: null,          // 탭별 표 정렬 방식(promo · stu · pz · guk) — 화면 표시 순서만 바꾼다
     attFilter: 'all',
     attQuery: '',
     feeTable: null,
@@ -5544,9 +5744,8 @@
       if (filter === 'active') { return isActive(s); }
       if (filter === 'paused') { return isPaused(s); }
       return true;
-    }).slice().sort(function (a, b) {
-      return a.name.localeCompare(b.name, 'ko');
-    });
+    }).slice().sort(studentOrder);
+    if (el('stu-sort')) { el('stu-sort').value = sortMode('stu'); }
     /* 검색어가 있으면 이름순을 그대로 둔 채 걸러낸다 */
     if (q) {
       list = list.filter(function (s) { return matchRosterQuery(s, q); });
@@ -5555,7 +5754,8 @@
       el('stu-filter-note').textContent = (q ? '검색 ' + list.length + '명 / ' : '') +
         (filter === 'all' ? '전체 ' + counts2.all + '명'
         : filter === 'active' ? '재원생 ' + counts2.active + '명'
-        : '휴관생 ' + counts2.paused + '명');
+        : '휴관생 ' + counts2.paused + '명') +
+        (sortMode('stu') === 'name' ? '' : ' · ' + sortLabelOf('stu'));
     }
     ['all', 'active', 'paused'].forEach(function (k) {
       var b = el('sf-' + k);
@@ -7534,7 +7734,8 @@
     if (el('ps-belts')) { el('ps-belts').innerHTML = belts().length + '<small>단계</small>'; }
     el('ps-promoted').innerHTML = promoted + '<small>명</small>';
     el('ps-total').innerHTML = activeStudents().length + '<small>명</small>';
-    el('promo-note').textContent = fmtDateKorean(now) + ' 기준';
+    if (el('promo-note')) { el('promo-note').textContent = fmtDateKorean(now) + ' 기준'; }
+    if (el('promo-sort')) { el('promo-sort').value = sortMode('promo'); }
     if (!el('p-exam-date').value) { el('p-exam-date').value = app.settings.examDate || defaultExamDate(); }
     if (!el('p-exam-time').value) { el('p-exam-time').value = app.settings.examTime || '10:00'; }
     renderBeltEditor();
@@ -7548,9 +7749,7 @@
     var sel = app.promoSelected || (app.promoSelected = {});
     Object.keys(sel).forEach(function (id) { if (!byId(id)) { delete sel[id]; } });
 
-    var rows = activeStudents().slice().sort(function (a, b) {
-      return a.name.localeCompare(b.name, 'ko');
-    }).filter(function (s) {
+    var rows = activeStudents().slice().sort(promoOrder).filter(function (s) {
       var st = promoState(s);
       if (filter === 'target') { return st.target; }
       if (filter === 'waiting') { return !st.target; }
@@ -7714,13 +7913,14 @@
     el('gk-docs').innerHTML = docs.length + '<small>명</small>';
     el('gk-passed').innerHTML = passed + '<small>명</small>';
     el('gk-holders').innerHTML = holders + '<small>명</small>';
-    el('gk-note').textContent = fmtDateKorean(now) + ' 기준';
+    if (el('gk-note')) { el('gk-note').textContent = fmtDateKorean(now) + ' 기준'; }
+    if (el('guk-sort')) { el('guk-sort').value = sortMode('guk'); }
 
     if (el('gk-date') && !el('gk-date').value) { el('gk-date').value = app.settings.gukDate || defaultExamDate(); }
     if (el('gk-time') && !el('gk-time').value) { el('gk-time').value = app.settings.gukTime || '10:00'; }
     if (el('gk-place') && !el('gk-place').value) { el('gk-place').value = app.settings.gukPlace || (app.settings.dojoName + ' 도장'); }
 
-    var rows = activeStudents().slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
+    var rows = activeStudents().slice().sort(gukOrder);
     var tbody = el('gk-table');
     if (!rows.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="9">등록된 관원이 없습니다</td></tr>';
@@ -11432,7 +11632,7 @@
     return app.pausedUI;
   }
   function pausedSort(a, b) {
-    return String(a.name).localeCompare(String(b.name), 'ko');
+    return pausedOrder(a, b);
   }
   function pausedSummary() {
     var list = pausedStudents();
@@ -11503,9 +11703,10 @@
     if (el('pz-label')) { el('pz-label').textContent = '휴관생 ' + sum.total + '명'; }
 
     var rows = pausedRows();
+    if (el('pz-sort')) { el('pz-sort').value = sortMode('pz'); }
     if (el('pz-note')) {
       el('pz-note').textContent = sum.total
-        ? ((u.q ? '검색 ' + rows.length + '명 · ' : '') + '이름 가나다순 · 휴관 90일이 넘으면 복귀 안내를 보내 보세요')
+        ? ((u.q ? '검색 ' + rows.length + '명 · ' : '') + sortLabelOf('pz') + ' · 휴관 90일이 넘으면 복귀 안내를 보내 보세요')
         : '휴관생 없음';
     }
     if (!rows.length) {
@@ -13319,6 +13520,13 @@
      ========================================================= */
   var COUPON_STATUS = { unused: '미사용', used: '사용', ended: '종료' };
   var COUPON_STATUS_ORDER = { unused: 0, used: 1, ended: 2 };
+  var COUPON_SORTS = {
+    name: '이름순 (가나다)',
+    status: '상태별 (미사용→사용→종료)',
+    type: '쿠폰 종류별',
+    givenDate: '지급일순 (최근)',
+    endDate: '만료일순 (빠른 순)'
+  };
   var COUPON_DEFAULT_TYPES = ['도복 무료 쿠폰', '원비 1만원 할인', '1주일 체험권', '가방 증정'];
 
   function couponAddDays(key, days) {
@@ -13418,7 +13626,7 @@
     var u = app.couponUI;
     if (typeof u.q !== 'string') { u.q = ''; }
     if (u.status !== 'unused' && u.status !== 'used' && u.status !== 'ended') { u.status = 'all'; }
-    if (u.sort !== 'status') { u.sort = 'name'; }
+    if (!COUPON_SORTS[u.sort]) { u.sort = 'name'; }
     if (typeof u.typeEdit !== 'string') { u.typeEdit = ''; }
     return u;
   }
@@ -13456,6 +13664,29 @@
         var sa = couponExpired(a) ? 2 : COUPON_STATUS_ORDER[a.status];
         var sb = couponExpired(b) ? 2 : COUPON_STATUS_ORDER[b.status];
         if (sa !== sb) { return sa - sb; }
+      } else if (u.sort === 'type') {
+        /* 쿠폰 종류별 — 빈 종류는 맨 뒤, 같은 종류끼리는 이름 가나다순 */
+        var ta = String(a.type || ''), tb = String(b.type || '');
+        if (!ta && tb) { return 1; }
+        if (ta && !tb) { return -1; }
+        var tc = ta.localeCompare(tb, 'ko');
+        if (tc) { return tc; }
+      } else if (u.sort === 'givenDate') {
+        /* 지급일 최근순 — 같은 날이면 이름순 */
+        var da = String(a.givenDate || ''), db = String(b.givenDate || '');
+        if (da !== db) {
+          if (!da) { return 1; }
+          if (!db) { return -1; }
+          return da < db ? 1 : -1;
+        }
+      } else if (u.sort === 'endDate') {
+        /* 만료일 빠른순 — 기한이 없는 쿠폰은 맨 뒤 */
+        var ea = String(a.endDate || ''), eb = String(b.endDate || '');
+        if (ea !== eb) {
+          if (!ea) { return 1; }
+          if (!eb) { return -1; }
+          return ea < eb ? -1 : 1;
+        }
       }
       var n = String(a.name).localeCompare(String(b.name), 'ko');
       if (n) { return n; }
@@ -13591,8 +13822,8 @@
     if (el('cp-q') && document.activeElement !== el('cp-q') && el('cp-q').value !== (u.q || '')) {
       el('cp-q').value = u.q || '';
     }
-    if (el('btn-cp-sort')) {
-      el('btn-cp-sort').textContent = u.sort === 'status' ? '🟢 상태별 정렬' : '🔤 가나다순';
+    if (el('cp-sort')) {
+      el('cp-sort').value = u.sort;
     }
     fillCouponForm(false);
     var rows = couponRows();
@@ -13854,12 +14085,12 @@
     if (el('btn-cp-add')) { el('btn-cp-add').addEventListener('click', function () { saveCouponFromForm(); }); }
     if (el('btn-cp-reset')) { el('btn-cp-reset').addEventListener('click', resetCouponForm); }
     if (el('btn-cp-csv')) { el('btn-cp-csv').addEventListener('click', downloadCouponCSV); }
-    if (el('btn-cp-sort')) {
-      el('btn-cp-sort').addEventListener('click', function () {
+    if (el('cp-sort')) {
+      el('cp-sort').addEventListener('change', function () {
         var u = ensureCouponUI();
-        u.sort = u.sort === 'status' ? 'name' : 'status';
+        u.sort = COUPON_SORTS[el('cp-sort').value] ? el('cp-sort').value : 'name';
         renderCoupons();
-        toast(u.sort === 'status' ? '상태별 · 이름 가나다순으로 정렬했어요' : '이름 가나다순으로 정렬했어요');
+        toast(COUPON_SORTS[u.sort] + '으로 정렬했어요');
       });
     }
     if (el('btn-cp-type-add')) { el('btn-cp-type-add').addEventListener('click', function () { saveCouponTypeFromInput(); }); }
@@ -16114,6 +16345,7 @@
     bindCounselEvents();
     bindShuttleEvents();
     bindCouponEvents();
+    bindSortSelects();
     el('pz-search').addEventListener('input', function () {
       ensurePausedUI().q = el('pz-search').value || '';
       renderPaused();
@@ -16744,6 +16976,20 @@
       edit: startEdit,
       reset: resetStudentForm,
       render: renderStudentsTable
+    },
+    /* 표 정렬 — 탭별 정렬 방식(화면 순서만 바뀜) */
+    sort: {
+      options: SORT_OPTIONS,
+      ui: ensureSortUI,
+      mode: sortMode,
+      set: setSortMode,
+      label: sortLabelOf,
+      beltRank: beltRankOf,
+      promo: promoOrder,
+      students: studentOrder,
+      paused: pausedOrder,
+      guk: gukOrder,
+      coupon: couponSortList
     },
     tab: setAdminTab,
     report: {
