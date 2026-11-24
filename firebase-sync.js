@@ -111,6 +111,31 @@
       ('00' + d.getMilliseconds()).slice(-3) + 'Z';
   }
   function dayOf(ms) { return isoOf(ms).slice(0, 10); }
+  /* Spark 무료 한도는 "미국 태평양 시간 자정"(= 한국 시간 오후 5시)에 초기화된다.
+     그 기준 날짜를 'pt:YYYY-MM-DD' 로 돌려준다.
+       · 날짜 계산은 태평양 시간대(America/Los_Angeles, 서머타임 자동 반영)
+       · 앞에 'pt:' 를 붙이는 이유 — 예전 버전이 UTC 날짜('2026-11-24')로 저장해 둔
+         계량기(tdk.fbUsage.v1)와 값이 겹치지 않아, 새 버전을 여는 즉시 잠긴 계량기가 0 으로 다시 센다. */
+  function sparkDayOf(ms) {
+    var at = (ms == null ? Date.now() : ms);
+    var ymd = null;
+    try {
+      if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
+        var parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(new Date(at));
+        var got = {};
+        for (var i = 0; i < parts.length; i++) { got[parts[i].type] = parts[i].value; }
+        if (got.year && got.month && got.day) { ymd = got.year + '-' + got.month + '-' + got.day; }
+      }
+    } catch (e) { ymd = null; }
+    if (!ymd) {
+      /* 시간대를 못 쓰는 환경 — 서머타임을 무시하고 UTC-8 로 계산한다 */
+      var d = new Date(at - 8 * 3600 * 1000);
+      ymd = d.getUTCFullYear() + '-' + p2(d.getUTCMonth() + 1) + '-' + p2(d.getUTCDate());
+    }
+    return 'pt:' + ymd;
+  }
 
   /* Firestore 문서 ID로 쓸 수 없는 문자 정리 ( '/' '.' '#' '$' '[' ']' 등 ) */
   function safeId(v) {
@@ -851,9 +876,14 @@
       try { raw = storage.getItem(key); } catch (e) { raw = null; }
       var s = null;
       try { s = raw ? JSON.parse(raw) : null; } catch (e) { s = null; }
-      var today = dayOf(now());
+      var today = sparkDayOf(now());
       if (!isPlain(s) || s.date !== today) {
-        s = { date: today, reads: 0, writes: 0, deletes: 0, blocked: null, history: isPlain(s) && s.date === today ? s.history : null };
+        /* 날짜가 바뀌었으면 카운터·차단을 비우고, 지난 날 합계는 history 로 옮겨 남긴다 */
+        var hist = (isPlain(s) && isPlain(s.history)) ? s.history : {};
+        if (isPlain(s) && s.date && (num(s.reads) || num(s.writes) || num(s.deletes))) {
+          hist[String(s.date)] = { reads: num(s.reads), writes: num(s.writes), deletes: num(s.deletes) };
+        }
+        s = { date: today, reads: 0, writes: 0, deletes: 0, blocked: null, history: hist };
       }
       if (!isPlain(s.history)) { s.history = {}; }
       /* 날짜가 바뀌면 이전 날 합계를 남겨 두어 추세를 볼 수 있게 */
@@ -865,7 +895,7 @@
       return s;
     }
     function resetIfNeeded() {
-      var today = dayOf(now());
+      var today = sparkDayOf(now());
       if (state.date !== today) {
         state.history[state.date] = { reads: num(state.reads), writes: num(state.writes), deletes: num(state.deletes) };
         state = { date: today, reads: 0, writes: 0, deletes: 0, blocked: null, history: state.history };
@@ -918,7 +948,7 @@
       },
       clearBlock: function () { state.blocked = null; persist(); },
       reset: function () {
-        state = { date: dayOf(now()), reads: 0, writes: 0, deletes: 0, blocked: null, history: state.history };
+        state = { date: sparkDayOf(now()), reads: 0, writes: 0, deletes: 0, blocked: null, history: state.history };
         persist();
       },
       limits: limits
@@ -3033,6 +3063,7 @@
     safeId: safeId,
     isoOf: isoOf,
     dayOf: dayOf,
+    sparkDayOf: sparkDayOf,
     errorText: errorText,
     isQuotaError: isQuotaError
   };

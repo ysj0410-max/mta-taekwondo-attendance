@@ -399,8 +399,9 @@
     }
     var tag = $('fb-pill-tag');
     if (tag) { tag.style.display = 'none'; }
+    var usageDate = S.engine ? String(S.engine.usage.snapshot().date || '').replace(/^pt:/, '') : '';
     setText('fb-usage-note', S.engine
-      ? (S.engine.usage.snapshot().date + ' 기준 · 이 기기에서 센 추정치 (PC·태블릿 합산 아님)')
+      ? (usageDate + ' 기준(태평양 자정 초기화) · 이 기기에서 센 추정치 (PC·태블릿 합산 아님)')
       : '동기화를 켜면 표시됩니다');
     var lastSync = (S.engine && S.engine.errors().lastSyncAt) || S.cfg.lastSyncAt || '';
     setText('fb-sync-note', '마지막 동기화: ' + (lastSync ? nowText(lastSync) : '아직 없음') +
