@@ -1,5 +1,5 @@
 /* =============================================================================
-   경희대MTA태권도 — 🔥 Firebase Firestore 실시간 동기화 엔진 (v29 정식)
+   경희대MTA태권도 — 🔥 Firebase Firestore 실시간 동기화 엔진 (v30 정식)
    =============================================================================
    · 이 파일은 정식 앱(index.html)이 불러 씁니다.
      운영 버전(index.html v28)은 이 파일을 읽지 않으며, 이 파일이 운영 데이터에
@@ -17,7 +17,7 @@
        dojangs/{dojangId}/meta/{설정문서}                설정·단가표·문구·로그·계정
        dojangs/{dojangId}/meta/usage                     기기별 무료 한도 추정 사용량 합산(관리자 전용 · 60초 간격)
        dojangs/{dojangId}/roles/{uid}                    권한(관리자/출석 태블릿)
-     · 기기 로컬 전용(절대 업로드하지 않음)
+     · 기기 로컬 전용(절대 업로드하지 않음) — tdk.fbLastSync.v1(컬렉션별 마지막 동기화 시각) 포함
        tdk.faces.v1(원생 얼굴 128차원), tdk.adminFace.v1(관리자 얼굴),
        그리고 이 엔진의 상태 키(tdk.fb*.v1)
    · 문서마다 `_ver`(문서 버전) · `_updatedAt` · `_updatedBy`(기기 ID) ·
@@ -32,7 +32,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.3.0';
+  var VERSION = '1.4.0';
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -118,19 +118,25 @@
        · 날짜 계산은 태평양 시간대(America/Los_Angeles, 서머타임 자동 반영)
        · 앞에 'pt:' 를 붙이는 이유 — 예전 버전이 UTC 날짜('2026-11-24')로 저장해 둔
          계량기(tdk.fbUsage.v1)와 값이 겹치지 않아, 새 버전을 여는 즉시 잠긴 계량기가 0 으로 다시 센다. */
+  var sparkFmt = null;    /* 태평양 날짜 형식기 — 한 번만 만들어 재사용 */
   function sparkDayOf(ms) {
     var at = (ms == null ? Date.now() : ms);
     var ymd = null;
     try {
       if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
-        var parts = new Intl.DateTimeFormat('en-CA', {
-          timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit'
-        }).formatToParts(new Date(at));
+        /* 형식기(Formatter)는 만들 때가 비싸다 — 문서 수천 건을 한꺼번에 받을 때
+           여기서 시간을 잡아먹지 않도록 한 번만 만들어 둔다 */
+        if (!sparkFmt) {
+          sparkFmt = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit'
+          });
+        }
+        var parts = sparkFmt.formatToParts(new Date(at));
         var got = {};
         for (var i = 0; i < parts.length; i++) { got[parts[i].type] = parts[i].value; }
         if (got.year && got.month && got.day) { ymd = got.year + '-' + got.month + '-' + got.day; }
       }
-    } catch (e) { ymd = null; }
+    } catch (e) { ymd = null; sparkFmt = null; }
     if (!ymd) {
       /* 시간대를 못 쓰는 환경 — 서머타임을 무시하고 UTC-8 로 계산한다 */
       var d = new Date(at - 8 * 3600 * 1000);
@@ -1060,6 +1066,77 @@
   }
 
   /* =========================================================================
+     5-2. 델타(증분) 동기화 — 컬렉션별 마지막 동기화 시각 (tdk.fbLastSync.v1)
+     ----------------------------------------------------------------------------
+     이미 한 번 전체를 받아 둔 기기는 새로고침 때 `_updatedAt > (마지막 - 2분)` 만
+     구독한다 → 새로고침마다 2,500건을 다시 읽던 것이 0~5건으로 줄어든다.
+       · 값: { students: 1732435200000, tuition: … } — 컬렉션 이름 → epoch ms(숫자)
+       · 단일 필드 where('_updatedAt', '>', …) 는 Firestore 자동 단일 인덱스를 쓰므로
+         복합 인덱스도 firestore.rules 수정도 필요 없다.
+       · 삭제는 `_deleted: true` 툼스톤(_updatedAt 포함)으로 올라오니 델타로도 받는다.
+       · meta 는 문서가 몇 개 안 되므로 전체 구독 그대로 둔다.
+       · 키가 없거나(첫 실행) 이 기기에 자료가 비어 있으면(새 기기·초기화) 전체 구독.
+       · 캐시에서 온 스냅샷(metadata.fromCache)은 "서버에서 읽었다"가 아니므로
+         계량기에 넣지도, 마지막 시각을 갱신하지도 않는다.
+     ========================================================================= */
+  var LASTSYNC_KEY = 'tdk.fbLastSync.v1';
+  var DELTA = {
+    safetyMs: 120000,                    /* 기기·서버 시각 차이 여유 2분 */
+    maxAgeMs: 45 * 24 * 3600 * 1000      /* 너무 오래된 시각은 믿지 않고 전체 구독 */
+  };
+
+  function lastSyncStore(storage) {
+    if (storage && typeof storage.getItem === 'function') { return storage; }
+    try { return root.localStorage || null; } catch (e) { return null; }
+  }
+  function readLastSync(storage) {
+    var s = lastSyncStore(storage);
+    if (!s) { return {}; }
+    try {
+      var raw = s.getItem(LASTSYNC_KEY);
+      var o = raw ? JSON.parse(raw) : null;
+      if (!isPlain(o)) { return {}; }
+      var out = {};
+      Object.keys(o).forEach(function (k) {
+        var n = num(o[k]);
+        if (n > 0) { out[k] = n; }
+      });
+      return out;
+    } catch (e) { return {}; }
+  }
+  function writeLastSync(storage, map) {
+    var s = lastSyncStore(storage);
+    if (!s || typeof s.setItem !== 'function') { return false; }
+    try { s.setItem(LASTSYNC_KEY, JSON.stringify(map || {})); return true; } catch (e) { return false; }
+  }
+  /* 컬렉션의 델타 기준 시각 → where('_updatedAt','>',값) 문자열 (전체 구독이면 '') */
+  function deltaSinceIso(sinceMs, nowMs) {
+    var at = num(sinceMs);
+    if (!(at > 0)) { return ''; }
+    var now = num(nowMs == null ? Date.now() : nowMs);
+    if (now - at > DELTA.maxAgeMs) { return ''; }
+    return isoOf(at - DELTA.safetyMs);
+  }
+  /* 이 기기에 그 컬렉션의 자료가 이미 있는가 — 없으면(새 기기·초기화) 전체 구독 */
+  function localDataHas(storage, coll) {
+    var s = lastSyncStore(storage);
+    if (!s || !coll) { return false; }
+    var keys = [];
+    KEY_TABLE.forEach(function (e) {
+      if (e.coll === coll && keys.indexOf(e.key) === -1) { keys.push(e.key); }
+    });
+    for (var i = 0; i < keys.length; i++) {
+      try {
+        var raw = s.getItem(keys[i]);
+        if (!raw) { continue; }
+        var v = JSON.parse(raw);
+        if (Array.isArray(v) ? v.length > 0 : (isPlain(v) ? Object.keys(v).length > 0 : !!v)) { return true; }
+      } catch (err) { /* 깨진 값은 없는 것으로 본다 */ }
+    }
+    return false;
+  }
+
+  /* =========================================================================
      6. 전송 큐 (Outbox) — 서버 저장 확인(ACK) 전에는 절대 지우지 않는다
      ========================================================================= */
   function createOutbox(storage, opts) {
@@ -1413,11 +1490,43 @@
     var lastError = '';
     var lastErrorKind = '';
     var lastSyncAt = '';
+    var lastSyncMark = null;      /* 컬렉션별 마지막 동기화 시각(tdk.fbLastSync.v1) — 인메모리 사본 */
+    var lastSyncTimer = null;
+    var fullSyncAt = '';          /* 마지막 「전체 다시 불러오기」 시각 */
     var unsub = null;
     var originals = null;
     var hookTarget = null;
 
     function basePath() { return 'dojangs/' + dojangId; }
+
+    /* ---------- 델타 구독용 "마지막 동기화 시각" ----------
+       · 서버에서 실제로 받은 문서마다 그 컬렉션의 시각을 갱신한다(0.6초 모아 저장).
+       · 새로고침하면 이 시각 이후로 바뀐 문서만 구독한다 → 읽기 2,500건 → 0~5건.
+       · 「🔄 전체 다시 불러오기」(forceFullSync)는 이 기록을 지워 전체 구독으로 되돌린다. */
+    function lastSyncMap() {
+      if (!lastSyncMark) { lastSyncMark = readLastSync(storage); }
+      return lastSyncMark;
+    }
+    function saveLastSync() {
+      if (lastSyncTimer) { try { clearTimeout(lastSyncTimer); } catch (e) {} lastSyncTimer = null; }
+      if (!lastSyncMark) { return false; }
+      /* 어댑터가 따로 적어 둔 항목(변경 0건인 컬렉션 등)을 지우지 않도록 디스크 값과 합친다 */
+      var disk = readLastSync(storage);
+      var merged = {};
+      Object.keys(disk).forEach(function (k) { merged[k] = disk[k]; });
+      Object.keys(lastSyncMark).forEach(function (k) {
+        if (!merged[k] || lastSyncMark[k] > merged[k]) { merged[k] = lastSyncMark[k]; }
+      });
+      lastSyncMark = merged;
+      return writeLastSync(storage, merged);
+    }
+    function markSynced(coll) {
+      if (!coll) { return; }
+      var m = lastSyncMap();
+      m[coll] = now();
+      if (lastSyncTimer) { return; }
+      lastSyncTimer = setTimeout(function () { lastSyncTimer = null; saveLastSync(); }, 600);
+    }
 
     /* ---------- 유효 권한 (서버 roles 기준) ----------
        ⚠️ 화면에서 「관리자 PC」를 골라도 그것만으로 관리자 권한이 생기지 않는다.
@@ -1598,10 +1707,24 @@
 
     function resubscribe() {
       if (!started || !adapter || typeof adapter.subscribe !== 'function') { return; }
-      if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+      if (unsub) { try { unsub(); } catch (e) {} } unsub = null;
+      attachBatchHooks(adapter);
       unsub = adapter.subscribe(function (path, data, meta) {
         try { onRemote(path, data, meta); } catch (e) { lastError = errorText(e); }
       });
+    }
+
+    /* ---------- 🔄 전체 다시 불러오기 (수동 · 기기 간 누락이 의심될 때 1회) ----------
+       델타 기준 시각(tdk.fbLastSync.v1)을 지우고 구독을 다시 열면,
+       다음 구독은 where 조건 없이 전체를 받아 온다. */
+    function forceFullSync() {
+      if (lastSyncTimer) { try { clearTimeout(lastSyncTimer); } catch (e) {} lastSyncTimer = null; }
+      lastSyncMark = {};
+      writeLastSync(storage, {});      /* 디스크까지 지운다(합치지 않는다) — 다음 구독은 전체 */
+      fullSyncAt = isoOf(now());
+      resubscribe();
+      emit('full-sync', { at: fullSyncAt, queued: outbox.count(), role: effectiveRole() });
+      return { ok: !!adapter, at: fullSyncAt, queued: outbox.count(), role: effectiveRole() };
     }
     function entryByName(n) {
       for (var i = 0; i < registry.length; i++) { if (registry[i].name === n) { return registry[i]; } }
@@ -1937,18 +2060,75 @@
       storage.removeItem(k);
     }
 
-    /* ---------- 값 읽기/쓰기 ---------- */
+    /* ---------- 값 읽기/쓰기 ----------
+       ⚡ 한꺼번에 들어오는 원격 문서(2,500건)를 처리할 때는 문서 1건마다
+          JSON.parse + JSON.stringify + localStorage.setItem 을 하면 PC가 심하게 버벅인다.
+          beginRemoteBatch() ~ endRemoteBatch() 사이에는 값은 메모리(remoteMem)에서 읽고
+          수정하고, dirty 로 표시만 해 두었다가 마지막에 키당 딱 1번만 setItem 한다.
+          → 읽기·직렬화·저장 모두 키당 1~2회로 줄고, 화면도 한 번만 다시 그린다. */
+    var remoteDepth = 0;
+    var remoteMem = {};
+    var remoteDirty = {};
+    var batchRemoteCount = 0;    /* 묶음 동안 화면에 알릴 원격 변경 건수 */
+
+    function beginRemoteBatch() { remoteDepth++; return remoteDepth; }
+    /* 모아 둔 키를 지금 한 번에 저장한다 — 테스트·동기 확인용으로 직접 불러도 된다 */
+    function flushLocalWrites() {
+      var names = Object.keys(remoteDirty);
+      if (!names.length) { if (remoteDepth <= 0) { remoteMem = {}; } return 0; }
+      remoteDirty = {};
+      var was = applying;
+      applying = true;
+      var wrote = 0;
+      try {
+        names.forEach(function (name) {
+          var e = entryByName(name);
+          if (!e) { return; }
+          var raw = 'null';
+          try { raw = JSON.stringify(hasOwn(remoteMem, name) ? remoteMem[name] : null); } catch (err) { return; }
+          try { if (rawSet(e.key, raw)) { wrote++; } } catch (err) {}
+        });
+      } finally { applying = was; }
+      if (remoteDepth <= 0) { remoteMem = {}; }
+      return wrote;
+    }
+
+    function endRemoteBatch() {
+      if (remoteDepth > 0) { remoteDepth--; }
+      if (remoteDepth > 0) { return 0; }
+      var wrote = flushLocalWrites();
+      /* 묶음 동안 모아 둔 화면 알림은 마지막에 딱 1번 — 2,500번 다시 그리지 않는다 */
+      if (batchRemoteCount) {
+        var n = batchRemoteCount;
+        batchRemoteCount = 0;
+        emit('remote', { batch: true, count: n });
+      }
+      return wrote;
+    }
+
     function readValue(name) {
       var e = entryByName(name);
       if (!e) { return null; }
+      if (remoteDepth > 0 && hasOwn(remoteMem, name)) { return remoteMem[name]; }
       var raw = null;
       try { raw = storage.getItem(e.key); } catch (err) { raw = null; }
-      if (raw == null) { return null; }
-      try { return JSON.parse(raw); } catch (err) { return null; }
+      var value = null;
+      if (raw != null) {
+        try { value = JSON.parse(raw); } catch (err) { value = null; }
+      }
+      if (remoteDepth > 0) { remoteMem[name] = value; }
+      return value;
     }
     function writeValue(name, value) {
       var e = entryByName(name);
       if (!e) { return false; }
+      if (remoteDepth > 0) {
+        /* 묶음 처리 중 — 메모리에만 두고 나중에 한 번에 저장 */
+        remoteMem[name] = value;
+        remoteDirty[name] = true;
+        prevValues[name] = value;
+        return true;
+      }
       var was = applying;
       applying = true;
       var ok = false;
@@ -2128,7 +2308,10 @@
       /* 기기별 사용량 합산 문서 — 화면 합산에만 쓰고, 이 수신 때문에 되쓰지 않는다(무한 쓰기 방지) */
       if (path === usageMetaPath()) { onRemoteUsage(data); return; }
       if (!entryByPath(path)) { return; }
-      usage.record('reads', 1);
+      /* 캐시에서 온 스냅샷(fromCache)은 서버 읽기가 아니다 — 계량기에 넣지 않는다.
+         실제 서버에서 읽은 문서만 무료 한도(읽기 5만/일)를 쓴다. */
+      var fromCache = !!(meta && meta.fromCache === true);
+      if (!fromCache) { usage.record('reads', 1); }
       var remoteDoc = {};
       if (isPlain(data)) {
         Object.keys(data).forEach(function (k) { remoteDoc[k] = data[k]; });
@@ -2207,6 +2390,11 @@
         }
       }
       lastSyncAt = isoOf(now());
+      /* 서버에서 실제로 받은 문서 → 그 컬렉션의 델타 기준 시각을 지금으로 */
+      if (!fromCache) {
+        var entryColl = pathColl(path);
+        if (entryColl) { markSynced(entryColl); }
+      }
     }
 
     function bodyWithMeta(body, meta) {
@@ -2483,10 +2671,17 @@
     }
 
     /* ---------- 구독 ---------- */
+    /* 어댑터가 스냅샷 하나를 처리할 때 문서 여러 건을 묶어 저장하게 한다 */
+    function attachBatchHooks(ad) {
+      if (!ad || typeof ad.setBatchHooks !== 'function') { return; }
+      try { ad.setBatchHooks(beginRemoteBatch, endRemoteBatch); } catch (e) {}
+    }
+
     function attachAdapter(nextAdapter) {
       if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
       adapter = nextAdapter || null;
       if (!adapter) { return; }
+      attachBatchHooks(adapter);
       if (typeof adapter.setRole === 'function') { try { adapter.setRole(effectiveRole()); } catch (e) {} }
       if (typeof adapter.subscribe === 'function') {
         unsub = adapter.subscribe(function (path, data, meta) {
@@ -2515,6 +2710,8 @@
     }
 
     function emit(type, payload) {
+      /* 묶음 처리 중의 원격 알림은 모아 두었다가 마지막에 1번만 — 화면 다시 그리기를 줄인다 */
+      if (remoteDepth > 0 && type === 'remote') { batchRemoteCount++; return; }
       var st = null;
       try { st = status(); } catch (e) { st = null; }
       (listeners || []).forEach(function (fn) { try { fn(type, payload, st); } catch (e) {} });
@@ -2724,6 +2921,7 @@
         } catch (e) {}
       }
       startRetryLoop();
+      attachBatchHooks(adapter);
       if (adapter && typeof adapter.subscribe === 'function') {
         unsub = adapter.subscribe(function (path, data, meta) {
           try { onRemote(path, data, meta); } catch (e) { lastError = errorText(e); }
@@ -2754,6 +2952,7 @@
     function stop() {
       started = false;
       stopUsageSync();
+      saveLastSync();
       if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
       if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
       if (root.removeEventListener) {
@@ -2820,6 +3019,35 @@
         prevValues[name] = readValue(name);
         capture(e);
         return outbox.count();
+      },
+      /* 원격 문서를 묶어서 반영 — 그 사이 읽기·수정은 메모리에서, 저장은 키당 1회.
+         (어댑터가 setBatchHooks 로 자동으로 감싸지만, 테스트·진단에서 직접 쓸 수도 있다) */
+      beginRemoteBatch: beginRemoteBatch,
+      endRemoteBatch: endRemoteBatch,
+      flushLocalWrites: flushLocalWrites,
+      simulateRemoteBatch: function (list) {
+        var arr = Array.isArray(list) ? list : [];
+        beginRemoteBatch();
+        try {
+          arr.forEach(function (it) { try { onRemote(it.path, it.data, it.meta || null); } catch (e) { lastError = errorText(e); } });
+        } finally { endRemoteBatch(); }
+        return arr.length;
+      },
+      /* 🔄 전체 다시 불러오기 — 델타 기준 시각을 지우고 전체 구독으로 되돌린다 */
+      forceFullSync: forceFullSync,
+      /* 델타 구독 상태 (화면·진단용) */
+      syncInfo: function () {
+        var map = readLastSync(storage);
+        var colls = {};
+        Object.keys(map).forEach(function (k) { colls[k] = { at: map[k], iso: isoOf(map[k]) }; });
+        return {
+          delta: Object.keys(map).length > 0,
+          collections: colls,
+          key: LASTSYNC_KEY,
+          safetyMs: DELTA.safetyMs,
+          lastSyncAt: lastSyncAt,
+          fullSyncAt: fullSyncAt
+        };
       },
       migrationPlan: migrationPlan,
       runMigration: runMigration,
@@ -3027,6 +3255,9 @@
     /* 역할을 확인하기 전에는 가장 제한적인 쪽(태블릿 구독)으로 시작한다 */
     var role = opts.role === 'admin' ? 'admin' : 'tablet';
     var unsubs = [];
+    /* 엔진이 넣어 주는 묶음 훅 — 한 스냅샷에 여러 문서가 올 때
+       메모리에서 모아 수정하고 저장은 키당 1회만 하게 한다 */
+    var batchHooks = { begin: null, end: null };
 
     function connect() {
       return loadModules(sdkVersion).then(function (m) {
@@ -3210,41 +3441,82 @@
         var basePath = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
         var since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
         var sinceIso = since.toISOString().slice(0, 10);
-        /* 출결은 최근 7일만 실시간 구독 — 오래된 기록까지 매번 읽지 않아 무료 한도를 아낀다 */
-        var eventSpec = { path: basePath + '/attendanceEvents', where: { field: 'date', op: '>=', value: sinceIso } };
+        /* 출결은 첫 전체 구독에서 최근 7일만 — 오래된 기록까지 매번 읽지 않아 무료 한도를 아낀다 */
+        var eventSpec = { path: basePath + '/attendanceEvents', coll: 'attendanceEvents', where: { field: 'date', op: '>=', value: sinceIso } };
         /* 태블릿은 원생 개인정보(students)·원비·상담·설정을 아예 구독하지 않는다.
            이 역할이 읽을 수 있는 것은 kioskStudents(최소 정보)와 attendanceEvents 둘뿐이다. */
         var specs = (role === 'admin')
           ? [
-            { path: basePath + '/students' },
-            { path: basePath + '/counsel' },
-            { path: basePath + '/shuttle' },
-            { path: basePath + '/coupons' },
-            { path: basePath + '/meta' },
-            { path: basePath + '/tuition' },
+            { path: basePath + '/students', coll: 'students' },
+            { path: basePath + '/counsel', coll: 'counsel' },
+            { path: basePath + '/shuttle', coll: 'shuttle' },
+            { path: basePath + '/coupons', coll: 'coupons' },
+            /* meta 는 문서가 몇 개 안 되니 전체 구독 그대로(델타 대상 아님) */
+            { path: basePath + '/meta', coll: 'meta', delta: false },
+            { path: basePath + '/tuition', coll: 'tuition' },
             eventSpec
           ]
           : [
-            { path: basePath + '/kioskStudents' },
+            { path: basePath + '/kioskStudents', coll: 'kioskStudents' },
             eventSpec
           ];
+        var store = lastSyncStore(opts.lastSyncStorage);
+        var lastMap = opts.fullSync === true ? {} : readLastSync(store);
+        var nowMs = Date.now();
+        var log = (opts.snapshotLog && typeof opts.snapshotLog.push === 'function') ? opts.snapshotLog : null;
+        /* 이 기기에 그 컬렉션 자료가 없으면(새 기기·초기화) 델타를 쓰지 않는다 */
+        function deltaAllowed(coll) {
+          if (typeof opts.hasLocalData === 'function') {
+            try { return opts.hasLocalData(coll) !== false; } catch (e) { return true; }
+          }
+          if (opts.hasLocalData === false) { return true; }
+          return localDataHas(store, coll);
+        }
+        function noteSync(coll) {
+          if (!coll) { return; }
+          var m = readLastSync(store);
+          m[coll] = Date.now();
+          writeLastSync(store, m);
+        }
         specs.forEach(function (spec) {
           var coll = fs.collection(db, spec.path);
           var q = coll;
-          if (spec.where) {
+          var sinceVal = '';
+          if (spec.delta !== false) {
+            if (deltaAllowed(spec.coll)) { sinceVal = deltaSinceIso(lastMap[spec.coll], nowMs); }
+          }
+          if (sinceVal) {
+            /* 단일 필드 where → 자동 인덱스. 확장 필드가 아니라 _updatedAt 이라 규칙 수정도 불필요 */
+            q = fs.query(coll, fs.where('_updatedAt', '>', sinceVal));
+          } else if (spec.where) {
             q = fs.query(coll, fs.where(spec.where.field, spec.where.op, spec.where.value));
           }
+          if (log) { log.push({ coll: spec.coll, path: spec.path, since: sinceVal, where: sinceVal ? '_updatedAt' : (spec.where ? spec.where.field : '') }); }
           var un = fs.onSnapshot(q, { includeMetadataChanges: false }, function (snap) {
-            snap.docChanges().forEach(function (ch) {
-              if (ch.type === 'removed') { fn(ch.doc.ref.path, null, { ver: 0 }); }
-              else { fn(ch.doc.ref.path, ch.doc.data(), { ver: 0 }); }
-            });
+            /* 캐시에서 온 스냅샷은 서버 읽기가 아니다 — 계량기에 넣지 않고 마지막 시각도 안 새긴다 */
+            var fromCache = !!(snap && snap.metadata && snap.metadata.fromCache === true);
+            var meta = { ver: 0, fromCache: fromCache, coll: spec.coll };
+            if (typeof batchHooks.begin === 'function') { try { batchHooks.begin(); } catch (e) {} }
+            try {
+              snap.docChanges().forEach(function (ch) {
+                if (ch.type === 'removed') { fn(ch.doc.ref.path, null, meta); }
+                else { fn(ch.doc.ref.path, ch.doc.data(), meta); }
+              });
+            } finally {
+              if (typeof batchHooks.end === 'function') { try { batchHooks.end(); } catch (e) {} }
+            }
+            if (!fromCache) { noteSync(spec.coll); }
           }, function (err) {
             if (typeof opts.onError === 'function') { opts.onError(err); }
           });
           unsubs.push(un);
         });
         return function () { unsubs.forEach(function (u) { try { u(); } catch (e) {} }); unsubs = []; };
+      },
+      /* 엔진이 넣는 묶음 처리 훅 — 문서 여러 건을 한 번에 저장하게 */
+      setBatchHooks: function (beginFn, endFn) {
+        batchHooks.begin = (typeof beginFn === 'function') ? beginFn : null;
+        batchHooks.end = (typeof endFn === 'function') ? endFn : null;
       },
       test: function () {
         if (!db) { return Promise.resolve({ ok: false, message: '아직 연결되지 않았습니다' }); }
@@ -3337,6 +3609,12 @@
     buildRegistry: buildRegistry,
     createEngine: createEngine,
     createUsage: createUsage,
+    DELTA: DELTA,
+    LASTSYNC_KEY: LASTSYNC_KEY,
+    readLastSync: readLastSync,
+    writeLastSync: writeLastSync,
+    deltaSinceIso: deltaSinceIso,
+    localDataHas: localDataHas,
     USAGE_SYNC: USAGE_SYNC,
     usageTotals: usageTotals,
     usageDeviceEntries: usageDeviceEntries,

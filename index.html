@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=37"></script>
-<script src="firebase-sync-ui.js?v=37"></script>
+<script src="firebase-sync.js?v=38"></script>
+<script src="firebase-sync-ui.js?v=38"></script>
 <title>경희대MTA태권도 · AI 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -99,6 +99,36 @@
   }
   .icon-btn:hover{background:rgba(255,255,255,.16)}
   .icon-btn.muted{color:#ffb4b4; border-color:rgba(255,180,180,.35)}
+  /* 🔄 새로고침 · 연결 배지 — 상단 바 오른쪽 도구 영역 */
+  .hdr-fb-chip{
+    display:inline-flex; align-items:center; gap:5px; font-family:inherit;
+    font-size:11.5px; font-weight:800; letter-spacing:-.2px; white-space:nowrap; cursor:pointer;
+    color:#cfe0ff; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14);
+    padding:7px 11px; border-radius:999px; transition:background .15s;
+  }
+  .hdr-fb-chip:hover{background:rgba(255,255,255,.16)}
+  .hdr-fb-chip.online{color:#8df3c6; border-color:rgba(141,243,198,.34); background:rgba(12,166,120,.20)}
+  .hdr-fb-chip.offline, .hdr-fb-chip.error{color:#ffd79a; border-color:rgba(255,215,154,.34); background:rgba(214,138,0,.18)}
+  .hdr-fb-chip.blocked{color:#ffb4b4; border-color:rgba(255,180,180,.38); background:rgba(194,47,47,.22)}
+  #app-refresh-btn{
+    width:auto; min-width:0; padding:0 12px; gap:6px; display:inline-flex; align-items:center;
+    font-size:12.5px; font-weight:800; letter-spacing:-.2px; white-space:nowrap;
+  }
+  #app-refresh-btn .rf-ico{font-size:15px; line-height:1; display:inline-block}
+  #app-refresh-btn.busy{opacity:.78; cursor:default}
+  #app-refresh-btn.busy .rf-ico{animation:rf-spin .9s linear infinite}
+  @keyframes rf-spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){ #app-refresh-btn.busy .rf-ico{animation:none} }
+  /* ±850~1080px(작은 노트북·태블릿 가로): 상단 바가 넘치지 않게 도구를 줄인다 */
+  @media (max-width:1080px){
+    .brand-sub{display:none}
+    .today-pill{display:none}
+  }
+  @media (max-width:980px){
+    .hdr-fb-chip{display:none}
+    #app-refresh-btn{width:40px; min-width:40px; padding:0; justify-content:center}
+    #app-refresh-btn .rf-txt{display:none}
+  }
   .tabs{display:flex; gap:3px; background:rgba(0,0,0,.22); padding:4px; border-radius:13px}
   .tab-btn{
     border:0; background:transparent; color:rgba(255,255,255,.65); font-weight:800; font-size:13.5px;
@@ -1098,7 +1128,7 @@
   .rp-ymethods b{color:var(--navy)}
   .rp-print-head{display:none}
   @media print{
-    .topbar, .tabs, .admin-tabs, .admin-lockbar, .admin-pw-banner, .btn, .help, .tab-btn, .icon-btn, .mon-nav .btn, select.mon-select, input.mon-pick{display:none !important}
+    .topbar, .tabs, .admin-tabs, .admin-lockbar, .admin-pw-banner, .btn, .help, .tab-btn, .icon-btn, .hdr-fb-chip, #app-refresh-btn, .mon-nav .btn, select.mon-select, input.mon-pick{display:none !important}
     #view-admin{padding:0; overflow:visible}
     .panel{box-shadow:none !important; border:1px solid #c9d3e4 !important; break-inside:avoid; page-break-inside:avoid}
     .admin-grid{grid-template-columns:1fr 1fr}
@@ -1141,8 +1171,8 @@
     .topbar{
       height:auto; display:grid; gap:6px 8px; padding:6px 10px 8px;
       padding-top:calc(6px + env(safe-area-inset-top));
-      grid-template-columns:minmax(0,1fr) auto;
-      grid-template-areas:"brand mute" "mode tabs";
+      grid-template-columns:minmax(0,1fr) auto auto;
+      grid-template-areas:"brand mute refresh" "mode tabs tabs";
     }
     .brand{grid-area:brand; flex-direction:row; align-items:center; gap:8px; width:100%}
     .brand-mark{width:34px; height:34px; border-radius:10px; font-size:18px}
@@ -1152,6 +1182,12 @@
     .today-pill{display:none}
     .clock{display:none}
     #mute-btn{grid-area:mute; width:36px; height:36px; border-radius:11px; font-size:15px; align-self:center}
+    .hdr-fb-chip{display:none}
+    #app-refresh-btn{
+      grid-area:refresh; width:36px; height:36px; min-width:36px; padding:0; border-radius:11px;
+      align-self:center; justify-content:center; font-size:15px;
+    }
+    #app-refresh-btn .rf-txt{display:none}
     .mode-toggle{grid-area:mode; width:100%; gap:3px; padding:3px; border-radius:12px}
     .mode-btn{flex:1; padding:9px 8px; font-size:13.5px; border-radius:9px; min-height:38px}
     .tabs{grid-area:tabs; gap:3px; padding:3px; border-radius:12px; justify-self:end}
@@ -1319,6 +1355,12 @@
       <div class="clock-time"><span id="clock-hm">00:00</span><span class="sep">:</span><span id="clock-s">00</span></div>
       <div class="clock-date" id="clock-date">-</div>
     </div>
+
+    <button class="hdr-fb-chip" id="hdr-fb-chip" type="button" title="눌러서 동기화 상태 보기">⚪ 로컬</button>
+
+    <button class="icon-btn" id="app-refresh-btn" type="button"
+            title="새로고침 — 대기 중인 기록을 먼저 보내고 앱을 다시 엽니다"
+            aria-label="새로고침"><span class="rf-ico" aria-hidden="true">🔄</span><span class="rf-txt">새로고침</span></button>
 
     <button class="icon-btn" id="mute-btn" title="효과음 켜기/끄기" aria-label="효과음 켜기/끄기">🔊</button>
 
@@ -1776,6 +1818,9 @@
                   </div>
 
                   <div class="tiny-note" id="fb-sync-note" style="margin-top:4px">마지막 동기화: 아직 없음</div>
+                  <div style="margin-top:6px">
+                    <button class="btn btn-sm" id="fb-sync-open" type="button">📊 동기화 상태 · 전체 다시 불러오기</button>
+                  </div>
 
                   <div class="fb-sec" id="fb-perm-sec">
                     <div class="fb-sec-head"><b>🧪 모의 권한 테스트 (가짜 원생 3명)</b><span class="chip wait" id="fb-perm-tag">아직 실행 전</span></div>

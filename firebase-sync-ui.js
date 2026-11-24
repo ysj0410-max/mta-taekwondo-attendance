@@ -144,6 +144,10 @@
           S.msgKind = 'warn';
         }
         if (type === 'synced') { saveConfig({ lastSyncAt: payload && payload.at }); }
+        if (type === 'full-sync') {
+          S.msg = '🔄 전체 다시 불러오기를 시작했습니다 — 서버에서 전체를 다시 받는 중입니다.';
+          S.msgKind = 'ok';
+        }
         if (type === 'remote-event') { relaySms(payload); }
         if (type === 'tablet-private-data' && payload && payload.count) {
           S.msg = '⚠️ 이 태블릿에 원생 개인정보가 ' + payload.count + '명분 남아 있습니다. 태블릿에는 이름·띠만 있으면 되니, 개인정보를 지우려면 「💾 도장 데이터 전체 백업」을 받아 두고 이 브라우저의 사이트 데이터를 지운 뒤 다시 연결하세요.';
@@ -234,6 +238,15 @@
     } catch (e) { S.authUnsub = null; }
   }
 
+  /* 실시간 구독 옵션 — 증분(델타) 구독에 쓰는 마지막 동기화 시각을 이 기기 저장소에 둔다.
+     기기에 그 컬렉션 자료가 아직 없거나(새 기기·초기화) 키가 없으면 어댑터가 전체 구독으로 돌아간다. */
+  function adapterOpts(extra) {
+    return Object.assign({
+      lastSyncStorage: localStorage,
+      hasLocalData: function (coll) { return FB.localDataHas(localStorage, coll); }
+    }, extra || {});
+  }
+
   function connectFirestore() {
     /* 연결 중에 「설정 저장·연결」을 또 눌러도 같은 연결을 기다린다 (앱 중복 생성 방지) */
     if (S.connecting) { return S.connecting; }
@@ -250,7 +263,7 @@
     renderAll();
     var connecting;
     try {
-      connecting = FB.createFirestoreAdapter(Object.assign({ dojangId: S.cfg.dojangId }, v.config), {
+      connecting = FB.createFirestoreAdapter(Object.assign({ dojangId: S.cfg.dojangId }, v.config), adapterOpts({
         basePath: 'dojangs/' + S.cfg.dojangId,
         /* 역할을 서버에서 확인하기 전에는 어댑터도 태블릿(최소) 구독으로 시작한다 */
         onError: function (err) {
@@ -258,7 +271,7 @@
           S.msgKind = 'warn';
           renderAll();
         }
-      });
+      }));
     } catch (err) {
       showError('⚠️ 연결하지 못했습니다: ', err);
       return Promise.resolve(false);
@@ -398,6 +411,18 @@
       pill.textContent = pillText;
       pill.className = 'fb-pill-state ' + st.state;
     }
+    /* 헤더 도구 영역의 연결 배지 — 누르면 동기화 상태 창이 열린다 */
+    var hdr = $('hdr-fb-chip');
+    if (hdr) {
+      var hdrText = st.state === 'online' ? '🟢 연결'
+        : st.state === 'offline' ? ('🟡 대기' + (st.queued ? ' ' + st.queued : ''))
+        : st.state === 'blocked' ? '🔴 한도'
+        : st.state === 'error' ? '🟠 연결문제' : '⚪ 로컬';
+      hdr.textContent = hdrText;
+      hdr.className = 'hdr-fb-chip ' + st.state;
+      hdr.title = (st.text || '') + (st.queued ? (' · 전송 대기 ' + st.queued + '건') : '') + ' — 눌러서 동기화 상태 보기';
+    }
+    if (SYNC_MODAL.open) { renderSyncModal(); }
     var tag = $('fb-pill-tag');
     if (tag) { tag.style.display = 'none'; }
     var usageDate = S.engine ? String(S.engine.usage.snapshot().date || '').replace(/^pt:/, '') : '';
@@ -1213,7 +1238,7 @@
       getting = Promise.resolve(live);
     } else {
       try {
-        getting = FB.createFirestoreAdapter(Object.assign({ dojangId: cfg.dojangId }, v.config), { basePath: base });
+        getting = FB.createFirestoreAdapter(Object.assign({ dojangId: cfg.dojangId }, v.config), adapterOpts({ basePath: base }));
       } catch (err) {
         return Promise.resolve({ ok: false, reason: 'connect-failed', detail: FB.errorText(err) });
       }
@@ -1247,6 +1272,152 @@
     });
   }
 
+  /* ---------- 📊 동기화 상태 창 (헤더 배지·관리자 화면에서 연다) ----------
+     · 지금 상태·마지막 동기화·증분(델타) 구독 현황·전송 대기를 한눈에
+     · 「🔄 새로고침」        = 대기 중인 기록을 먼저 보내고 앱을 다시 연다
+     · 「🔄 전체 다시 불러오기」 = 기기 간 누락이 의심될 때 1회 전체 재동기화 */
+  var SYNC_MODAL = { open: false, root: null };
+
+  /* 엔진이 적은 시각(_updatedAt 과 같은 표기: 기기 지역 시각)을 그대로 보여 준다 */
+  function isoText(iso) {
+    var s = String(iso == null ? '' : iso);
+    if (!s) { return '-'; }
+    return s.slice(0, 19).replace('T', ' ');
+  }
+
+  function syncInfoText() {
+    var info = null;
+    try { info = S.engine && typeof S.engine.syncInfo === 'function' ? S.engine.syncInfo() : null; } catch (e) { info = null; }
+    if (!info) { return '<div class="tiny-note">동기화가 켜져 있지 않습니다 — 증분 구독 정보가 없습니다.</div>'; }
+    var names = Object.keys(info.collections || {});
+    var rows = names.map(function (k) {
+      var at = info.collections[k];
+      return '<tr><td>' + escHtml(k) + '</td><td>' + escHtml(isoText(at.iso)) + '</td></tr>';
+    }).join('');
+    var head = info.delta
+      ? '이 기기는 <b>바뀐 것만 받는 증분 구독</b>을 씁니다 — 새로고침마다 2,500건을 다시 읽지 않습니다(변경 0~5건).'
+      : '아직 전체 동기화 기록이 없어 <b>다음 연결 때 전체를 한 번</b> 받습니다.';
+    return '<div class="tiny-note" style="line-height:1.6">' + head +
+      '<br>안전 여유 ' + Math.round((info.safetyMs || 0) / 1000) + '초 · 창을 닫아도 계속 동기화됩니다.' +
+      (info.fullSyncAt ? '<br>마지막 전체 다시 불러오기: ' + escHtml(isoText(info.fullSyncAt)) : '') + '</div>' +
+      (rows ? '<table class="fb-sync-tbl"><thead><tr><th>컬렉션</th><th>마지막 동기화</th></tr></thead><tbody>' + rows + '</tbody></table>' : '');
+  }
+
+  function renderSyncModal() {
+    if (!SYNC_MODAL.open || !SYNC_MODAL.root) { return; }
+    var st = S.engine ? S.engine.status() : { state: 'local', text: '⚪ 미연결(로컬 모드)', queued: 0, lastSyncAt: '' };
+    var sum = S.engine ? S.engine.outbox.summary() : { pending: 0, failed: 0, unacked: 0 };
+    var body = SYNC_MODAL.root.querySelector('#fb-sync-modal-body');
+    if (!body) { return; }
+    body.innerHTML =
+      '<div class="fb-sync-state"><span class="chip ' + chipFor(st.state) + '">' + escHtml(st.text) + '</span>' +
+      '<span class="tiny-note">마지막 동기화: ' + escHtml(st.lastSyncAt ? isoText(st.lastSyncAt) : '아직 없음') + '</span></div>' +
+      '<div class="tiny-note" style="margin:8px 0 10px">보낼 것 <b>' + sum.pending + '</b>건 · 확인 중 <b>' + sum.unacked +
+      '</b>건 · 실패 <b>' + sum.failed + '</b>건 · 기기 ID <b>' + escHtml(deviceId()) + '</b></div>' +
+      syncInfoText();
+  }
+
+  function closeSyncStatus() {
+    var root = SYNC_MODAL.root || $('modal-root');
+    SYNC_MODAL.open = false;
+    SYNC_MODAL.root = null;
+    if (root) {
+      root.classList.remove('open');
+      root.innerHTML = '';
+      root.onclick = null;
+    }
+  }
+
+  function openSyncStatus() {
+    var root = $('modal-root');
+    if (!root) { return; }
+    SYNC_MODAL.open = true;
+    SYNC_MODAL.root = root;
+    root.innerHTML =
+      '<div class="modal-backdrop" data-fbclose="1"></div>' +
+      '<div class="modal" role="dialog" aria-modal="true" aria-label="동기화 상태">' +
+      '<h3>🔄 동기화 상태</h3>' +
+      '<div class="modal-sub">새로고침은 대기 중인 기록을 먼저 보낸 뒤 앱을 다시 엽니다.</div>' +
+      '<div class="modal-body" id="fb-sync-modal-body"></div>' +
+      '<div class="modal-actions">' +
+      '<button class="btn" data-fbclose="1" id="fb-sync-modal-close">닫기</button>' +
+      '<button class="btn" id="fb-sync-modal-full" style="font-weight:800">🔄 전체 다시 불러오기</button>' +
+      '<button class="btn btn-primary" id="fb-sync-modal-refresh" style="font-weight:800">🔄 새로고침</button>' +
+      '</div></div>';
+    root.classList.add('open');
+    root.onclick = function (ev) {
+      var t = ev.target;
+      if (!t) { return; }
+      if (t.closest && t.closest('[data-fbclose]')) { closeSyncStatus(); return; }
+      if (t.closest && t.closest('#fb-sync-modal-full')) { onFullSync(); return; }
+      if (t.closest && t.closest('#fb-sync-modal-refresh')) { appRefresh(); }
+    };
+    renderSyncModal();
+  }
+
+  function escHtml(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* 🔄 전체 다시 불러오기 — 확인을 한 번 받고 델타 기준 시각을 지워 전체 구독 */
+  function onFullSync() {
+    var msg = '기기 간 누락이 의심될 때만 쓰세요.\n서버에서 전체를 다시 받아 오며, 무료 읽기를 한 번 크게 씁니다(원생·원비 등 약 2,500건).\n지금 전체 다시 불러올까요?';
+    if (typeof window.confirm === 'function' && !window.confirm(msg)) { return; }
+    var r = null;
+    try { r = S.engine && typeof S.engine.forceFullSync === 'function' ? S.engine.forceFullSync() : null; } catch (e) { r = null; }
+    S.msg = r ? '🔄 전체 다시 불러오기를 시작했습니다 — 잠시 뒤 화면이 채워집니다.' : '전체 다시 불러오기를 할 수 없습니다(동기화가 꺼져 있음).';
+    S.msgKind = r ? 'ok' : 'warn';
+    try { renderAll(); } catch (e) {}
+    renderSyncModal();
+    return r;
+  }
+
+  /* ---------- 🔄 새로고침 — 대기 중인 기록을 먼저 보내고 앱을 다시 연다 ----------
+     · 「지금 전송」(flush)이 3초 안에 끝나지 않아도 그대로 새로고침한다(보내던 것은 큐에 남아 다음에 다시 보냄).
+     · 서비스워커 새 버전이 대기 중이면 SKIP_WAITING 으로 즉시 활성화한다. */
+  function appRefresh(opts) {
+    opts = opts || {};
+    var btn = $('app-refresh-btn');
+    var label = btn ? btn.querySelector('.rf-txt') : null;
+    if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+    if (label) { label.textContent = '보내는 중…'; }
+    var flushed = false;
+    function finish() {
+      if (flushed) { return; }
+      flushed = true;
+      try { if (typeof opts.beforeReload === 'function') { opts.beforeReload(); } } catch (e) {}
+      reloadNow(opts);
+    }
+    var timer = setTimeout(finish, 3000);
+    var sending = null;
+    try { sending = (S.engine && typeof S.engine.flush === 'function') ? S.engine.flush() : null; } catch (e) { sending = null; }
+    Promise.resolve(sending).then(function () { clearTimeout(timer); finish(); },
+      function () { clearTimeout(timer); finish(); });
+    return flushed;
+  }
+
+  function reloadNow(opts) {
+    opts = opts || {};
+    var doReload = (typeof opts.reload === 'function') ? opts.reload : function () {
+      try { window.location.reload(); } catch (e) {}
+    };
+    var sw = null;
+    try { sw = (typeof navigator !== 'undefined' && navigator.serviceWorker) ? navigator.serviceWorker : null; } catch (e) { sw = null; }
+    if (!sw || typeof sw.getRegistration !== 'function') { doReload(); return; }
+    var went = false;
+    function go() { if (went) { return; } went = true; doReload(); }
+    setTimeout(go, 400);   /* 서비스워커가 응답하지 않아도 새로고침은 한다 */
+    try {
+      sw.getRegistration().then(function (reg) {
+        try {
+          if (reg && reg.waiting && reg.waiting.postMessage) { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); }
+          else if (reg && typeof reg.update === 'function') { try { reg.update(); } catch (e) {} }
+        } catch (e) {}
+        setTimeout(go, 120);
+      }, function () { go(); });
+    } catch (e) { go(); }
+  }
+
   function ensurePill() {
     if ($('fb-pill')) { return; }
     var d = document.createElement('div');
@@ -1268,7 +1439,11 @@
       ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-clear-failed', onClearFailed], ['fb-usage-reset', onUsageReset],
       ['fb-perm-run', runPermDemo],
       ['fb-tablet-scrub', onScrubTablet],
-      ['fb-guide', onGuide]
+      ['fb-guide', onGuide],
+      /* 🔄 새로고침 · 동기화 상태 — 헤더 도구 영역과 관리자 화면 양쪽에서 */
+      ['app-refresh-btn', function () { appRefresh(); }],
+      ['hdr-fb-chip', openSyncStatus],
+      ['fb-sync-open', openSyncStatus]
     ];
     map.forEach(function (pair) {
       var el = $(pair[0]);
@@ -1353,6 +1528,18 @@
     requestedRole: function () { return S.cfg.role; },
     effectiveRole: engineRole,
     verifiedRole: verifiedRole,
+    /* 🔄 새로고침 — 대기 중인 기록을 보낸 뒤 앱을 다시 연다 */
+    refreshApp: appRefresh,
+    flushOutbox: function () { return S.engine ? S.engine.flush() : null; },
+    /* 🔄 전체 다시 불러오기 — 델타 기준 시각을 지우고 전체 구독 */
+    fullSync: onFullSync,
+    syncInfo: function () {
+      var info = null;
+      try { info = S.engine && typeof S.engine.syncInfo === 'function' ? S.engine.syncInfo() : null; } catch (e) { info = null; }
+      return info;
+    },
+    openSyncStatus: openSyncStatus,
+    closeSyncStatus: closeSyncStatus,
     /* 🔑 로그인 모달의 「비밀번호 분실 시」 — Firebase 관리자 계정으로 본인 확인 */
     verifyAdminCredentials: verifyAdminCredentials,
     roleLabel: function (r) { return roleLabel(r); },

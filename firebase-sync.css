@@ -75,3 +75,10 @@
 @media (max-width: 760px) {
   .fb-perm-cards { grid-template-columns: 1fr; }
 }
+
+/* 📊 동기화 상태 창 — 증분(델타) 구독 현황 */
+.fb-sync-state { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fb-sync-tbl { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11.5px; }
+.fb-sync-tbl th, .fb-sync-tbl td { border-bottom: 1px solid #eef1f7; padding: 4px 6px; text-align: left; }
+.fb-sync-tbl th { color: var(--muted); font-weight: 800; font-size: 11px; background: #f8fafd; }
+.fb-sync-tbl td { color: #23324f; font-weight: 700; font-variant-numeric: tabular-nums; }
