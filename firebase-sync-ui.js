@@ -401,7 +401,7 @@
     if (tag) { tag.style.display = 'none'; }
     var usageDate = S.engine ? String(S.engine.usage.snapshot().date || '').replace(/^pt:/, '') : '';
     setText('fb-usage-note', S.engine
-      ? (usageDate + ' 기준(태평양 자정 초기화) · 이 기기에서 센 추정치 (PC·태블릿 합산 아님)')
+      ? (usageDate + ' 기준(한국 오후 5시 초기화) · 이 기기에서 센 추정치 (PC·태블릿 합산 아님)')
       : '동기화를 켜면 표시됩니다');
     var lastSync = (S.engine && S.engine.errors().lastSyncAt) || S.cfg.lastSyncAt || '';
     setText('fb-sync-note', '마지막 동기화: ' + (lastSync ? nowText(lastSync) : '아직 없음') +
@@ -415,7 +415,7 @@
     if (!on) { el.style.display = 'none'; return; }
     el.style.display = '';
     el.innerHTML = '🔴 <b>무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다.</b><br>' +
-      '지금 찍은 기록은 <b>이 기기 로컬에 임시 보관</b> 중이며, 한도가 풀리면(태평양 시간 자정) 자동으로 다시 보냅니다. ' +
+      '지금 찍은 기록은 <b>이 기기 로컬에 임시 보관</b> 중이며, 한도가 풀리면(한국 시간 오후 5시 · 태평양 자정) 자동으로 다시 보냅니다. ' +
       '유료 결제로 자동 전환되지 않습니다.<br>' +
       '그동안 <b>Google Drive 백업</b>(「💾 도장 데이터 전체 백업」 또는 「☁️ 드라이브 자동 백업」)을 받아 두시길 권합니다.';
   }
