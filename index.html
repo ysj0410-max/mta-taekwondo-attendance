@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=34"></script>
-<script src="firebase-sync-ui.js?v=34"></script>
+<script src="firebase-sync.js?v=35"></script>
+<script src="firebase-sync-ui.js?v=35"></script>
 <title>경희대MTA태권도 · AI 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1576,6 +1576,7 @@
               <h3>📋 재원생 전체 명단</h3>
               <div class="spacer"></div>
               <span class="tiny-note" id="stu-count">0명</span>
+              <button class="btn btn-sm" id="btn-stu-dedupe" title="이름이 같은 관원이 두 번 들어갔을 때, 얼굴·띠·수업·출결이 있는 기존 관원을 남기고 중복만 지우며 빈 모·부 번호·성함·주소를 채웁니다">🧹 중복 관원 정리</button>
               <button class="btn btn-sm" id="btn-stu-csv" title="지금 고른 필터(재원생·휴관생·전체)와 검색어에 맞는 관원 명단을 엑셀에서 바로 여는 CSV로 내려받습니다">📤 명단 CSV</button>
             </div>
             <div class="panel-body">
@@ -3546,6 +3547,17 @@
   }
   function normalizeParentName(v) {
     return String(v == null ? '' : v).trim().replace(/\s+/g, ' ').slice(0, 20);
+  }
+  /* 관원 이름 비교용 — 앞뒤 공백과 줄 안의 중복 공백을 지운다.
+     학원 프로그램 CSV 는 「김민준 」처럼 공백이 붙어 오는 일이 있어 그대로 비교하면 같은 사람이 두 번 들어간다. */
+  function normalizeStudentName(v) {
+    return String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+  }
+  /* 합치기에서 이름이 같은 관원에 붙여도 되는지 — 상태가 같거나 한쪽이 재원생이면 같은 사람으로 본다 */
+  function studentStatusMergeable(a, b) {
+    var sa = (a && a.status) === 'paused' ? 'paused' : 'active';
+    var sb = (b && b.status) === 'paused' ? 'paused' : 'active';
+    return sa === sb || sa === 'active' || sb === 'active';
   }
   function normalizeAddress(v) {
     return String(v == null ? '' : v).trim().replace(/\s+/g, ' ').slice(0, 120);
@@ -15020,20 +15032,27 @@
   }
 
   /* 읽어 들인 명단을 기존 명단에 합친다(순수 계산) — 모달 없이 테스트할 수 있게 따로 둔다.
+     · 이름은 앞뒤·중복 공백을 지운 값으로 비교한다 (파일에 「김민준 」처럼 공백이 붙어 와도 같은 사람)
      · 이름이 같고 모·부 번호가 하나라도 겹치면 그 관원
-     · 이름이 같고 기존 번호가 비어 있는 1명이면 새로 만들지 않고 번호만 채운다
-     · 이미 번호가 있는데 다른 번호면 동명이인으로 보고 따로 둔다
+     · 이름이 같은 후보가 딱 1명이면 번호가 달라도 그 관원에 맞춘다
+       (번호를 바꾼 관원 · 부 번호만 적힌 파일 · 예전에 번호 없이 들여온 관원)
+     · 같은 이름 후보가 2명 이상일 때만 번호로 가른다 — 번호가 다르면 동명이인으로 보고 따로 둔다
      · 이름·띠·수업횟수·발송대상·원비날짜처럼 앱에서 정해 둔 값은 건드리지 않고,
        비어 있는 모·부 번호·성함·주소만 채운다. */
   function mergeImportedStudents(students) {
     var out = { added: 0, filled: 0, matched: 0 };
     var nameIndex = {};
-    app.students.forEach(function (s) {
-      (nameIndex[s.name] = nameIndex[s.name] || []).push(s);
-    });
+    var keyOf = function (x) { return normalizeStudentName(x && x.name); };
+    var indexOf = function (x) {
+      var k = keyOf(x);
+      (nameIndex[k] = nameIndex[k] || []).push(x);
+    };
+    app.students.forEach(indexOf);
     var numbersOf = function (x) { return studentPhonesAll(x).map(digitsOnly); };
+    /* 이번 파일에서 새로 넣은 관원 — 같은 사람 줄이 두 번 들어 있어도 두 번 추가하지 않는다 */
+    var addedHere = [];
     (students || []).forEach(function (s) {
-      var cands = nameIndex[s.name] || [];
+      var cands = nameIndex[keyOf(s)] || [];
       var impNums = numbersOf(s);
       var hit = null;
       for (var i = 0; i < cands.length; i++) {
@@ -15041,14 +15060,21 @@
         var same = impNums.some(function (d) { return have.indexOf(d) !== -1; });
         if (same) { hit = cands[i]; break; }
       }
-      // 이름은 같은데 기존 관원의 번호가 비어 있던 경우 — 새 관원을 만들지 않고 번호만 채운다
-      if (!hit) {
-        var empties = cands.filter(function (x) { return !numbersOf(x).length; });
-        if (empties.length === 1 && !(cands.length > 1 && !impNums.length)) { hit = empties[0]; }
+      // 이름이 같은 후보가 하나뿐이면 번호가 달라도 그 관원 — 동명이인은 2명 이상일 때만 번호로 가른다
+      if (!hit && cands.length === 1 && studentStatusMergeable(cands[0], s)) { hit = cands[0]; }
+      // 같은 파일 안에 같은 사람 줄이 두 번 들어 있는 경우 — 방금 넣은 관원과도 맞춘다
+      if (!hit && !impNums.length) {
+        for (var j = 0; j < addedHere.length; j++) {
+          if (keyOf(addedHere[j]) !== keyOf(s)) { continue; }
+          if (numbersOf(addedHere[j]).length) { continue; }
+          hit = addedHere[j];
+          break;
+        }
       }
       if (!hit) {
         app.students.push(s);
-        (nameIndex[s.name] = nameIndex[s.name] || []).push(s);
+        indexOf(s);
+        addedHere.push(s);
         out.added++;
         return;
       }
@@ -15103,7 +15129,8 @@
   function findStudentForImport(row) {
     if (!row) { return null; }
     var imp = studentPhonesAll(row).map(digitsOnly);
-    var same = app.students.filter(function (x) { return x.name === row.name; });
+    var nm = normalizeStudentName(row.name);
+    var same = app.students.filter(function (x) { return normalizeStudentName(x.name) === nm; });
     for (var i = 0; i < same.length; i++) {
       var have = studentPhonesAll(same[i]).map(digitsOnly);
       for (var j = 0; j < imp.length; j++) {
@@ -15111,6 +15138,237 @@
       }
     }
     return same.length === 1 ? same[0] : null;
+  }
+
+  /* =========================================================
+     12-B. 🧹 중복 관원 정리 (v35)
+     합치기로 이름이 같은 관원이 두 번 들어갔을 때, 원본은 그대로 두고
+     중복 쪽의 빈 모·부 번호·성함·주소만 옮긴 뒤 중복만 지운다.
+       · 이름은 정규화(앞뒤·중복 공백 제거)한 값이 같은 사람끼리만 비교
+       · 같은 이름 + 모·부·대표 번호가 하나라도 겹치면 같은 사람
+       · 번호를 서로 다르게 적어 둔 동명이인은 건드리지 않는다
+       · 한쪽이라도 얼굴·출결·원비·상담 기록이 전혀 없으면 새로 들어온 중복으로 본다
+       · 남길 원본: 얼굴 > 출결 > 원비 > 상담 > 설정(띠·수업·원비날짜 등) > 먼저 들어온 순서
+     ========================================================= */
+  /* 관원이 가진 번호 전부(모·부·대표)를 숫자만으로 */
+  function studentNumbersOf(s) {
+    return studentPhonesAll(s).map(digitsOnly).filter(function (d) { return !!d; });
+  }
+  /* 관원이 남긴 흔적 — 지울지 결정하는 기준이자 안전장치 */
+  function studentTraceOf(s) {
+    var t = { face: false, attendance: false, tuition: false, counsel: false, settings: false };
+    var id = s && s.id ? String(s.id) : '';
+    if (!id) { return t; }
+    if (app.faces && app.faces[id]) { t.face = true; }
+    Object.keys(app.attendance || {}).forEach(function (d) {
+      var day = app.attendance[d];
+      if (day && day[id] && (day[id].inTime || day[id].outTime || day[id].manual)) { t.attendance = true; }
+    });
+    if (!t.attendance) {
+      Object.keys(app.records || {}).forEach(function (d) {
+        var day = app.records[d];
+        if (day && day[id] && (day[id].in || day[id].out || day[id].manual)) { t.attendance = true; }
+      });
+    }
+    Object.keys(app.tuition || {}).forEach(function (mk) {
+      var month = app.tuition[mk];
+      if (month && month[id]) { t.tuition = true; }
+    });
+    (app.counsel || []).forEach(function (r) {
+      if (r && r.studentId && String(r.studentId) === id) { t.counsel = true; }
+    });
+    var belt = String((s && s.belt) || '').trim();
+    t.settings = !!(belt && belt !== '흰띠') || !!String((s && s.course) || '').trim() ||
+      !!(s && (s.tuitionDay || s.tuitionDate || s.firstRegDate || s.birthDate || s.tconId || s.note || s.siblingDiscount));
+    return t;
+  }
+  /* 원본으로 남길 우선순위 점수 — 높을수록 원본 */
+  function studentKeepScore(s, t) {
+    var n = 0;
+    if (t.face) { n += 64; }
+    if (t.attendance) { n += 32; }
+    if (t.tuition) { n += 16; }
+    if (t.counsel) { n += 8; }
+    if (t.settings) { n += 4; }
+    if (Number(s && s.attendCount) > 0) { n += 2; }
+    return n;
+  }
+  /* 두 관원이 같은 사람인가 — 「아니오」가 나오면 동명이인이므로 건드리지 않는다 */
+  function studentIsDuplicateOf(a, b, ta, tb) {
+    var na = studentNumbersOf(a), nb = studentNumbersOf(b);
+    if (nb.some(function (d) { return na.indexOf(d) !== -1; })) { return true; }  /* 번호가 하나라도 겹친다 */
+    if (na.length && nb.length) { return false; }        /* 서로 다른 번호를 적었으면 동명이인 */
+    var recA = !!(ta.face || ta.attendance || ta.tuition || ta.counsel);
+    var recB = !!(tb.face || tb.attendance || tb.tuition || tb.counsel);
+    return !recA || !recB;                                /* 기록이 전혀 없는 쪽은 새로 들어온 중복 */
+  }
+  /* 중복 관원에서 원본으로 옮길 빈 칸만 골라낸다 */
+  function studentMergeFill(keep, drop) {
+    var fill = {};
+    if (!parentPhoneFrom(keep, 'mother') && parentPhoneFrom(drop, 'mother')) { fill.motherPhone = parentPhoneFrom(drop, 'mother'); }
+    if (!parentPhoneFrom(keep, 'father') && parentPhoneFrom(drop, 'father')) { fill.fatherPhone = parentPhoneFrom(drop, 'father'); }
+    if (!parentNameOf(keep, 'mother') && parentNameOf(drop, 'mother')) { fill.motherName = parentNameOf(drop, 'mother'); }
+    if (!parentNameOf(keep, 'father') && parentNameOf(drop, 'father')) { fill.fatherName = parentNameOf(drop, 'father'); }
+    if (!addressOf(keep) && addressOf(drop)) { fill.address = addressOf(drop); }
+    return fill;
+  }
+  /* 빈 칸만 채운다 — 이미 적힌 값은 덮지 않는다. 채운 칸 수를 돌려준다 */
+  function studentApplyFill(s, fill) {
+    if (!s || !fill) { return 0; }
+    ensureParentPhones(s);
+    var n = 0;
+    if (fill.motherPhone !== undefined && !parentPhoneFrom(s, 'mother')) { s.motherPhone = fill.motherPhone; n++; }
+    if (fill.fatherPhone !== undefined && !parentPhoneFrom(s, 'father')) { s.fatherPhone = fill.fatherPhone; n++; }
+    if (fill.motherName !== undefined && !parentNameOf(s, 'mother')) { s.motherName = fill.motherName; n++; }
+    if (fill.fatherName !== undefined && !parentNameOf(s, 'father')) { s.fatherName = fill.fatherName; n++; }
+    if (fill.address !== undefined && !addressOf(s)) { s.address = fill.address; n++; }
+    if (fill.motherPhone !== undefined || fill.fatherPhone !== undefined) { syncPrimaryPhone(s); }
+    return n;
+  }
+  /* 중복 관원 찾기 — app 을 건드리지 않고 「남길 관원 / 지울 관원 / 채울 칸」만 계산한다 */
+  function studentDedupePlan() {
+    var groups = {}, keys = [], traces = {};
+    (app.students || []).forEach(function (s, i) {
+      if (!s) { return; }
+      var key = normalizeStudentName(s.name);
+      if (!key) { return; }
+      if (!groups[key]) { groups[key] = []; keys.push(key); }
+      groups[key].push({ s: s, i: i });
+    });
+    var traceOf = function (s) {
+      var id = String((s && s.id) || '');
+      if (!traces[id]) { traces[id] = studentTraceOf(s); }
+      return traces[id];
+    };
+    var pairs = [], skipped = 0;
+    keys.forEach(function (key) {
+      var g = groups[key];
+      if (g.length < 2) { return; }
+      /* 원본을 먼저 — 점수가 같으면 먼저 명단에 있던(예전에 들어온) 관원을 남긴다 */
+      g.sort(function (a, b) {
+        var d = studentKeepScore(b.s, traceOf(b.s)) - studentKeepScore(a.s, traceOf(a.s));
+        return d || (a.i - b.i);
+      });
+      var keep = g[0].s;
+      var virtual = JSON.parse(JSON.stringify(keep));   /* 번호가 채워지는 모습을 흉내 내는 사본 */
+      var vTrace = JSON.parse(JSON.stringify(traceOf(keep)));
+      for (var j = 1; j < g.length; j++) {
+        var other = g[j].s;
+        var oTrace = traceOf(other);
+        if (vTrace.face && oTrace.face) { skipped++; continue; }   /* 둘 다 얼굴이 있으면 다른 사람일 수 있어 남긴다 */
+        if (!studentIsDuplicateOf(virtual, other, vTrace, oTrace)) { skipped++; continue; }
+        var fill = studentMergeFill(virtual, other);
+        pairs.push({ keep: keep, drop: other, keepId: keep.id, dropId: other.id, fill: fill });
+        studentApplyFill(virtual, fill);
+        if (oTrace.attendance) { vTrace.attendance = true; }
+        if (oTrace.tuition) { vTrace.tuition = true; }
+        if (oTrace.counsel) { vTrace.counsel = true; }
+      }
+    });
+    return { pairs: pairs, skipped: skipped };
+  }
+  /* 지워지는 관원에만 있던 출결·원비·상담 기록을 남길 관원으로 옮긴다 — 기록이 사라지지 않게 */
+  function moveStudentRecords(fromId, toId) {
+    if (!fromId || !toId || fromId === toId) { return 0; }
+    var n = 0;
+    Object.keys(app.attendance || {}).forEach(function (d) {
+      var day = app.attendance[d];
+      if (!day || !day[fromId]) { return; }
+      if (!day[toId]) { day[toId] = day[fromId]; n++; }
+      delete day[fromId];
+    });
+    Object.keys(app.records || {}).forEach(function (d) {
+      var day = app.records[d];
+      if (!day || !day[fromId]) { return; }
+      if (!day[toId]) { day[toId] = day[fromId]; }
+      delete day[fromId];
+    });
+    Object.keys(app.tuition || {}).forEach(function (mk) {
+      var month = app.tuition[mk];
+      if (!month || !month[fromId]) { return; }
+      if (!month[toId]) { month[toId] = month[fromId]; n++; }
+      delete month[fromId];
+    });
+    (app.counsel || []).forEach(function (r) {
+      if (r && r.studentId && String(r.studentId) === String(fromId)) { r.studentId = toId; n++; }
+    });
+    return n;
+  }
+  /* 실제로 정리한다 — saveStudents() 가 Firebase 동기화에 삭제(툼스톤)까지 넘긴다 */
+  function runStudentDedupe() {
+    var plan = studentDedupePlan();
+    var dropIds = {}, faceMoved = false;
+    var filled = 0, moved = 0;
+    plan.pairs.forEach(function (p) {
+      var keep = byId(p.keepId);
+      var drop = (app.students || []).filter(function (x) { return x && x.id === p.dropId; })[0];
+      if (!keep || !drop || keep.id === drop.id || dropIds[drop.id]) { return; }
+      filled += studentApplyFill(keep, p.fill);
+      moved += moveStudentRecords(drop.id, keep.id);
+      if (app.faces && app.faces[drop.id] && !app.faces[keep.id]) {
+        app.faces[keep.id] = app.faces[drop.id];
+        delete app.faces[drop.id];
+        faceMoved = true;
+      }
+      dropIds[drop.id] = true;
+    });
+    var removed = Object.keys(dropIds).length;
+    if (!removed) { return { removed: 0, filled: 0, moved: 0, names: [] }; }
+    var names = (app.students || []).filter(function (s) { return s && dropIds[s.id]; })
+      .map(function (s) { return String(s.name || '').trim(); });
+    app.students = app.students.filter(function (s) { return !s || !dropIds[s.id]; });
+    saveStudents();
+    if (faceMoved) { saveFaces(); }
+    if (moved) { saveAttendance(); saveTuition(); saveCounselFile(); }
+    return { removed: removed, filled: filled, moved: moved, names: names };
+  }
+  /* 버튼 → 미리보기 모달 → 확인하면 정리 */
+  function openStudentDedupe() {
+    var plan = studentDedupePlan();
+    var n = plan.pairs.length;
+    if (!n) {
+      toast('중복 관원이 없어요. 명단이 깔끔해요 👍');
+      return Promise.resolve(null);
+    }
+    var labels = { motherPhone: '모 번호', fatherPhone: '부 번호', motherName: '모 성함', fatherName: '부 성함', address: '주소' };
+    var seen = {};
+    var items = [];
+    plan.pairs.forEach(function (p) {
+      if (seen[p.keepId] || items.length >= 12) { return; }
+      seen[p.keepId] = true;
+      var fills = Object.keys(labels).filter(function (k) { return p.fill[k] !== undefined; })
+        .map(function (k) { return labels[k]; });
+      items.push('<li><b>' + esc(String(p.keep.name || '').trim()) + '</b> — 중복 1명 정리' +
+        (fills.length ? ' · ' + esc(fills.join('·')) + ' 채움' : '') + '</li>');
+    });
+    var body = '<ul class="dedupe-list" style="margin:2px 0 8px;padding-left:18px;line-height:1.75">' + items.join('') + '</ul>';
+    if (n > items.length) { body += '<div class="tiny-note">외 ' + (n - items.length) + '명</div>'; }
+    if (plan.skipped) {
+      body += '<div class="tiny-note" style="margin-top:6px">번호가 서로 다른 동명이인 ' + plan.skipped + '명은 그대로 두었어요.</div>';
+    }
+    body += '<div class="help" style="margin-top:8px">얼굴·띠·수업·출결·원비 기록이 있는 기존 관원을 남기고, 중복 관원에만 있던 모·부 번호·성함·주소는 원본의 빈 칸으로 옮깁니다. 정리 전에 「🔐 관리자 계정」의 백업을 한 번 받아 두면 되돌리기 쉬워요.</div>';
+    return openModal({
+      title: '🧹 중복 관원 ' + n + '명을 찾았어요',
+      sub: '기존 관원(얼굴·띠·수업·출결 유지)에 빈 모·부 번호·성함·주소만 채우고 중복 ' + n + '명을 정리할까요?',
+      body: body,
+      actions: [
+        { label: '취소', value: null, kind: 'btn-ghost' },
+        { label: '🧹 중복 정리', value: 'dedupe', kind: 'btn-primary' }
+      ]
+    }).then(function (choice) {
+      if (choice !== 'dedupe') { return null; }
+      var r = runStudentDedupe();
+      renderAll();
+      if (!r.removed) {
+        toast('정리할 중복 관원이 없어요.');
+        return r;
+      }
+      var msg = '중복 관원 ' + r.removed + '명을 정리했어요';
+      if (r.filled) { msg += ' · 빈 칸 ' + r.filled + '개를 채웠어요'; }
+      if (r.moved) { msg += ' · 출결·원비 기록 ' + r.moved + '건도 원본으로 옮겼어요'; }
+      toast(msg);
+      return r;
+    });
   }
 
   function applyImport(students, fileName) {
@@ -16327,6 +16585,9 @@
     }
     if (el('btn-stu-csv')) {
       el('btn-stu-csv').addEventListener('click', downloadStudentsCSV);
+    }
+    if (el('btn-stu-dedupe')) {
+      el('btn-stu-dedupe').addEventListener('click', function () { openStudentDedupe(); });
     }
     if (el('att-filters')) {
       el('att-filters').addEventListener('click', function (e) {
@@ -17567,7 +17828,12 @@
       updateFee: updateFeeCalc,
       sort: rosterSort,
       importRoster: applyImport,
-      mergeRoster: mergeImportedStudents
+      mergeRoster: mergeImportedStudents,
+      nameKey: normalizeStudentName,
+      traceOf: studentTraceOf,
+      dedupePlan: studentDedupePlan,
+      dedupe: runStudentDedupe,
+      openDedupe: openStudentDedupe
     },
     tuition: {
       status: TUITION_STATUS,
