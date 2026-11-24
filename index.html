@@ -16416,6 +16416,16 @@
       setView('attendance');
     });
     el('tab-admin').addEventListener('click', function () { requestAdmin(); });
+    /* 🔄 새로고침 — 실제 동작(대기 기록 전송 → 새 버전 적용 → 다시 열기)은
+       firebase-sync-ui.js 가 맡는다. 그 화면이 없을 때만 여기서 단순 새로고침. */
+    (function () {
+      var rb = el('app-refresh-btn');
+      if (!rb) { return; }
+      rb.addEventListener('click', function () {
+        if (window.TDKFB && typeof window.TDKFB.refreshApp === 'function') { return; }
+        try { window.location.reload(); } catch (err) {}
+      });
+    })();
     el('mute-btn').addEventListener('click', function () {
       app.muted = !app.muted;
       writeJSON(LS.muted, app.muted);
