@@ -30,6 +30,7 @@
     busy: false,
     connecting: null,
     migrating: null,
+    authUnsub: null,
     msg: '',
     msgKind: '',
     timer: null
@@ -102,6 +103,7 @@
 
   /* ---------- 엔진 준비 ---------- */
   function stopEngine() {
+    if (S.authUnsub) { try { S.authUnsub(); } catch (e) {} S.authUnsub = null; }
     if (S.engine) { try { S.engine.stop(); } catch (e) {} S.engine = null; }
     if (S.adapter && typeof S.adapter.disconnect === 'function') { try { S.adapter.disconnect(); } catch (e) {} }
     if (S.server && typeof S.server.close === 'function') { try { S.server.close(); } catch (e) {} }
@@ -185,6 +187,52 @@
     renderAll();
   }
 
+  /* 서버 roles/{uid} 확인 결과를 화면 문구로 — 연결 직후와 늦은 세션 복원이 같은 말을 하도록 */
+  function roleVerifiedMsg(r) {
+    if (r && r.verified === 'admin') {
+      return '✅ 관리자 계정(' + (r.email || r.uid) + ')으로 확인되었습니다 — 데이터 이전을 진행할 수 있습니다.';
+    }
+    if (r && r.verified === 'tablet') {
+      return '✅ 출석 태블릿 계정으로 확인되었습니다 — 출결만 올립니다. (화면의 「이 기기 역할」을 관리자로 바꿔도 관리자 권한은 생기지 않습니다)';
+    }
+    return '🔒 역할 확인 전입니다 — 아래 「' + roleLabel(S.cfg.role) + ' 계정」으로 로그인해 주세요. (로그인 전에는 서버로 아무것도 보내지 않습니다)';
+  }
+
+  /* connect() 가 기다린 4초 안에는 세션이 복원되지 않았는데 그 뒤에 복원되는 경우까지 따라간다.
+     Firebase 의 onAuthStateChanged 로 uid 가 생기면 roles/{uid} 를 다시 읽어 자동으로 🟢 연결됨 까지 간다. */
+  function watchAuthRestore(adapter, engine) {
+    if (!adapter || typeof adapter.onAuthChange !== 'function') { return; }
+    if (S.authUnsub) { try { S.authUnsub(); } catch (e) {} S.authUnsub = null; }
+    try {
+      S.authUnsub = adapter.onAuthChange(function (user) {
+        if (S.engine !== engine) { return; }
+        var uid = (user && user.uid) ? String(user.uid) : '';
+        if (!uid) { return; }
+        /* 이미 누군가 로그인한 상태(로그인 흐름 포함)에서는 그쪽이 처리한다 —
+           여기서는 「S.auth 가 비어 있는데 세션이 생겼을 때」만 따라간다 */
+        if (S.auth && S.auth.uid) { return; }
+        S.auth = { uid: uid, email: (user && user.email) || '', role: '', expect: S.cfg.role };
+        S.msg = '🔎 로그인 세션이 복원되었습니다 — 이 계정(' + ((user && user.email) || uid) + ')의 역할을 서버에서 확인하는 중…';
+        S.msgKind = '';
+        renderAll();
+        var verifying;
+        try { verifying = engine.verifyRole(); } catch (err) { return; }
+        Promise.resolve(verifying).then(function (r) {
+          if (S.engine !== engine) { return; }
+          if (r && r.uid) {
+            S.auth = { uid: r.uid, email: r.email || '', role: r.verified || '', expect: S.cfg.role };
+          }
+          S.msg = roleVerifiedMsg(r);
+          S.msgKind = (r && (r.verified === 'admin' || r.verified === 'tablet')) ? 'ok' : 'warn';
+          renderAll();
+        }, function (err) {
+          if (S.engine !== engine) { return; }
+          showError('⚠️ 역할 확인에 실패했습니다: ', err);
+        });
+      });
+    } catch (e) { S.authUnsub = null; }
+  }
+
   function connectFirestore() {
     /* 연결 중에 「설정 저장·연결」을 또 눌러도 같은 연결을 기다린다 (앱 중복 생성 방지) */
     if (S.connecting) { return S.connecting; }
@@ -237,23 +285,18 @@
             if (r && r.uid) {
               S.auth = { uid: r.uid, email: r.email || '', role: r.verified || '', expect: S.cfg.role };
             }
-            if (r && r.verified === 'admin') {
-              S.msg = '✅ 관리자 계정(' + (r.email || r.uid) + ')으로 확인되었습니다 — 데이터 이전을 진행할 수 있습니다.';
-              S.msgKind = 'ok';
-            } else if (r && r.verified === 'tablet') {
-              S.msg = '✅ 출석 태블릿 계정으로 확인되었습니다 — 출결만 올립니다. (화면의 「이 기기 역할」을 관리자로 바꿔도 관리자 권한은 생기지 않습니다)';
-              S.msgKind = 'ok';
-            } else {
-              S.msg = '🔒 역할 확인 전입니다 — 아래 「' + roleLabel(S.cfg.role) + ' 계정」으로 로그인해 주세요. (로그인 전에는 서버로 아무것도 보내지 않습니다)';
-              S.msgKind = 'warn';
-            }
+            S.msg = roleVerifiedMsg(r);
+            S.msgKind = (r && (r.verified === 'admin' || r.verified === 'tablet')) ? 'ok' : 'warn';
             renderAll();
           } catch (err) {
             showError('⚠️ 연결 상태를 화면에 표시하지 못했습니다: ', err);
           }
+          /* 여기까지 와도 세션이 늦게 복원될 수 있으니 계속 지켜본다 */
+          try { watchAuthRestore(adapter, engine); } catch (e) {}
           return true;
         }, function (err) {
           showError('⚠️ 역할 확인에 실패했습니다: ', err);
+          try { watchAuthRestore(adapter, engine); } catch (e) {}
           return true;
         });
       } catch (err) {
@@ -1250,7 +1293,19 @@
       if (!ok && tries < 60) { setTimeout(ready, 150); return; }
       Promise.resolve(S.migrating).then(function () {
         if (S.cfg.mode === 'mock') { connectMock(); }
-        else if (S.cfg.mode === 'firestore') { connectFirestore(); }
+        else if (S.cfg.mode === 'firestore') {
+          /* 앱을 껐다 켜도 저장된 firebaseConfig 로 혼자 다시 연결한다.
+             로그인 세션은 어댑터가 복원을 기다렸다가(최대 4초) roles/{uid} 로 역할을 확인하므로
+             손대지 않아도 🟢 연결 상태로 돌아온다. */
+          var v = FB.validateConfig(S.cfg.config || {});
+          if (v.ok) { connectFirestore(); }
+          else {
+            S.msg = '⚠️ 저장된 firebaseConfig 를 확인해 주세요: ' + v.errors.join(' / ') +
+              ' — 「설정 저장」을 눌러 다시 연결할 수 있습니다.';
+            S.msgKind = 'warn';
+            renderAll();
+          }
+        }
         else { renderAll(); }
       });
       if (S.timer) { clearInterval(S.timer); }

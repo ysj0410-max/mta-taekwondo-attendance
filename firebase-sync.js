@@ -2677,6 +2677,11 @@
     var loadModules = (typeof opts.loadModules === 'function') ? opts.loadModules : loadFirebaseModules;
     /* 연결 테스트가 오프라인·권한 지연으로 무한 대기하지 않게 하는 시간(기본 8초) */
     var testTimeoutMs = Number(opts.testTimeoutMs) > 0 ? Number(opts.testTimeoutMs) : 8000;
+    /* 앱을 껐다 켰을 때 저장된 로그인 세션(IndexedDB)이 복원되기를 기다리는 시간(기본 4초).
+       복원은 비동기라서, 기다리지 않으면 connect() 직후 auth.currentUser 가 아직 null 이다. */
+    var authReadyTimeoutMs = Number(opts.authReadyTimeoutMs) > 0 ? Number(opts.authReadyTimeoutMs) : 4000;
+    /* 저장된 로그인 세션이(이미 있거나 복원되어) 확인됐는지 — 화면 표시용 */
+    var authRestored = false;
     /* 역할을 확인하기 전에는 가장 제한적인 쪽(태블릿 구독)으로 시작한다 */
     var role = opts.role === 'admin' ? 'admin' : 'tablet';
     var unsubs = [];
@@ -2706,8 +2711,67 @@
           db = fs.getFirestore(app);
         }
         auth = m.auth.getAuth(app);
-        return api;
+        /* 앱을 다시 켜면 SDK 가 저장된 로그인 세션을 비동기로 복원한다.
+           여기서 기다리지 않으면 바로 뒤의 roles/{uid} 확인이 currentUser=null 을 읽어
+           로그인이 남아 있어도 「⚪ 로컬 · 역할 미확인」으로 굳는다. */
+        return waitAuthRestore().then(function () { return api; });
       });
+    }
+
+    /* 저장된 로그인 세션 복원을 기다린다 — 없거나 알림이 오지 않으면 지금 상태로 진행한다 */
+    function waitAuthRestore() {
+      if (!auth) { return Promise.resolve(false); }
+      if (auth.currentUser) { authRestored = true; return Promise.resolve(true); }
+      return new Promise(function (resolve) {
+        var settled = false;
+        var timer = null;
+        function finish(ok) {
+          if (settled) { return; }
+          settled = true;
+          if (timer) { try { clearTimeout(timer); } catch (e) {} timer = null; }
+          authRestored = !!ok;
+          resolve(!!ok);
+        }
+        /* 복원 알림이 끝내 오지 않는 환경(사생활 보호 모드·모의 객체)에서도 앱 시작을 4초 넘게 잡아두지 않는다 */
+        try { timer = setTimeout(function () { finish(!!(auth && auth.currentUser)); }, authReadyTimeoutMs); } catch (e) { timer = null; }
+        var modsAuth = (mods && mods.auth) || {};
+        if (typeof auth.authStateReady === 'function') {
+          try {
+            auth.authStateReady().then(function () { finish(!!auth.currentUser); },
+              function () { finish(!!auth.currentUser); });
+            return;
+          } catch (e) { /* 아래 폴백으로 */ }
+        }
+        if (typeof modsAuth.onAuthStateChanged === 'function') {
+          var un = null;
+          try {
+            un = modsAuth.onAuthStateChanged(auth, function () {
+              try { if (un) { un(); } } catch (e) {}
+              un = null;
+              finish(!!auth.currentUser);
+            });
+            return;
+          } catch (e) { /* 폴백 없음 — 위 타이머가 정리한다 */ }
+        }
+        /* 세션 복원을 알려 주는 통로가 없는 모의 객체 — 지금 상태로 진행 */
+        finish(!!auth.currentUser);
+      });
+    }
+
+    /* 앱을 껐다 켜도 로그인이 남아 있게 영속성(localStorage/IndexedDB)을 보장한다.
+       실패해도 로그인 자체는 막지 않는다(세션만 남지 않을 뿐이다). */
+    function ensurePersistence() {
+      var modsAuth = (mods && mods.auth) || {};
+      if (!auth || typeof modsAuth.setPersistence !== 'function') { return Promise.resolve(false); }
+      var kind = null;
+      try {
+        if (modsAuth.browserLocalPersistence) { kind = modsAuth.browserLocalPersistence; }
+        else if (modsAuth.indexedDBLocalPersistence) { kind = modsAuth.indexedDBLocalPersistence; }
+      } catch (e) { kind = null; }
+      if (!kind) { return Promise.resolve(false); }
+      try {
+        return Promise.resolve(modsAuth.setPersistence(auth, kind)).then(function () { return true; }, function () { return false; });
+      } catch (e) { return Promise.resolve(false); }
     }
 
     var api = {
@@ -2725,7 +2789,11 @@
         if (!mods || !mods.auth || typeof mods.auth.signInWithEmailAndPassword !== 'function') {
           return Promise.reject(new Error('Firebase Auth 모듈이 준비되지 않았습니다 — 연결을 다시 눌러 주세요'));
         }
-        return mods.auth.signInWithEmailAndPassword(auth, email, pw).then(function (cred) {
+        /* 로그인 전에 영속성을 먼저 잡아 둔다 — 앱을 껐다 켜도 세션이 남는다 */
+        return ensurePersistence().then(function () {
+          return mods.auth.signInWithEmailAndPassword(auth, email, pw);
+        }).then(function (cred) {
+          authRestored = true;
           return { uid: cred.user.uid, email: cred.user.email || '' };
         });
       },
@@ -2733,7 +2801,12 @@
         if (!mods || !mods.auth || typeof mods.auth.signInAnonymously !== 'function') {
           return Promise.reject(new Error('Firebase Auth 모듈이 준비되지 않았습니다 — 연결을 다시 눌러 주세요'));
         }
-        return mods.auth.signInAnonymously(auth).then(function (cred) { return { uid: cred.user.uid }; });
+        return ensurePersistence().then(function () {
+          return mods.auth.signInAnonymously(auth);
+        }).then(function (cred) {
+          authRestored = true;
+          return { uid: cred.user.uid };
+        });
       },
       signOut: function () {
         if (!mods || !mods.auth || typeof mods.auth.signOut !== 'function') {
@@ -2743,6 +2816,25 @@
       },
       currentUser: function () { return auth && auth.currentUser ? { uid: auth.currentUser.uid, email: auth.currentUser.email || '', anonymous: !!auth.currentUser.isAnonymous } : null; },
       uid: function () { return auth && auth.currentUser ? auth.currentUser.uid : ''; },
+      /* connect() 가 세션 복원을 기다렸는지 — 화면·테스트 확인용 */
+      authRestored: function () { return authRestored; },
+      /* 세션이 뒤늦게 복원되거나 로그아웃될 때 화면이 따라갈 수 있게 알린다.
+         반환값은 구독 해제 함수(지원하지 않는 환경이면 아무것도 하지 않는 함수) */
+      onAuthChange: function (cb) {
+        var modsAuth = (mods && mods.auth) || {};
+        if (typeof cb !== 'function' || !auth || typeof modsAuth.onAuthStateChanged !== 'function') {
+          return function () {};
+        }
+        var un = null;
+        try {
+          un = modsAuth.onAuthStateChanged(auth, function (user) {
+            try {
+              cb(user ? { uid: user.uid, email: user.email || '', anonymous: !!user.isAnonymous } : null);
+            } catch (e) {}
+          });
+        } catch (e) { return function () {}; }
+        return function () { try { if (un) { un(); } } catch (e) {} };
+      },
       writeBatch: function (ops) {
         var fs = mods.firestore;
         var batch = fs.writeBatch(db);
