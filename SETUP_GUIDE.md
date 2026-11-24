@@ -125,7 +125,7 @@
 | `roles` 권한 문서 | 자기 것 읽기, 만들기·수정 | 자기 것 읽기만 |
 | 로그인하지 않은 사람 | 전부 차단 | 전부 차단 |
 
-- `kioskStudents` 문서에는 **`phone`·`birthDate`·`tconId`·`note`·`tuitionDay` 등 개인정보 칸이 들어가면 규칙이 저장 자체를 거부**합니다(관리자 기기가 실수로 보내도 막힘). v3 부터는 한 걸음 더 나가서 **정해진 칸 목록(`id`·`name`·`division`·`course`·`belt`·`status` + 엔진 메타) 밖의 칸이 하나라도 있으면 거부**합니다.
+- `kioskStudents` 문서에는 **`phone`·`motherPhone`·`fatherPhone`·`smsTargets`·`motherName`·`fatherName`·`address`·`birthDate`·`tconId`·`note`·`tuitionDay` 등 개인정보 칸이 들어가면 규칙이 저장 자체를 거부**합니다(관리자 기기가 실수로 보내도 막힘). v3 부터는 한 걸음 더 나가서 **정해진 칸 목록(`id`·`name`·`division`·`course`·`belt`·`status` + 엔진 메타) 밖의 칸이 하나라도 있으면 거부**합니다.
 - **출결 문서 칸 제한**: `date`·`studentId`·`kind`·`time`·`eventId`·`source`·`manual`·`deviceId` + 엔진 메타 4개만 허용합니다. 임의의 칸을 끼워 넣으면 거부됩니다.
 - **태블릿의 출결 만들기 3중 검사**: ① `kind`는 `in`/`out`, `date`는 `YYYY-MM-DD`, **`time`은 실제 시계 시각 `00:00`~`23:59`** ② 그 도장에 **실제로 있는 원생(`kioskStudents` 문서가 있는 원생)** 이어야 함 ③ 문서 ID가 **`{날짜}_{원생ID}_{in|out}` 와 정확히 같아야** 함 → 없는 원생 ID나 엄뚱한 문서 ID 로는 출결을 위조할 수 없습니다.
 - **출결 시간은 `00:00`~`23:59` 만** 허용합니다(v4). 예전에는 `24:00`·`29:59` 처럼 없는 시각도 통과했는데, 이제 규칙이 거부합니다. 시간은 `09:05` 처럼 **두 자리 시·두 자리 분**이어야 합니다.
