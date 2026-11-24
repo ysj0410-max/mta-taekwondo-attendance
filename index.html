@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=33"></script>
-<script src="firebase-sync-ui.js?v=33"></script>
+<script src="firebase-sync.js?v=34"></script>
+<script src="firebase-sync-ui.js?v=34"></script>
 <title>경희대MTA태권도 · AI 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -349,6 +349,19 @@
   .sib-check{display:flex; align-items:center; gap:8px; height:42px; border:1.5px solid #dde3ee; border-radius:11px; padding:0 12px; background:#fbfcfe; font-size:12.5px; font-weight:800; color:#33405a; cursor:pointer; user-select:none; white-space:nowrap}
   .sib-check input{width:17px; height:17px; accent-color:var(--navy); margin:0; flex:0 0 auto}
   .sib-check.on{border-color:#8aa4ff; background:#f2f6ff; color:#1b2a5b}
+  /* 📞 부·모 보호자 — 문자 발송 대상 체크 · 명단의 번호 줄 */
+  .sms-target{display:flex; align-items:center; gap:8px; height:42px}
+  .sms-tg-ck{display:flex; align-items:center; gap:7px; height:42px; border:1.5px solid #dde3ee; border-radius:11px; padding:0 16px; background:#fbfcfe; font-size:12.5px; font-weight:800; color:#33405a; cursor:pointer; user-select:none}
+  .sms-tg-ck input{width:17px; height:17px; accent-color:var(--navy); margin:0}
+  .sms-tg-ck.on{border-color:#8aa4ff; background:#f2f6ff; color:#1b2a5b}
+  .ph-cell{display:flex; flex-direction:column; gap:2px; line-height:1.35; font-variant-numeric:tabular-nums}
+  .ph-line{display:flex; align-items:center; gap:5px; white-space:nowrap}
+  .ph-line i{font-style:normal; font-weight:900; font-size:10px; color:#8a94a6; background:#f1f4f9; border-radius:6px; padding:0 4px; line-height:15px}
+  .ph-line.on i{color:#155e9c; background:#e8f4ff}
+  .ph-line.off{color:#98a2b3}
+  .ph-none{color:#98a2b3}
+  .chip.sms-tg{background:#eef4ff; color:#1d4ed8; border:1px solid #d5e2fb; font-size:10px; padding:1px 6px; align-self:flex-start}
+  .tu-parent{font-size:11.5px; font-weight:800; color:#475467}
   .fee-calc{margin:0 0 11px; font-size:12px; font-weight:800; color:#155e9c; background:#f2f7ff; border:1px solid #dfe9fb; border-radius:11px; padding:9px 12px; line-height:1.55}
   .fee-calc b{color:#1b2a5b}
   .fee-calc .dc{color:#0b7a55}
@@ -1570,7 +1583,7 @@
                 <button class="pchip active" data-sfilter="active" id="sf-active">재원생</button>
                 <button class="pchip" data-sfilter="paused" id="sf-paused">휴관생</button>
                 <button class="pchip" data-sfilter="all" id="sf-all">전체</button>
-                <input class="input" id="stu-q" type="search" placeholder="🔍 이름·초성·전화 뒷자리 검색" autocomplete="off" spellcheck="false" aria-label="재원생 명단 이름·초성·전화 뒷자리 검색">
+                <input class="input" id="stu-q" type="search" placeholder="🔍 이름·초성·전화·부모 성함" autocomplete="off" spellcheck="false" aria-label="재원생 명단 이름·초성·전화·부모 성함 검색">
                 <div class="spacer"></div>
                 <select class="input mon-select" id="stu-sort" aria-label="원생 명단 정렬 방식" title="명단 정렬 — 띠는 「띠 체계 설정」 순서대로">
                   <option value="name">이름순 (가나다)</option>
@@ -1585,7 +1598,7 @@
               <div class="stu-tablehint" id="stu-tablehint">← → 옆으로 밀면 특이사항·비고까지 볼 수 있어요</div>
               <div class="tablewrap stu-tablewrap">
                 <table class="tb stu-tb">
-                  <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>보호자</th><th>생년월일</th><th>티콘 ID</th><th>첫 등록일</th><th>원비 날짜</th><th>특이사항 · 비고</th><th>얼굴</th><th style="width:150px"></th></tr></thead>
+                  <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>부 · 모</th><th>생년월일</th><th>티콘 ID</th><th>첫 등록일</th><th>원비 날짜</th><th>특이사항 · 비고</th><th>얼굴</th><th style="width:150px"></th></tr></thead>
                   <tbody id="stu-table"></tbody>
                 </table>
               </div>
@@ -1599,8 +1612,22 @@
                   <input type="hidden" id="edit-id" value="">
                   <div class="row2">
                     <div class="field"><label>이름</label><input class="input" id="f-name" placeholder="예: 김민준"></div>
-                    <div class="field"><label>보호자 연락처</label><input class="input" id="f-phone" placeholder="010-1234-5678" inputmode="tel"></div>
+                    <div class="field"><label>모 전화번호</label><input class="input" id="f-phone" placeholder="010-1234-5678" inputmode="tel" aria-label="모 전화번호"></div>
                   </div>
+                  <div class="row2">
+                    <div class="field"><label>모 성함 <span style="font-weight:600;color:#8a94a6">(원비 입금자명 확인)</span></label><input class="input" id="f-mname" maxlength="20" placeholder="예: 허윤정" autocomplete="off" spellcheck="false" aria-label="모 성함"></div>
+                    <div class="field"><label>부 성함</label><input class="input" id="f-fname" maxlength="20" placeholder="예: 고성민" autocomplete="off" spellcheck="false" aria-label="부 성함"></div>
+                  </div>
+                  <div class="row2">
+                    <div class="field"><label>부 전화번호 <span style="font-weight:600;color:#8a94a6">(없으면 비워 두세요)</span></label><input class="input" id="f-fphone" placeholder="010-5678-1234" inputmode="tel" aria-label="부 전화번호"></div>
+                    <div class="field"><label>문자 발송 대상</label>
+                      <div class="sms-target" id="sms-target-wrap" role="group" aria-label="문자 발송 대상">
+                        <label class="sms-tg-ck on" id="tg-mother-wrap"><input type="checkbox" id="f-sms-mother" checked> <span>모</span></label>
+                        <label class="sms-tg-ck" id="tg-father-wrap"><input type="checkbox" id="f-sms-father"> <span>부</span></label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="field"><label>주소 <span style="font-weight:600;color:#8a94a6">(우편·방문 안내용)</span></label><input class="input" id="f-addr" maxlength="120" placeholder="예: 그린스퀘어 102동 2403호" autocomplete="off" aria-label="주소"></div>
                   <div class="row3">
                     <div class="field"><label>부서</label>
                       <select class="input" id="f-division">
@@ -2263,7 +2290,7 @@
             </div>
             <div class="spacer"></div>
             <select class="input mon-select" id="tu-class" aria-label="부서 필터"><option value="all">전체 부서</option></select>
-            <input class="input mon-search" id="tu-search" placeholder="🔍 이름·초성 검색" autocomplete="off" aria-label="관원 이름 검색">
+            <input class="input mon-search" id="tu-search" placeholder="🔍 이름·초성·부모 성함" autocomplete="off" aria-label="관원 이름·부모 성함 검색">
             <select class="input mon-select" id="tu-sort" aria-label="정렬 방식">
               <option value="name">이름순</option>
               <option value="tuitionDay">원비 날짜순 (1일~31일)</option>
@@ -3440,6 +3467,117 @@
     return String(v == null ? '' : v).trim();
   }
 
+  /* =========================================================
+     부·모 보호자 정보 — 전화 2개(모·부) · 문자 발송 대상 · 성함 · 주소
+     · 예전 데이터는 보호자 번호가 phone 하나뿐이다 → 모 번호로 옮기고 모에게만 보낸다.
+     · phone 은 하위 호환용 대표 번호로 계속 맞춰 둔다(체크된 첫 번호 → 모 → 부).
+     ========================================================= */
+  function normalizeSmsTargets(v) {
+    var t = (v && typeof v === 'object') ? v : {};
+    return { mother: t.mother !== false, father: t.father === true };
+  }
+  /* 예전 데이터(phone 하나)면 모 번호로 본다 */
+  function parentPhoneFrom(s, who) {
+    if (!s) { return ''; }
+    var split = (s.motherPhone !== undefined || s.fatherPhone !== undefined);
+    if (!split) { return who === 'mother' ? normalizePhone(String(s.phone || '').trim()) : ''; }
+    return normalizePhone(String((who === 'father' ? s.fatherPhone : s.motherPhone) || '').trim());
+  }
+  function smsTargetsOf(s) {
+    if (s && s.smsTargets && typeof s.smsTargets === 'object') { return normalizeSmsTargets(s.smsTargets); }
+    var m = parentPhoneFrom(s, 'mother'), f = parentPhoneFrom(s, 'father');
+    var hm = !!m, hf = !!f;
+    return { mother: hm || !hf, father: !hm && hf };
+  }
+  /* 문자를 보낼 번호 — 체크된 모·부 번호만, 같은 번호는 한 번만 */
+  function smsPhonesOf(s) {
+    if (!s) { return []; }
+    var t = smsTargetsOf(s);
+    var out = [], seen = {};
+    var push = function (v) {
+      var p = normalizePhone(String(v == null ? '' : v).trim());
+      var d = digitsOnly(p);
+      if (!d || d.length < 4 || seen[d]) { return; }
+      seen[d] = true;
+      out.push(p);
+    };
+    if (t.mother) { push(parentPhoneFrom(s, 'mother')); }
+    if (t.father) { push(parentPhoneFrom(s, 'father')); }
+    return out;
+  }
+  /* 검색·매칭에 쓰는 모든 번호 (체크와 상관없이 모·부·대표) */
+  function studentPhonesAll(s) {
+    if (!s) { return []; }
+    var out = [], seen = {};
+    [parentPhoneFrom(s, 'mother'), parentPhoneFrom(s, 'father'), s.phone].forEach(function (v) {
+      var p = normalizePhone(String(v == null ? '' : v).trim());
+      var d = digitsOnly(p);
+      if (!d || d.length < 4 || seen[d]) { return; }
+      seen[d] = true;
+      out.push(p);
+    });
+    return out;
+  }
+  /* 하위 호환용 대표 번호(phone)를 다시 맞춘다 — 체크된 첫 번호 → 모 → 부 */
+  function syncPrimaryPhone(s) {
+    if (!s) { return ''; }
+    var split = (s.motherPhone !== undefined || s.fatherPhone !== undefined);
+    var list = smsPhonesOf(s);
+    var p = list.length ? list[0] : (parentPhoneFrom(s, 'mother') || parentPhoneFrom(s, 'father'));
+    /* 모·부 칸이 있는 원생만 다시 맞춘다 — 예전 모양(phone 하나)은 그대로 둔다 */
+    if (p || split) { s.phone = p || ''; }
+    return s.phone;
+  }
+  /* 예전 모양(phone 하나) 원생 객체에 모·부 번호·발송 대상 칸을 만들어 준다 */
+  function ensureParentPhones(s) {
+    if (!s) { return s; }
+    if (s.motherPhone === undefined && s.fatherPhone === undefined) {
+      s.motherPhone = normalizePhone(String(s.phone || '').trim());
+      s.fatherPhone = '';
+    }
+    if (!s.smsTargets || typeof s.smsTargets !== 'object') { s.smsTargets = smsTargetsOf(s); }
+    return s;
+  }
+  function smsTargetLabel(s) {    var t = smsTargetsOf(s);
+    if (t.mother && t.father) { return '모·부'; }
+    if (t.father) { return '부'; }
+    return t.mother ? '모' : '';
+  }
+  function normalizeParentName(v) {
+    return String(v == null ? '' : v).trim().replace(/\s+/g, ' ').slice(0, 20);
+  }
+  function normalizeAddress(v) {
+    return String(v == null ? '' : v).trim().replace(/\s+/g, ' ').slice(0, 120);
+  }
+  function parentNameOf(s, who) {
+    if (!s) { return ''; }
+    return normalizeParentName(who === 'father' ? s.fatherName : s.motherName);
+  }
+  function addressOf(s) { return normalizeAddress(s && s.address); }
+  function parentNamesText(s) {
+    var m = parentNameOf(s, 'mother'), f = parentNameOf(s, 'father');
+    var out = [];
+    if (m) { out.push('모 ' + m); }
+    if (f) { out.push('부 ' + f); }
+    return out.join(' · ');
+  }
+  /* 명단·표에 보여 줄 모·부 번호 + 문자 발송 대상 배지 */
+  function phonesCellHtml(s) {
+    var t = smsTargetsOf(s);
+    var lines = [];
+    var m = parentPhoneFrom(s, 'mother'), f = parentPhoneFrom(s, 'father');
+    if (m) {
+      lines.push('<span class="ph-line' + (t.mother ? ' on' : ' off') + '" title="모 전화' + (t.mother ? ' · 문자 발송' : ' · 문자 안 보냄') + '"><i>모</i>' + esc(maskPhone(m)) + '</span>');
+    }
+    if (f) {
+      lines.push('<span class="ph-line' + (t.father ? ' on' : ' off') + '" title="부 전화' + (t.father ? ' · 문자 발송' : ' · 문자 안 보냄') + '"><i>부</i>' + esc(maskPhone(f)) + '</span>');
+    }
+    var lab = smsTargetLabel(s);
+    if (!lines.length) { return '<span class="ph-none">번호 없음</span>'; }
+    return '<div class="ph-cell">' + lines.join('') +
+      (lab ? '<span class="chip sms-tg" title="문자 발송 대상">' + esc(lab) + '</span>' : '') + '</div>';
+  }
+
   var CHOSUNG = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
   var CHOSUNG_SET = CHOSUNG.join('');
   function toChosung(str) {
@@ -3469,7 +3607,8 @@
     if (isChosungQuery(q)) {
       if (toChosung(name).indexOf(q) !== -1) { return true; }
     }
-    var hay = [divisionOf(student), courseLabel(student.division, student.course), String(student.className || '')]
+    var hay = [divisionOf(student), courseLabel(student.division, student.course), String(student.className || ''),
+      parentNameOf(student, 'mother'), parentNameOf(student, 'father')]
       .join(' ').replace(/\s+/g, '');
     if (hay.indexOf(q) !== -1) { return true; }
     return false;
@@ -3481,17 +3620,22 @@
     if (matchSearch(student, q)) { return true; }
     var qd = digitsOnly(q);
     if (qd && qd.length >= 3) {
-      var rawPhone = String(student.phone || '');
-      var pd = digitsOnly(rawPhone);
-      /* 뒷자리 우선 — 010-2345-6789를 「6789」·「2345-6789」·전체 번호 어느 쪽으로 쳐도 찾는다 */
-      if (pd.length >= qd.length && pd.slice(pd.length - qd.length) === qd) { return true; }
-      if (qd.length >= 4) {
-        /* 010-2345-6789에서 기억나는 가운데 묶음(2345)으로도 */
-        if (rawPhone.split(/\D+/).indexOf(qd) !== -1) { return true; }
-        if (qd.length >= 7 && pd.indexOf(qd) !== -1) { return true; }
+      var phones = studentPhonesAll(student);
+      for (var pi = 0; pi < phones.length; pi++) {
+        var rawPhone = String(phones[pi] || '');
+        var pd = digitsOnly(rawPhone);
+        /* 뒷자리 우선 — 010-2345-6789를 「6789」·「2345-6789」·전체 번호 어느 쪽으로 쳐도 찾는다 */
+        if (pd.length >= qd.length && pd.slice(pd.length - qd.length) === qd) { return true; }
+        if (qd.length >= 4) {
+          /* 010-2345-6789에서 기억나는 가운데 묶음(2345)으로도 */
+          if (rawPhone.split(/\D+/).indexOf(qd) !== -1) { return true; }
+          if (qd.length >= 7 && pd.indexOf(qd) !== -1) { return true; }
+        }
       }
     }
     var lq = q.toLowerCase();
+    var addr = addressOf(student).replace(/\s+/g, '').toLowerCase();
+    if (addr && addr.indexOf(lq) !== -1) { return true; }
     var tcon = String(tconOf(student) || '').replace(/\s+/g, '').toLowerCase();
     if (tcon && tcon.indexOf(lq) !== -1) { return true; }
     var note = String(noteOf(student) || '').replace(/\s+/g, '').toLowerCase();
@@ -3561,6 +3705,13 @@
           s.siblingDiscount === 'on' || s.siblingDiscount === 'O'),
         belt: String(s.belt || '').trim() || '흰띠',
         phone: String(s.phone || '').trim(),
+        // 부·모 보호자 — 예전 데이터(phone 하나)는 모 번호로 옮기고 모에게만 보낸다
+        motherPhone: parentPhoneFrom(s, 'mother'),
+        fatherPhone: parentPhoneFrom(s, 'father'),
+        motherName: normalizeParentName(s.motherName || s.mother || s.모성함 || ''),
+        fatherName: normalizeParentName(s.fatherName || s.father || s.부성함 || ''),
+        smsTargets: smsTargetsOf(s),
+        address: normalizeAddress(s.address || s.addr || s.주소 || ''),
         attendCount: Math.max(0, parseInt(s.attendCount, 10) || 0),
         lastAttendanceDate: isDateKey(s.lastAttendanceDate) ? String(s.lastAttendanceDate) : '',
         grade: String(s.grade || '').trim(),
@@ -3589,6 +3740,9 @@
         })()
       };
     }).filter(function (s) { return s.name; });
+
+    /* 하위 호환용 대표 번호(phone)를 체크된 모·부 번호에 맞춰 둔다 */
+    app.students.forEach(function (s) { syncPrimaryPhone(s); });
 
     /* 예전 데모 명단(6명)을 손대지 않고 그대로 두고 있으면, 새 데모(부서·수업·형제할인)로 한 번 맞춰 준다.
        이름·반이 그대로이고 수업·원비를 직접 넣지 않은 경우만 건드린다. */
@@ -4560,32 +4714,44 @@
     });
   }
 
+  /* 문자 한 건을 발송 로그에 남긴다.
+     모·부 둘 다 발송 대상이면 번호마다 로그를 하나씩 만들고(각각 재전송·상태 관리),
+     부르는 쪽이 쓰는 대표 항목(첫 번호)을 돌려준다. */
   function addLog(student, mode, timeStr, opts) {
     opts = opts || {};
     var now = new Date();
-    var entry = {
-      id: uid('log'),
-      at: now.toISOString(),
-      date: todayKey(now),
-      studentId: student.id,
-      name: student.name,
-      phone: student.phone || '',
-      mode: mode,
-      time: timeStr,
-      dojo: app.settings.dojoName,
-      text: opts.text || buildMessage(student, mode, timeStr),
-      kind: opts.kind || 'attendance',
-      status: opts.test ? 'test' : 'queued',
-      statusNote: opts.test ? '테스트 발송' : ''
-    };
-    if (typeof opts.onStatus === 'function') { entry.onStatus = opts.onStatus; }
-    app.logs.unshift(entry);
+    var phones = smsPhonesOf(student);
+    if (!phones.length) { phones = ['']; }
+    var first = null;
+    phones.forEach(function (phone, idx) {
+      var entry = {
+        id: uid('log'),
+        at: now.toISOString(),
+        date: todayKey(now),
+        studentId: student.id,
+        name: student.name,
+        phone: phone,
+        mode: mode,
+        time: timeStr,
+        dojo: app.settings.dojoName,
+        text: opts.text || buildMessage(student, mode, timeStr),
+        kind: opts.kind || 'attendance',
+        status: opts.test ? 'test' : 'queued',
+        statusNote: opts.test ? '테스트 발송' : ''
+      };
+      if (idx === 0) {
+        /* 배너·진행 표시는 대표 항목만 따라간다 */
+        if (typeof opts.onStatus === 'function') { entry.onStatus = opts.onStatus; }
+        first = entry;
+      }
+      app.logs.unshift(entry);
+      enqueueSms(entry);
+    });
     app.logs = app.logs.slice(0, 200);
     saveLogs();
     renderLog();
     renderAdminLog();
-    enqueueSms(entry);
-    return entry;
+    return first;
   }
 
   function logVisible(l) {
@@ -4728,7 +4894,7 @@
     var pin = app.pin;
     if (pin.length !== 4) { return; }
     var matches = activeStudents().filter(function (s) {
-      return digitsOnly(s.phone).slice(-4) === pin;
+      return studentPhonesAll(s).some(function (p) { return digitsOnly(p).slice(-4) === pin; });
     }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); });
     var listEl = el('cand-list');
 
@@ -5854,7 +6020,7 @@
         (paused ? ' <span class="chip pause">휴관</span>' : '') + '</td>' +
         '<td><div class="sub">' + esc(studentLabel(s)) + '</div>' + siblingBadge(s) + '</td>' +
         '<td><span class="chip belt-chip-cell">' + beltSwatchHtml(s.belt) + esc(s.belt || '-') + (studentGrade(s) ? ' · ' + esc(studentGrade(s)) : '') + '</span></td>' +
-        '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
+        '<td class="sub">' + phonesCellHtml(s) + '</td>' +
         '<td><input class="input mini stu-tbirth" type="date" value="' + esc(birthOf(s)) + '"' +
         ' data-stubirth="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 생년월일') + '"' +
         ' title="생년월일 (국기원 심사접수용)"></td>' +
@@ -6036,11 +6202,29 @@
     box.innerHTML = calcHtml;
   }
 
+  function syncSmsTargetUI() {
+    var m = !!(el('f-sms-mother') && el('f-sms-mother').checked);
+    var f = !!(el('f-sms-father') && el('f-sms-father').checked);
+    if (el('tg-mother-wrap')) { el('tg-mother-wrap').classList.toggle('on', m); }
+    if (el('tg-father-wrap')) { el('tg-father-wrap').classList.toggle('on', f); }
+  }
+  function setSmsTargetInputs(targets) {
+    var t = normalizeSmsTargets(targets);
+    if (el('f-sms-mother')) { el('f-sms-mother').checked = !!t.mother; }
+    if (el('f-sms-father')) { el('f-sms-father').checked = !!t.father; }
+    syncSmsTargetUI();
+  }
+
   function resetStudentForm() {
     app.editingId = '';
     el('edit-id').value = '';
     el('f-name').value = '';
     el('f-phone').value = '';
+    if (el('f-fphone')) { el('f-fphone').value = ''; }
+    if (el('f-mname')) { el('f-mname').value = ''; }
+    if (el('f-fname')) { el('f-fname').value = ''; }
+    if (el('f-addr')) { el('f-addr').value = ''; }
+    setSmsTargetInputs({ mother: true, father: false });
     if (el('f-division')) { el('f-division').value = '초등부'; }
     if (el('f-course')) { el('f-course').value = ''; }
     if (el('f-sibling')) { el('f-sibling').checked = false; }
@@ -6068,7 +6252,12 @@
     app.editingId = id;
     el('edit-id').value = id;
     el('f-name').value = s.name;
-    el('f-phone').value = s.phone;
+    el('f-phone').value = parentPhoneFrom(s, 'mother');
+    if (el('f-fphone')) { el('f-fphone').value = parentPhoneFrom(s, 'father'); }
+    if (el('f-mname')) { el('f-mname').value = parentNameOf(s, 'mother'); }
+    if (el('f-fname')) { el('f-fname').value = parentNameOf(s, 'father'); }
+    if (el('f-addr')) { el('f-addr').value = addressOf(s); }
+    setSmsTargetInputs(smsTargetsOf(s));
     if (el('f-division')) { el('f-division').value = divisionOf(s); }
     if (el('f-course')) { el('f-course').value = courseOf(s); }
     if (el('f-sibling')) { el('f-sibling').checked = siblingOf(s); }
@@ -6094,7 +6283,19 @@
 
   function saveStudent() {
     var name = el('f-name').value.trim();
-    var phone = normalizePhone(el('f-phone').value.trim());
+    var motherPhone = normalizePhone(el('f-phone') ? el('f-phone').value.trim() : '');
+    var fatherPhone = normalizePhone(el('f-fphone') ? el('f-fphone').value.trim() : '');
+    var motherName = normalizeParentName(el('f-mname') ? el('f-mname').value : '');
+    var fatherName = normalizeParentName(el('f-fname') ? el('f-fname').value : '');
+    var address = normalizeAddress(el('f-addr') ? el('f-addr').value : '');
+    var smsTargets = {
+      mother: !!(el('f-sms-mother') && el('f-sms-mother').checked),
+      father: !!(el('f-sms-father') && el('f-sms-father').checked)
+    };
+    /* 둘 다 꺼 두면 문자가 아예 안 나가므로, 비워 두면 모에게 보내는 기본값으로 돌린다 */
+    if (!smsTargets.mother && !smsTargets.father) { smsTargets.mother = true; }
+    var targetPhones = smsPhonesOf({ motherPhone: motherPhone, fatherPhone: fatherPhone, smsTargets: smsTargets });
+    var phone = targetPhones.length ? targetPhones[0] : (motherPhone || fatherPhone);
     var division = normalizeDivision(el('f-division') ? el('f-division').value : '') || '초등부';
     var course = normalizeCourse(el('f-course') ? el('f-course').value : '');
     var siblingDiscount = !!(el('f-sibling') && el('f-sibling').checked);
@@ -6117,7 +6318,10 @@
       monthlyFee = feeVal;
     }
     if (!name) { toast('관원 이름을 입력해 주세요.'); el('f-name').focus(); return; }
-    if (phone && digitsOnly(phone).length < 4) { toast('보호자 연락처를 다시 확인해 주세요.'); return; }
+    if ((motherPhone && digitsOnly(motherPhone).length < 4) || (fatherPhone && digitsOnly(fatherPhone).length < 4)) {
+      toast('모·부 전화번호를 다시 확인해 주세요.');
+      return;
+    }
 
     var status = (el('f-status') && el('f-status').value === 'paused') ? 'paused' : 'active';
     var firstRegRaw = String(el('f-firstreg') ? el('f-firstreg').value : '').trim();
@@ -6144,6 +6348,11 @@
       if (s) {
         var prevTuitionDay = tuitionDayOf(s);
         s.name = name; s.phone = phone; s.belt = belt;
+        s.motherPhone = motherPhone; s.fatherPhone = fatherPhone;
+        s.motherName = motherName; s.fatherName = fatherName;
+        s.smsTargets = { mother: !!smsTargets.mother, father: !!smsTargets.father };
+        s.address = address;
+        syncPrimaryPhone(s);
         s.className = ''; s.division = division; s.course = course; s.siblingDiscount = siblingDiscount;
         s.grade = grade; s.poomDan = poomDan;
         s.monthlyFee = monthlyFee;
@@ -6162,6 +6371,10 @@
     } else {
       var fresh = {
         id: uid('stu'), name: name, phone: phone, className: '', belt: belt,
+        motherPhone: motherPhone, fatherPhone: fatherPhone,
+        motherName: motherName, fatherName: fatherName,
+        smsTargets: { mother: !!smsTargets.mother, father: !!smsTargets.father },
+        address: address,
         division: division, course: course, siblingDiscount: siblingDiscount, lastAttendanceDate: '',
         attendCount: 0, grade: grade, poomDan: poomDan,
         targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '', monthlyFee: monthlyFee,
@@ -8638,10 +8851,14 @@
     if (!d) { return list[0]; }
     var byFull = null, byLast = null;
     for (var i = 0; i < list.length; i++) {
-      var sd = attPhoneDigits(list[i].phone);
-      if (!sd) { continue; }
-      if (sd === d) { byFull = list[i]; break; }
-      if (!byLast && sd.length >= 4 && d.length >= 4 && sd.slice(-4) === d.slice(-4)) { byLast = list[i]; }
+      var nums = studentPhonesAll(list[i]);
+      for (var k = 0; k < nums.length; k++) {
+        var sd = attPhoneDigits(nums[k]);
+        if (!sd) { continue; }
+        if (sd === d) { byFull = list[i]; break; }
+        if (!byLast && sd.length >= 4 && d.length >= 4 && sd.slice(-4) === d.slice(-4)) { byLast = list[i]; }
+      }
+      if (byFull) { break; }
     }
     return byFull || byLast || list[0];
   }
@@ -8983,6 +9200,8 @@
   function attCreateStudent(name, phone, paused) {
     var s = {
       id: uid('stu'), name: String(name).trim(), phone: String(phone || '').trim(), className: '', division: '초등부',
+      motherPhone: normalizePhone(String(phone || '').trim()), fatherPhone: '',
+      motherName: '', fatherName: '', address: '', smsTargets: { mother: true, father: false },
       course: '', siblingDiscount: false, belt: '흰띠', attendCount: 0, lastAttendanceDate: '',
       grade: '', poomDan: '없음', targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '',
       monthlyFee: null, status: paused ? 'paused' : 'active', pausedDate: '', pauseReason: ''
@@ -9670,8 +9889,9 @@
           (isPaused(s) ? '<span class="chip pause tub-paused" title="휴관생 — 이 달 원비 기록">🛌 휴관</span>' : '') +
           '<span class="belt-badge tub-belt">' + beltSwatchHtml(s.belt) + esc(s.belt || '미지정') + '</span></div>' +
           '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) +
-          '<button type="button" class="tu-year-btn" data-tyear="' + esc(s.id) + '" title="1년 납부 기록 보기" aria-label="1년 납부 기록 보기">1년</button></div></td>' +
-          '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) + '</div></td>' +
+          '<button type="button" class="tu-year-btn" data-tyear="' + esc(s.id) + '" title="1년 납부 기록 보기" aria-label="1년 납부 기록 보기">1년</button></div>' +
+          (parentNamesText(s) ? '<div class="sub tu-parent" title="원비 입금자명 확인용">' + esc(parentNamesText(s)) + '</div>' : '') +
+          '</td>' +
           '<td><select class="input mini tu-tday" data-ttday="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 원비 날짜') + '"' +
           ' title="원비 날짜(매달 원비 내는 날) · 원생 관리와 함께 바뀝니다">' + tuitionDayOptions(tuitionDayOf(s)) + '</select></td>' +
           '<td><input class="input mini tu-fee" type="number" min="0" step="1000" inputmode="numeric" value="' + base + '"' +
@@ -9764,7 +9984,7 @@
       if (!silent) { toast(s.name + ' 관원은 면제·휴원이라 원비 안내를 보내지 않았어요.'); }
       return 'skipped';
     }
-    if (!String(s.phone || '').trim()) {
+    if (!smsPhonesOf(s).length) {
       if (!silent) { toast(s.name + ' 관원은 보호자 연락처가 없어 문자를 보낼 수 없어요.'); }
       return 'skipped';
     }
@@ -9819,7 +10039,7 @@
     if (!ids.length) { return; }
     var u = ensureTuition(), mk = u.month;
     var list = ids.map(byId).filter(Boolean);
-    var payable = list.filter(function (s) { return tuitionStatusOf(mk, s.id) !== 'exempt' && String(s.phone || '').trim(); });
+    var payable = list.filter(function (s) { return tuitionStatusOf(mk, s.id) !== 'exempt' && smsPhonesOf(s).length; });
     if (!payable.length) { toast('문자를 보낼 수 있는 관원이 없어요(면제·휴원이거나 연락처 없음).'); return; }
     openModal({
       title: '선택한 ' + payable.length + '명에게 원비 안내 문자를 보낼까요?',
@@ -11371,9 +11591,11 @@
     if (!u.belt) { u.belt = 'all'; }
     return u;
   }
-  function bulkHasPhone(s) { return !!(s && String(s.phone || '').trim()); }
+  /* 문자를 보낼 수 있는 관원 = 체크된 모·부 번호가 하나라도 있는 관원 */
+  function bulkHasPhone(s) { return !!(s && smsPhonesOf(s).length); }
 
-  /* 체크한 관원과 발송 가능 인원 — 번호가 없는 관원은 발송에서만 빠집니다 */
+  /* 체크한 관원과 발송 가능 인원 — 번호가 없는 관원은 발송에서만 빠진다.
+     phones = 실제로 나갈 문자 건수(모·부 둘 다 체크한 관원은 2건) */
   function bulkSelectedIds() {
     var u = ensureBulkSms(), sel = u.selected;
     return Object.keys(sel).filter(function (id) { return sel[id] && byId(id); });
@@ -11381,7 +11603,9 @@
   function bulkCounts() {
     var list = bulkSelectedIds().map(byId).filter(Boolean);
     var ok = list.filter(bulkHasPhone);
-    return { total: list.length, ok: ok.length, noPhone: list.length - ok.length, list: list, okList: ok };
+    var phones = 0;
+    ok.forEach(function (s) { phones += smsPhonesOf(s).length; });
+    return { total: list.length, ok: ok.length, phones: phones, noPhone: list.length - ok.length, list: list, okList: ok };
   }
   function bulkRows() {
     var u = ensureBulkSms();
@@ -11617,25 +11841,30 @@
     } else {
       wrap.innerHTML = rows.map(function (s) {
         var on = !!u.selected[s.id];
-        var phone = String(s.phone || '').trim();
-        return '<label class="bs-row' + (on ? ' sel' : '') + (phone ? '' : ' nophone') + '">' +
+        var phones = smsPhonesOf(s);
+        var phoneHtml = phones.length
+          ? phones.map(function (p) { return '<span>' + esc(normalizePhone(p)) + '</span>'; }).join('')
+          : '<i>번호 없음</i>';
+        return '<label class="bs-row' + (on ? ' sel' : '') + (phones.length ? '' : ' nophone') + '">' +
           '<input type="checkbox" class="ck" data-bscheck="' + esc(s.id) + '"' +
           (on ? ' checked' : '') + ' aria-label="' + esc(s.name + ' 발송 대상') + '">' +
           '<span class="bs-belt">' + beltColors(s.belt).map(function (c) { return '<i style="background:' + esc(c) + '"></i>'; }).join('') + '</span>' +
           '<span class="bs-main"><span class="bs-name">' + esc(s.name) + '</span>' +
           '<span class="bs-sub">' + esc(studentLabel(s)) + ' · ' + esc(s.belt || '띠 미지정') + '</span></span>' +
-          '<span class="bs-phone">' + (phone ? esc(normalizePhone(phone)) : '<i>번호 없음</i>') + '</span>' +
+          '<span class="bs-phone">' + phoneHtml + '</span>' +
           '</label>';
       }).join('');
     }
     var cnt = bulkCounts();
     if (el('bs-count')) {
       el('bs-count').innerHTML = '선택 ' + cnt.total + '명 <small>(발송 가능 ' + cnt.ok + '명' +
+        (cnt.phones > cnt.ok ? ' · 문자 ' + cnt.phones + '건' : '') +
         (cnt.noPhone ? ' · 번호 없음 ' + cnt.noPhone + '명' : '') + ')</small>';
     }
     if (el('bs-send-note')) {
       el('bs-send-note').textContent = cnt.ok
-        ? cnt.ok + '명에게 보냅니다 · ' + (smsConfigured() ? (smsAutoOn() ? '도장폰 웹훅 · 0.7초 간격' : '자동발송 꺼짐 · 로그만 기록') : '웹훅 미설정 · 로그만 기록')
+        ? cnt.ok + '명에게 ' + (cnt.phones > cnt.ok ? '문자 ' + cnt.phones + '건을 ' : '') + '보냅니다 · ' +
+          (smsConfigured() ? (smsAutoOn() ? '도장폰 웹훅 · 0.7초 간격' : '자동발송 꺼짐 · 로그만 기록') : '웹훅 미설정 · 로그만 기록')
         : '발송할 관원을 선택해 주세요.';
     }
   }
@@ -11852,6 +12081,7 @@
       sub: kind + ' · ' + bytes + 'B · ' + (first ? first.name + ' 관원 기준으로 이름·부서·수업·띠가 채워집니다' : '관원 정보로 치환됩니다'),
       body: '<div class="bs-bubble" style="max-height:210px; overflow:auto">' + preview + '</div>' +
         '<div class="help" style="margin-top:10px">발송 인원 <b>' + cnt.ok + '명</b>' +
+        (cnt.phones > cnt.ok ? ' · 문자 <b>' + cnt.phones + '건</b>(모·부 둘 다 체크한 관원은 두 분께)' : '') +
         (cnt.noPhone ? ' · 번호가 없어 제외 <b>' + cnt.noPhone + '명</b>' : '') +
         '<br>' + esc(smsModalNote()) + ' 0.7초 간격으로 차례대로 나갑니다.</div>',
       actions: [
@@ -11861,14 +12091,16 @@
     }).then(function (ok) {
       if (!ok) { return 0; }
       var list = bulkSelectedIds().map(byId).filter(bulkHasPhone);
-      var sent = 0;
+      var sent = 0, letters = 0;
       list.forEach(function (s) {
+        var n = smsPhonesOf(s).length;
         addLog(s, 'in', fmtTime(), { kind: 'bulk_sms', text: bulkFill(text, s) });
         sent++;
+        letters += n;
       });
       u.selected = {};
       renderBulkSms(true);
-      toast(sent + '명에게 단체문자' + smsToastTail());
+      toast(sent + '명에게 단체문자' + (letters > sent ? ' ' + letters + '건' : '') + smsToastTail());
       return sent;
     });
   }
@@ -11909,7 +12141,7 @@
   function sendResumeSms(id, silent) {
     var s = byId(id);
     if (!s) { return 'skipped'; }
-    if (!String(s.phone || '').trim()) {
+    if (!smsPhonesOf(s).length) {
       if (!silent) { toast(s.name + ' 관원은 보호자 연락처가 없어 문자를 보낼 수 없어요.'); }
       return 'skipped';
     }
@@ -11919,10 +12151,12 @@
   }
 
   function pausedCSVText(list) {
-    var lines = [['이름', '부서', '수업', '띠', '급수', '보호자 연락처', '휴관일', '휴관 사유', '특이사항 · 비고', '상태']];
+    var lines = [['이름', '부서', '수업', '띠', '급수', '모 성함', '모 전화', '부 성함', '부 전화', '문자 발송', '보호자 연락처', '주소', '휴관일', '휴관 사유', '특이사항 · 비고', '상태']];
     (list || []).forEach(function (s) {
       lines.push([
-        s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', studentGrade(s), s.phone || '',
+        s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', studentGrade(s),
+        parentNameOf(s, 'mother'), parentPhoneFrom(s, 'mother'), parentNameOf(s, 'father'), parentPhoneFrom(s, 'father'),
+        smsTargetLabel(s), s.phone || '', addressOf(s),
         s.pausedDate || '', s.pauseReason || '', noteOf(s), '휴관'
       ]);
     });
@@ -11979,7 +12213,7 @@
         '<td class="sub">' + esc(studentLabel(s)) + siblingBadge(s) + '</td>' +
         '<td>' + beltSwatchHtml(s.belt) + ' <span class="sub" style="font-size:12px;color:#344054;font-weight:800">' + esc(s.belt || '미지정') + '</span>' +
         (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
-        '<td class="sub">' + esc(maskPhone(s.phone)) + '</td>' +
+        '<td class="sub">' + phonesCellHtml(s) + '</td>' +
         '<td><input class="input mini" type="date" data-pzdate="' + esc(s.id) + '" value="' + esc(s.pausedDate || '') + '" aria-label="' + esc(s.name + ' 휴관일') + '"></td>' +
         '<td><input class="input mini pz-reason" type="text" maxlength="60" data-pzreason="' + esc(s.id) + '" value="' + esc(s.pauseReason || '') + '" placeholder="휴관 사유/메모" aria-label="' + esc(s.name + ' 휴관 사유') + '"></td>' +
         '<td><input class="input mini pz-notein" type="text" maxlength="200" data-pznote="' + esc(s.id) + '" value="' + esc(noteOf(s)) + '" placeholder="특이사항 · 비고" autocomplete="off" aria-label="' + esc(s.name + ' 특이사항 · 비고') + '" title="특이사항 · 비고 (관리자 화면 전용)"></td>' +
@@ -12003,21 +12237,30 @@
   function applyPausedRows(rows, mode) {
     var out = { converted: 0, added: 0, removed: 0, kept: 0, updated: 0, convertedNames: [], nameOnlyNames: [] };
     var list = Array.isArray(rows) ? rows.slice() : [];
-    var byKey = {}, byName = {};
+    var byName = {};
     app.students.forEach(function (s) {
-      byKey[s.name + '|' + digitsOnly(s.phone)] = s;
       if (!byName[s.name]) { byName[s.name] = []; }
       byName[s.name].push(s);
     });
     var seen = {};
     list.forEach(function (r) {
       if (!r || !String(r.name || '').trim()) { return; }
-      var key = r.name + '|' + digitsOnly(r.phone);
-      var target = byKey[key] || null;
+      var target = null;
       var nameOnly = false;
-      if (!target && !digitsOnly(r.phone)) {
-        var cands = byName[r.name] || [];
-        if (cands.length === 1) { target = cands[0]; nameOnly = true; }
+      var impNums = studentPhonesAll(r).map(digitsOnly);
+      var cands = byName[r.name] || [];
+      if (impNums.length) {
+        for (var ci = 0; ci < cands.length; ci++) {
+          var have = studentPhonesAll(cands[ci]).map(digitsOnly);
+          if (impNums.some(function (d) { return have.indexOf(d) !== -1; })) { target = cands[ci]; break; }
+        }
+        if (!target) {
+          var empties = cands.filter(function (x) { return !studentPhonesAll(x).length; });
+          if (empties.length === 1) { target = empties[0]; nameOnly = true; }
+        }
+      } else if (cands.length === 1) {
+        target = cands[0];
+        nameOnly = true;
       }
       if (target) {
         seen[target.id] = true;
@@ -12038,6 +12281,13 @@
         if (r.course && !courseOf(target)) { target.course = normalizeCourse(r.course); }
         if (r.className && !divisionFromText(target.className)) { target.className = String(r.className).trim(); }
         if (!String(target.phone || '').trim() && r.phone) { target.phone = r.phone; }
+        ensureParentPhones(target);
+        if (!parentPhoneFrom(target, 'mother') && parentPhoneFrom(r, 'mother')) { target.motherPhone = parentPhoneFrom(r, 'mother'); }
+        if (!parentPhoneFrom(target, 'father') && parentPhoneFrom(r, 'father')) { target.fatherPhone = parentPhoneFrom(r, 'father'); }
+        if (!parentNameOf(target, 'mother') && parentNameOf(r, 'mother')) { target.motherName = parentNameOf(r, 'mother'); }
+        if (!parentNameOf(target, 'father') && parentNameOf(r, 'father')) { target.fatherName = parentNameOf(r, 'father'); }
+        if (!addressOf(target) && addressOf(r)) { target.address = addressOf(r); }
+        syncPrimaryPhone(target);
         if (!Number(target.attendCount) && Number(r.attendCount)) { target.attendCount = Number(r.attendCount); }
         // 특이사항·비고도 직접 적어 둔 값이 있으면 그대로 두고, 비어 있을 때만 채운다
         if (r.note && !noteOf(target)) { target.note = normalizeNote(r.note); }
@@ -12047,6 +12297,12 @@
           id: r.id || uid('stu'),
           name: String(r.name).trim(),
           phone: normalizePhone(r.phone || ''),
+          motherPhone: parentPhoneFrom(r, 'mother'),
+          fatherPhone: parentPhoneFrom(r, 'father'),
+          motherName: parentNameOf(r, 'mother'),
+          fatherName: parentNameOf(r, 'father'),
+          smsTargets: smsTargetsOf(r),
+          address: addressOf(r),
           className: String(r.className || '').trim(),
           division: normalizeDivision(r.division) || divisionFromText(r.className) || '초등부',
           course: normalizeCourse(r.course),
@@ -14408,6 +14664,8 @@
     pausedDate: ['휴관일', '휴관시작', '휴관날짜', 'pausedate', 'pause_date'],
     pauseReason: ['휴관사유', '사유', 'reason'],
     note: ['특이사항', '비고', '메모', 'note', 'remark', 'memo'],
+    address: ['주소', '주소지', '거주지', '도로명주소', 'address'],
+    bunji: ['번지'],
     status: ['상태', '구분', 'status', 'state']
   };
 
@@ -14435,6 +14693,18 @@
     var t = String(text == null ? '' : text).toLowerCase().replace(/\s+/g, '');
     if (!t || t.length > 10) { return false; }
     return /sms|문자|수신/.test(t);
+  }
+  /* 보호자 성함 열 — 학원 원생관리 파일의 「어머님」·「아버님」, 「모 성명」·「부 성함」
+     ※ 전화 열(모 전화·부 전화)과 생김새가 비슷하니, 전화·연락 글자가 있으면 성함 열이 아니다. */
+  function parentNameHeaderKind(text) {
+    var t = String(text == null ? '' : text).toLowerCase().replace(/\s+/g, '');
+    if (!t || t.length > 14) { return ''; }
+    if (/전화|연락|폰|phone|tel|mobile|hp/.test(t)) { return ''; }
+    var nameish = /성명|성함|이름|name/.test(t) || /^어머님$|^아버님$|^어머니$|^아버지$/.test(t);
+    if (!nameish) { return ''; }
+    if (/어머|모친|모성|mother|mom/.test(t)) { return 'mother'; }
+    if (/아버|부친|부성|father|dad/.test(t)) { return 'father'; }
+    return '';
   }
   /* 행 하나에서 쓸 전화번호 — 후보 열 중 가장 알맞은 값(없으면 '') */
   function phoneFromColumns(row, cols) {
@@ -14521,7 +14791,7 @@
   function matchField(text) {
     var t = String(text || '').toLowerCase().replace(/\s+/g, '');
     if (!t) { return null; }
-    var fields = ['name', 'phone', 'division', 'course', 'siblingDiscount', 'className', 'attendCount', 'firstRegDate', 'birthDate', 'tconId', 'tuitionDate', 'belt', 'pausedDate', 'pauseReason', 'note', 'status'];
+    var fields = ['name', 'phone', 'division', 'course', 'siblingDiscount', 'className', 'attendCount', 'firstRegDate', 'birthDate', 'tconId', 'tuitionDate', 'belt', 'pausedDate', 'pauseReason', 'note', 'address', 'bunji', 'status'];
     for (var i = 0; i < fields.length; i++) {
       var f = fields[i];
       var keys = HEADER_KEYS[f];
@@ -14539,6 +14809,7 @@
       var row = rows[r] || [];
       var map = {};
       var phoneCols = [];
+      var parentCols = {};
       var score = 0;
       for (var c = 0; c < row.length; c++) {
         var kind = phoneHeaderKind(row[c]);
@@ -14548,12 +14819,19 @@
           score++;
           continue;
         }
+        var pk = parentNameHeaderKind(row[c]);
+        if (pk) {
+          // 「어머님」·「아버님」은 성함 열 — 전화 열과 섞이지 않게 따로 잡는다
+          if (parentCols[pk] === undefined) { parentCols[pk] = c; }
+          score++;
+          continue;
+        }
         var f = matchField(row[c]);
         if (f && map[f] === undefined) { map[f] = c; score++; }
       }
       if (phoneCols.length && map.phone === undefined) { map.phone = phoneCols[0].c; }
       if (map.name !== undefined && score >= 2) {
-        if (!best || score > best.score) { best = { index: r, map: map, score: score, phoneCols: phoneCols }; }
+        if (!best || score > best.score) { best = { index: r, map: map, score: score, phoneCols: phoneCols, parentCols: parentCols }; }
       }
     }
     return best;
@@ -14566,11 +14844,12 @@
     if (!rows.length) { return []; }
 
     var header = detectHeader(rows);
-    var map, start, phoneCols = [];
+    var map, start, phoneCols = [], parentCols = {};
     if (header) {
       map = header.map;
       start = header.index + 1;
       phoneCols = header.phoneCols || [];
+      parentCols = header.parentCols || {};
     } else {
       map = { name: 0, className: 1, belt: 2, phone: 3 };
       start = 0;
@@ -14586,6 +14865,35 @@
       var phoneRaw = phoneCols.length
         ? phoneFromColumns(row, phoneCols)
         : (map.phone !== undefined ? row[map.phone] : '');
+      /* 학원 원생관리 파일처럼 모 전화·부 전화가 따로 있으면 각각 motherPhone·fatherPhone 으로,
+         Sms(☏) 표시가 있는 쪽을 문자 발송 대상으로 잡는다. 없으면 지금까지처럼 phone 하나를 쓴다. */
+      var motherRaw = '', fatherRaw = '', motherSms = false, fatherSms = false;
+      for (var pc = 0; pc < phoneCols.length; pc++) {
+        var pcol = phoneCols[pc];
+        var pval = String(row[pcol.c] == null ? '' : row[pcol.c]).trim();
+        var pmark = pcol.sms !== null && pcol.sms !== undefined &&
+          String(row[pcol.sms] == null ? '' : row[pcol.sms]).trim() !== '';
+        if (pcol.kind === 'mother' && !motherRaw) { motherRaw = pval; motherSms = pmark; }
+        if (pcol.kind === 'father' && !fatherRaw) { fatherRaw = pval; fatherSms = pmark; }
+      }
+      var genericPhone = normalizePhone(String(phoneRaw == null ? '' : phoneRaw).trim());
+      var motherPhone = normalizePhone(motherRaw);
+      var fatherPhone = normalizePhone(fatherRaw);
+      if (!motherPhone && genericPhone && digitsOnly(genericPhone) !== digitsOnly(fatherPhone)) {
+        motherPhone = genericPhone; // 모 전화 열이 비었으면 대표 번호(휴대전화·기타)를 모 번호로
+      }
+      if (!motherPhone && !fatherPhone) { motherPhone = genericPhone; }
+      var rowTargets;
+      if (motherSms || fatherSms) {
+        rowTargets = { mother: motherSms && !!motherPhone, father: fatherSms && !!fatherPhone };
+        if (!rowTargets.mother && !rowTargets.father) { rowTargets.mother = true; }
+      } else {
+        rowTargets = { mother: !!motherPhone || !fatherPhone, father: !motherPhone && !!fatherPhone };
+      }
+      var repPhone = (function () {
+        var list = smsPhonesOf({ motherPhone: motherPhone, fatherPhone: fatherPhone, smsTargets: rowTargets });
+        return list.length ? list[0] : (motherPhone || fatherPhone);
+      })();
       var countRaw = map.attendCount !== undefined ? String(row[map.attendCount] == null ? '' : row[map.attendCount]) : '';
       var statusRaw = map.status !== undefined ? String(row[map.status] == null ? '' : row[map.status]) : '';
       var pausedRaw = map.pausedDate !== undefined ? String(row[map.pausedDate] == null ? '' : row[map.pausedDate]) : '';
@@ -14599,6 +14907,9 @@
       var importDivision = normalizeDivision(cellOf('division')) || divisionFromText(importClass) ||
         divisionFromText(courseCell) || divisionFromCourseText(courseCell);
       var importCourse = normalizeCourse(courseCell) || courseFromText(courseCell);
+      /* 주소 — 「주소」 열에 「번지」 열이 비어 있지 않으면 이어 붙인다 */
+      var addrCell = cellOf('address');
+      var bunjiCell = map.bunji !== undefined ? String(row[map.bunji] == null ? '' : row[map.bunji]).trim() : '';
       var sibRaw = cellOf('siblingDiscount');
       // 형제할인은 전용 열이 없어도 과정·반 칸의 「형제」 표시로 잡아 준다 (예: '12회-18만 / 형제')
       var importSibling = /^(y|yes|o|예|형제|true|1|체크)$/i.test(sibRaw) || sibRaw.indexOf('형제') !== -1 ||
@@ -14611,7 +14922,13 @@
         course: importCourse,
         siblingDiscount: importSibling,
         belt: map.belt !== undefined ? (String(row[map.belt] == null ? '' : row[map.belt]).trim() || '흰띠') : '흰띠',
-        phone: normalizePhone(String(phoneRaw == null ? '' : phoneRaw).trim()),
+        phone: repPhone,
+        motherPhone: motherPhone,
+        fatherPhone: fatherPhone,
+        motherName: normalizeParentName(parentCols.mother !== undefined ? row[parentCols.mother] : ''),
+        fatherName: normalizeParentName(parentCols.father !== undefined ? row[parentCols.father] : ''),
+        smsTargets: rowTargets,
+        address: normalizeAddress(addrCell && bunjiCell ? addrCell + ' ' + bunjiCell : (addrCell || bunjiCell)),
         attendCount: Math.max(0, parseInt(countRaw.replace(/[^0-9]/g, ''), 10) || 0),
         grade: '',
         poomDan: '없음',
@@ -14702,40 +15019,54 @@
   }
 
   /* 읽어 들인 명단을 기존 명단에 합친다(순수 계산) — 모달 없이 테스트할 수 있게 따로 둔다.
-     · 이름+보호자 번호가 같으면 그 관원
+     · 이름이 같고 모·부 번호가 하나라도 겹치면 그 관원
      · 이름이 같고 기존 번호가 비어 있는 1명이면 새로 만들지 않고 번호만 채운다
-     · 이미 번호가 있는데 다른 번호면 동명이인으로 보고 따로 둔다 */
+     · 이미 번호가 있는데 다른 번호면 동명이인으로 보고 따로 둔다
+     · 이름·띠·수업횟수·발송대상·원비날짜처럼 앱에서 정해 둔 값은 건드리지 않고,
+       비어 있는 모·부 번호·성함·주소만 채운다. */
   function mergeImportedStudents(students) {
     var out = { added: 0, filled: 0, matched: 0 };
-    var existing = {};
     var nameIndex = {};
     app.students.forEach(function (s) {
-      existing[s.name + '|' + digitsOnly(s.phone)] = s;
       (nameIndex[s.name] = nameIndex[s.name] || []).push(s);
     });
+    var numbersOf = function (x) { return studentPhonesAll(x).map(digitsOnly); };
     (students || []).forEach(function (s) {
-      var digits = digitsOnly(s.phone);
-      var key = s.name + '|' + digits;
-      var hit = existing[key];
-      // 이름은 같은데 기존 관원의 전화번호가 비어 있던 경우 — 새 관원을 만들지 않고 번호만 채운다
-      if (!hit && digits) {
-        var cands = nameIndex[s.name] || [];
-        if (cands.length === 1 && !digitsOnly(cands[0].phone)) { hit = cands[0]; }
+      var cands = nameIndex[s.name] || [];
+      var impNums = numbersOf(s);
+      var hit = null;
+      for (var i = 0; i < cands.length; i++) {
+        var have = numbersOf(cands[i]);
+        var same = impNums.some(function (d) { return have.indexOf(d) !== -1; });
+        if (same) { hit = cands[i]; break; }
+      }
+      // 이름은 같은데 기존 관원의 번호가 비어 있던 경우 — 새 관원을 만들지 않고 번호만 채운다
+      if (!hit) {
+        var empties = cands.filter(function (x) { return !numbersOf(x).length; });
+        if (empties.length === 1 && !(cands.length > 1 && !impNums.length)) { hit = empties[0]; }
       }
       if (!hit) {
         app.students.push(s);
-        existing[key] = s;
         (nameIndex[s.name] = nameIndex[s.name] || []).push(s);
         out.added++;
         return;
       }
       out.matched++;
-      // 기존 관원의 보호자 번호가 비어 있으면 새로 읽은 번호로 채운다(이미 있으면 덮지 않음)
-      if (!String(hit.phone || '').trim() && digits) {
-        hit.phone = normalizePhone(s.phone);
-        out.filled++;
-        if (!existing[key]) { existing[key] = hit; }
+      /* 번호는 빈 칸만 채운다 — 이미 있는 모·부 번호와 문자 발송 대상은 그대로 둔다 */
+      var filledNow = false;
+      if (!parentPhoneFrom(hit, 'mother') && parentPhoneFrom(s, 'mother')) {
+        hit.motherPhone = parentPhoneFrom(s, 'mother');
+        filledNow = true;
       }
+      if (!parentPhoneFrom(hit, 'father') && parentPhoneFrom(s, 'father')) {
+        hit.fatherPhone = parentPhoneFrom(s, 'father');
+        filledNow = true;
+      }
+      if (filledNow) { out.filled++; syncPrimaryPhone(hit); }
+      // 성함·주소도 비어 있을 때만 — 원비 입금자명·우편에 쓰는 값이라 따로 적어 둔 것이 우선이다
+      if (!parentNameOf(hit, 'mother') && parentNameOf(s, 'mother')) { hit.motherName = parentNameOf(s, 'mother'); }
+      if (!parentNameOf(hit, 'father') && parentNameOf(s, 'father')) { hit.fatherName = parentNameOf(s, 'father'); }
+      if (!addressOf(hit) && addressOf(s)) { hit.address = addressOf(s); }
       // 파일이 휴관(상태·구분 열)으로 표시한 기존 관원만 휴관생으로 바꾼다
       if (s.status === 'paused') {
         hit.status = 'paused';
@@ -14763,6 +15094,20 @@
       }
     });
     return out;
+  }
+
+  /* 가져온 줄 하나에 해당하는 앱의 원생 — 이름 + 모·부 번호가 겹치는 사람 */
+  function findStudentForImport(row) {
+    if (!row) { return null; }
+    var imp = studentPhonesAll(row).map(digitsOnly);
+    var same = app.students.filter(function (x) { return x.name === row.name; });
+    for (var i = 0; i < same.length; i++) {
+      var have = studentPhonesAll(same[i]).map(digitsOnly);
+      for (var j = 0; j < imp.length; j++) {
+        if (have.indexOf(imp[j]) !== -1) { return same[i]; }
+      }
+    }
+    return same.length === 1 ? same[0] : null;
   }
 
   function applyImport(students, fileName) {
@@ -14797,9 +15142,7 @@
       students.forEach(function (s) {
         var day = tuitionDayOf(s);
         if (!day) { return; }
-        var key = s.name + '|' + digitsOnly(s.phone);
-        var hit = null;
-        app.students.forEach(function (x) { if (x.name + '|' + digitsOnly(x.phone) === key) { hit = x; } });
+        var hit = findStudentForImport(s);
         if (hit) { syncTuitionFromStudentDay(hit.id, 0, day); }
       });
       renderAll();
@@ -14810,9 +15153,11 @@
   }
 
   function downloadSampleCSV() {
-    var lines = ['이름,부서,수업,띠,보호자 연락처,누적 출석,첫 등록일,원비 날짜,생년월일,티콘 ID,특이사항,형제할인'];
+    var lines = ['이름,부서,수업,띠,모 성함,모 전화,부 성함,부 전화,문자 발송,보호자 연락처,주소,누적 출석,첫 등록일,원비 날짜,생년월일,티콘 ID,특이사항,형제할인'];
     SAMPLE_STUDENTS.forEach(function (s) {
-      lines.push([s.name, s.division || '', s.course || '', s.belt, s.phone, s.attendCount || 0,
+      lines.push([s.name, s.division || '', s.course || '', s.belt,
+        parentNameOf(s, 'mother'), parentPhoneFrom(s, 'mother'), parentNameOf(s, 'father'), parentPhoneFrom(s, 'father'),
+        smsTargetLabel(s), s.phone, addressOf(s), s.attendCount || 0,
         s.firstRegDate || '', tuitionDayOf(s) ? dayLabel(tuitionDayOf(s)) : '',
         s.birthDate || '', s.tconId || '', noteOf(s), s.siblingDiscount ? 'Y' : ''].map(csvCell).join(','));
     });
@@ -14833,11 +15178,14 @@
      12-A-2. 관원 명단 CSV 내려받기 (특이사항·비고 포함 · 관리자 전용)
      ========================================================= */
   function studentsCSVText(list) {
-    var head = ['이름', '부서', '수업', '띠', '급수', '보호자 연락처', '생년월일', '티콘 ID', '첫 등록일', '원비 날짜', '특이사항 · 비고', '상태'];
+    var head = ['이름', '부서', '수업', '띠', '급수', '모 성함', '모 전화', '부 성함', '부 전화', '문자 발송',
+      '보호자 연락처', '주소', '생년월일', '티콘 ID', '첫 등록일', '원비 날짜', '특이사항 · 비고', '상태'];
     var lines = [head];
     (list || []).forEach(function (s) {
       lines.push([
-        s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', studentGrade(s), s.phone || '',
+        s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', studentGrade(s),
+        parentNameOf(s, 'mother'), parentPhoneFrom(s, 'mother'), parentNameOf(s, 'father'), parentPhoneFrom(s, 'father'),
+        smsTargetLabel(s), s.phone || '', addressOf(s),
         s.birthDate || '', s.tconId || '', firstRegOf(s),
         tuitionDayOf(s) ? dayLabel(tuitionDayOf(s)) : '', noteOf(s), isPaused(s) ? '휴관' : '재원'
       ]);
@@ -15821,6 +16169,10 @@
         updateFeeCalc();
       });
     }
+    ['f-sms-mother', 'f-sms-father'].forEach(function (fid) {
+      if (!el(fid)) { return; }
+      el(fid).addEventListener('change', syncSmsTargetUI);
+    });
     if (el('f-fee')) {
       el('f-fee').addEventListener('input', function () {
         el('f-fee').setAttribute('data-auto', '0');
@@ -16338,7 +16690,7 @@
       saveExamSettings();
       openModal({
         title: '심사 안내 문자 미리보기',
-        sub: s.name + ' 관원 학부모님 (' + maskPhone(s.phone) + ')',
+        sub: s.name + ' 관원 학부모님 (' + (smsPhonesOf(s).map(maskPhone).join(', ') || '번호 없음') + ')',
         body: '<div class="sms-msg" style="box-shadow:none">' +
           '<div class="sms-head"><span class="sms-tag">심사 안내</span><span class="sms-sender">' + esc(app.settings.dojoName) + '</span></div>' +
           '<div class="sms-bubble">' + esc(buildExamMessage(s)) + '</div></div>',
@@ -17081,7 +17433,7 @@
           var sid = String(studentId == null ? '' : studentId);
           var s = (app.students || []).filter(function (x) { return x && String(x.id) === sid; })[0];
           if (!s) { return { sent: false, reason: 'no-student' }; }
-          if (!String(s.phone || '').trim()) { return { sent: false, reason: 'no-phone' }; }
+          if (!smsPhonesOf(s).length) { return { sent: false, reason: 'no-phone' }; }
           if (!smsConfigured() || !smsAutoOn()) { return { sent: false, reason: 'sms-off' }; }
           var mode = kind === 'out' ? 'out' : 'in';
           var t = String(time || '').slice(0, 5) || fmtTime();
@@ -17108,6 +17460,7 @@
       retryAll: retryVisibleSms,
       renderRetryAll: renderSmsRetryAll,
       findLog: findLog,
+      phonesOf: smsPhonesOf,
       queue: function () { return smsQueue.slice(); },
       busy: function () { return smsBusy; },
       pump: pumpSms,
@@ -17312,6 +17665,19 @@
       birth: birthOf,
       tcon: tconOf,
       note: noteOf,
+      /* 부·모 번호 · 문자 발송 대상 · 부모 성함 · 주소 */
+      phonesOf: smsPhonesOf,
+      phonesAll: studentPhonesAll,
+      targetsOf: smsTargetsOf,
+      targetLabel: smsTargetLabel,
+      motherPhone: function (s) { return parentPhoneFrom(s, 'mother'); },
+      fatherPhone: function (s) { return parentPhoneFrom(s, 'father'); },
+      motherName: function (s) { return parentNameOf(s, 'mother'); },
+      fatherName: function (s) { return parentNameOf(s, 'father'); },
+      address: addressOf,
+      syncPhone: syncPrimaryPhone,
+      normalizeParentName: normalizeParentName,
+      normalizeAddress: normalizeAddress,
       normalizeNote: normalizeNote,
       csv: studentsCSVText,
       downloadCsv: downloadStudentsCSV,

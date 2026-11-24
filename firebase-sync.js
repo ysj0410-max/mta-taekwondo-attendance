@@ -574,12 +574,16 @@
      3-1. kioskStudents — 태블릿에 보여 줄 최소 정보만 남긴 사본
      -------------------------------------------------------------------------
      · 담는 칸: id · name · division · course · belt · status (+ 엔진 메타 _ver 등)
-     · 절대 담지 않는 칸: phone · birthDate · tconId · note · tuitionDay ·
+     · 절대 담지 않는 칸: phone · motherPhone · fatherPhone · smsTargets · motherName ·
+       fatherName · address · birthDate · tconId · note · tuitionDay ·
        siblingDiscount · firstRegDate · monthlyFee · attendCount 등
        (firestore.rules 의 noPrivateFields() 가 서버에서도 한 번 더 막는다)
      ========================================================================= */
   var KIOSK_FIELDS = ['id', 'name', 'division', 'course', 'belt', 'status'];
-  var PRIVATE_STUDENT_FIELDS = ['phone', 'birthDate', 'tconId', 'note', 'tuitionDay', 'siblingDiscount', 'firstRegDate'];
+  /* 절대 태블릿 사본(kioskStudents)에 넣지 않는 칸
+     · 모·부 전화번호·성함·발송 대상, 주소까지 모두 개인정보로 본다 */
+  var PRIVATE_STUDENT_FIELDS = ['phone', 'birthDate', 'tconId', 'note', 'tuitionDay', 'siblingDiscount', 'firstRegDate',
+    'motherPhone', 'fatherPhone', 'smsTargets', 'motherName', 'fatherName', 'address'];
 
   function kioskStudentBody(s) {
     if (!isPlain(s)) { return null; }
@@ -649,6 +653,15 @@
     if (v === undefined || v === null) { return false; }
     if (typeof v === 'boolean') { return v; }
     if (typeof v === 'number') { return isFinite(v) && v !== 0; }
+    if (typeof v === 'object') {
+      /* 문자 발송 대상(smsTargets)은 {mother, father} 두 칸뿐인 선택값이다.
+         기본값(모만 받음)은 개인정보로 세지 않고, 부까지 받거나 모를 끈 경우만 센다. */
+      var keys = Object.keys(v);
+      if (keys.length === 2 && keys.indexOf('mother') !== -1 && keys.indexOf('father') !== -1) {
+        return v.mother !== true || v.father === true;
+      }
+      return keys.some(function (k) { return hasPrivateValue(v[k]); });
+    }
     var s = String(v).trim();
     return s !== '' && s !== '0' && s !== 'false' && s !== 'null' && s !== 'undefined';
   }
@@ -2985,6 +2998,7 @@
     KIOSK_FIELDS: KIOSK_FIELDS,
     PRIVATE_STUDENT_FIELDS: PRIVATE_STUDENT_FIELDS,
     kioskStudentBody: kioskStudentBody,
+    kioskDocsOf: kioskDocsOf,
     kioskConfigBody: kioskConfigBody,
     countPrivateStudents: countPrivateStudents,
     countFaces: countFaces,
