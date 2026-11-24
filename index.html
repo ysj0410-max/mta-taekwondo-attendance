@@ -3538,7 +3538,8 @@
     if (!s.smsTargets || typeof s.smsTargets !== 'object') { s.smsTargets = smsTargetsOf(s); }
     return s;
   }
-  function smsTargetLabel(s) {    var t = smsTargetsOf(s);
+  function smsTargetLabel(s) {
+    var t = smsTargetsOf(s);
     if (t.mother && t.father) { return '모·부'; }
     if (t.father) { return '부'; }
     return t.mother ? '모' : '';
