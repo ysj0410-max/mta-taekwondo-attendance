@@ -416,6 +416,15 @@
       chip.textContent = total ? ('대기 ' + total + '건' + (sum.failed ? ' · 실패 ' + sum.failed : '') + (sum.unacked ? ' · 확인대기 ' + sum.unacked : '')) : '대기 없음';
       chip.className = 'chip ' + (total ? (sum.failed ? 'off' : 'wait') : 'ok');
     }
+    /* 「🗑️ 실패 비우기」 — 실패 건이 없으면 누를 수 없게 */
+    var clearBtn = $('fb-clear-failed');
+    if (clearBtn) {
+      clearBtn.disabled = !(S.engine && sum.failed);
+      clearBtn.textContent = sum.failed ? ('🗑️ 실패 비우기 (' + numText(sum.failed) + ')') : '🗑️ 실패 비우기';
+      clearBtn.title = sum.failed
+        ? '서버 규칙 거부 등으로 실패한 ' + numText(sum.failed) + '건만 목록에서 비웁니다 (대기 중인 출결은 그대로)'
+        : '비울 실패 항목이 없습니다';
+    }
     if (!S.queueOpen || !out) { return; }
     var items = out.list().filter(function (it) { return it.state !== 'sent'; }).slice(-40).reverse();
     if (!items.length) { setHtml('fb-queue-list', '<div class="tiny-note" style="padding:8px 0">대기 중인 기록이 없습니다.</div>'); return; }
@@ -539,7 +548,8 @@
     }
     /* 화면(인메모리)도 비운 자료로 다시 읽어 즉시 반영한다 — 지운 기록이 화면에 남지 않게 */
     reloadApp();
-    S.msg = '✅ 이 태블릿의 개인정보를 비웠습니다. 등록된 얼굴 ' + numText(r.faces) + '명은 그대로 유지됩니다.';
+    S.msg = '✅ 이 태블릿의 개인정보를 비웠습니다. 등록된 얼굴 ' + numText(r.faces) + '명은 그대로 유지됩니다.' +
+      (r.failedCleared ? (' 보낼 수 없는 실패 항목 ' + numText(r.failedCleared) + '건도 함께 비웠습니다.') : '');
     S.msgKind = 'ok';
     renderAll();
   }
@@ -907,6 +917,47 @@
     onFlush();
   }
 
+  /* ---------- 🗑️ 실패 항목 비우기 (v32) ----------
+     ・서버 규칙 거부 등으로 영구 실패한 항목만 목록에서 지운다 — 대기 중인 출결은 건드리지 않는다.
+     ・지운 뒤 배지(🟡 오프라인 대기)가 바로 🟢 연결로 돌아오는지는 엔진이 상태를 다시 계산한다. */
+  function failedCount() {
+    return S.engine ? (S.engine.outbox.summary().failed || 0) : 0;
+  }
+  function onClearFailed() {
+    if (!S.engine) { return; }
+    var n = failedCount();
+    if (!n) {
+      S.msg = '비울 실패 항목이 없습니다.';
+      S.msgKind = '';
+      renderAll();
+      return;
+    }
+    var ask = '서버 규칙 거부 등으로 실패한 ' + numText(n) + '건만 목록에서 비웁니다. 대기 중인 출결은 건드리지 않습니다.';
+    if (typeof window.confirm === 'function' && !window.confirm(ask)) {
+      S.msg = '실패 항목 비우기를 취소했습니다 — 아무것도 지우지 않았습니다.';
+      S.msgKind = '';
+      renderAll();
+      return;
+    }
+    var r = null;
+    try {
+      r = (typeof S.engine.clearFailed === 'function')
+        ? S.engine.clearFailed('all')
+        : { ok: true, removed: S.engine.outbox.dropWhere('failed'), failed: failedCount(), queued: S.engine.outbox.count() };
+    } catch (e) { r = null; }
+    if (!r) {
+      S.msg = '⚠️ 실패 항목을 비우지 못했습니다.';
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    S.msg = '🗑️ 실패 항목 ' + numText(r.removed) + '건을 비웠습니다.' +
+      (r.failed ? (' 남은 실패 ' + numText(r.failed) + '건은 「실패 재시도」로 다시 보내 보세요.') : '') +
+      (r.queued ? (' 대기 중인 기록 ' + numText(r.queued) + '건은 그대로입니다.') : '');
+    S.msgKind = 'ok';
+    renderAll();
+  }
+
   function onUsageReset() {
     if (!S.engine) { return; }
     if (typeof window.confirm === 'function' && !window.confirm('오늘 사용량 카운터를 0으로 되돌립니다.\n실제 Firebase 사용량은 그대로이니 안내용으로만 쓰세요. 계속할까요?')) { return; }
@@ -1143,7 +1194,7 @@
       ['fb-admin-logout', function () { logoutAs('admin'); }],
       ['fb-tablet-logout', function () { logoutAs('tablet'); }],
       ['fb-mig-preview', onPreview], ['fb-mig-run', onMigrate],
-      ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-usage-reset', onUsageReset],
+      ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-clear-failed', onClearFailed], ['fb-usage-reset', onUsageReset],
       ['fb-perm-run', runPermDemo],
       ['fb-tablet-scrub', onScrubTablet],
       ['fb-guide', onGuide]
@@ -1238,6 +1289,8 @@
     },
     flush: function () { return S.engine ? S.engine.flush() : null; },
     scrubTablet: onScrubTablet,
+    clearFailed: onClearFailed,
+    failedCount: failedCount,
     scrubConfirmText: SCRUB_CONFIRM_TEXT,
     scrubState: function () {
       return { role: engineRole(), privateStudents: scrubPrivateCount(), faces: scrubFaceCount(),

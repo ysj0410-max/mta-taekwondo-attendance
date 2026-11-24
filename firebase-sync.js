@@ -998,6 +998,20 @@
         });
         persist();
       },
+      /* 조건에 맞는 항목만 지운다.
+         · dropWhere('failed') 처럼 상태 이름을 주면 그 상태만
+         · 함수를 주면 그 함수가 true 인 항목만 (경로까지 따질 때)
+         돌려주는 값은 지운 개수. */
+      dropWhere: function (pred) {
+        var fn = (typeof pred === 'function')
+          ? pred
+          : function (it) { return it.state === pred; };
+        var before = state.items.length;
+        state.items = state.items.filter(function (it) { return !fn(it); });
+        var removed = before - state.items.length;
+        if (removed) { persist(); }
+        return removed;
+      },
       clear: function () { state = { items: [] }; persist(); }
     };
   }
@@ -1113,6 +1127,38 @@
     function isEffectiveAdmin() { return effectiveRole() === 'admin'; }
     function isEffectiveTablet() { return effectiveRole() === 'tablet'; }
 
+    /* ---------- 태블릿이 올릴 수 있는 곳은 출결(attendanceEvents) 하나뿐 ----------
+       firestore.rules 상 태블릿 계정은 attendanceEvents 만 새로 만들 수 있고,
+       students · kioskStudents · tuition · counsel · shuttle · coupons · meta 는
+       permission-denied 다. 보내 봐야 실패할 항목은 처음부터 큐에 넣지 않는다
+       (예전에 쌓여 「대기 N건 · 실패 N」으로 남아 있는 것도 아래에서 정리한다). */
+    var TABLET_WRITE_COLL = 'attendanceEvents';
+    function pathColl(path) {
+      var seg = String(path || '').split('/');
+      return seg.length >= 4 ? seg[2] : '';
+    }
+    function isTabletBlockedPath(path) {
+      return effectiveRole() === 'tablet' && pathColl(path) !== TABLET_WRITE_COLL;
+    }
+    /* 실패 항목 비우기 — 「서버 규칙 거부 등으로 실패한 항목」만 지운다.
+       · scope 를 주지 않으면(또는 'blocked') 태블릿이 보낼 수 없는 경로의 failed 만 지운다
+         (출결은 나중에 성공할 수 있으므로 남긴다 — 자동 정리용)
+       · scope 'all' 이면 화면의 「🗑️ 실패 비우기」 버튼이 부른 것으로, failed 전부를 지운다
+       · state 가 'pending' 인 항목(아직 보내지 않은 출결)은 절대 건드리지 않는다 */
+    function clearFailed(scope) {
+      var eventsOnly = scope !== 'all';
+      var removed = outbox.dropWhere(function (it) {
+        if (it.state !== 'failed') { return false; }
+        if (eventsOnly && pathColl(it.path) === TABLET_WRITE_COLL) { return false; }
+        return true;
+      });
+      var sum = outbox.summary();
+      /* 실패가 하나도 남지 않았으면 그 실패 때문에 켜져 있던 경고등도 끈다 → 배지가 🟢 로 돌아온다 */
+      if (!sum.failed) { lastError = ''; lastErrorKind = ''; }
+      emit('queue-cleared', { removed: removed, failed: sum.failed, queued: outbox.count(), role: effectiveRole() });
+      return { ok: true, removed: removed, failed: sum.failed, queued: outbox.count(), role: effectiveRole() };
+    }
+
     /* 화면 역할 변경 — 그래도 유효 권한은 서버 roles 기준 그대로다 */
     function setDeviceRole(r) {
       var next = r === 'tablet' ? 'tablet' : 'admin';
@@ -1123,6 +1169,7 @@
         if (adapter && typeof adapter.setRole === 'function') { try { adapter.setRole(after); } catch (e) {} }
         resubscribe();
         emit('role', { role: after, deviceRole: deviceRole, verified: verifiedRole });
+        if (after === 'tablet') { try { clearFailed(); } catch (e) {} }
       }
       return after;
     }
@@ -1139,6 +1186,8 @@
         emit('role', { role: after, deviceRole: deviceRole, verified: verifiedRole });
         /* 잠겨 있는 동안(역할 미확인)에 기기에서 고친 내용을 역할이 풀리는 순간 한 번 훑는다 */
         if (after === 'admin') { rescanLocal(); }
+        /* 태블릿으로 확인되는 순간, 보낼 수 없는 경로의 실패 항목을 한 번 정리한다 */
+        if (after === 'tablet') { try { clearFailed(); } catch (e) {} }
       }
       return after;
     }
@@ -1180,6 +1229,9 @@
         writeValue(name, clone(SCRUB_EMPTY[name]));
         cleared.push(e.key);
       });
+      /* 개인정보를 비운 김에, 규칙이 거부해 쌓인 「보낼 수 없는」 실패 항목도 함께 정리한다 */
+      var queue = { removed: 0, failed: 0, queued: outbox.count() };
+      try { queue = clearFailed(); } catch (e) {}
       /* 지운 뒤 남은 얼굴은 100% 그대로 — 한 번 더 세어 돌려준다 */
       var facesAfter = countFaces(readValue('faces'));
       return {
@@ -1190,6 +1242,8 @@
         faces: facesAfter,
         facesBefore: faceCount,
         cleared: cleared,
+        failedCleared: queue.removed,
+        failedLeft: queue.failed,
         kept: ['tdk.faces.v1', 'tdk.fbConfig.v1', 'tdk.fbDevice.v1', 'tdk.fbState.v1', 'tdk.fbOutbox.v1', 'tdk.fbShadow.v1', 'tdk.fbUsage.v1']
       };
     }
@@ -1635,6 +1689,12 @@
     }
 
     function capture(entry) {
+      /* 태블릿은 출결(attendanceEvents)만 올린다 — 그 밖의 원생·원비·상담·차량·설정은
+         규칙이 거부하므로 큐에 넣지도, 그림자를 앞지르지도 않는다 */
+      if (effectiveRole() === 'tablet' && entry.kind !== 'events') {
+        emit('blocked-local', { key: entry.name, reason: 'tablet-role' });
+        return;
+      }
       var base = basePath();
       var changes = [];
       var live = {};
@@ -1700,7 +1760,14 @@
 
       if (changes.length) {
         saveShadow();
-        changes.forEach(function (c) { outbox.enqueue({ path: c.path, body: c.body }); });
+        changes.forEach(function (c) {
+          /* 보낼 수 없는 경로는 큐에 넣지 않는다 (태블릿 = 출결만) */
+          if (isTabletBlockedPath(c.path)) {
+            emit('blocked-local', { key: entry.name, reason: 'tablet-role' });
+            return;
+          }
+          outbox.enqueue({ path: c.path, body: c.body });
+        });
         emit('captured', { key: entry.name, count: changes.length });
       }
     }
@@ -1790,15 +1857,21 @@
         emit('remote', { path: path, key: entry.name });
       }
       if (needRemote) {
-        /* 내 쪽이 더 최신인 필드가 있어 합친 결과를 되돌려 보낸다 → 양쪽이 같은 값으로 수렴 */
-        var body = bodyWithMeta(mergedBody, merged.meta);
-        body._ver = num(merged.ver) + 1;
-        body._updatedAt = isoOf(now());
-        body._updatedBy = deviceId;
-        if (merged.deleted) { body = { _deleted: true, _ver: body._ver, _updatedAt: body._updatedAt, _updatedBy: deviceId }; }
-        updateShadowFromMerged(path, merged, kind, body);
-        outbox.enqueue({ path: path, body: body });
-        scheduleFlush();
+        /* 태블릿은 출결 외 경로를 보낼 수 없다 — 큐에 쌓아 두면 영원히 실패로 남는다 */
+        if (isTabletBlockedPath(path)) {
+          emit('blocked-local', { key: entry.name, reason: 'tablet-role' });
+          updateShadowFromMerged(path, merged, kind, null);
+        } else {
+          /* 내 쪽이 더 최신인 필드가 있어 합친 결과를 되돌려 보낸다 → 양쪽이 같은 값으로 수렴 */
+          var body = bodyWithMeta(mergedBody, merged.meta);
+          body._ver = num(merged.ver) + 1;
+          body._updatedAt = isoOf(now());
+          body._updatedBy = deviceId;
+          if (merged.deleted) { body = { _deleted: true, _ver: body._ver, _updatedAt: body._updatedAt, _updatedBy: deviceId }; }
+          updateShadowFromMerged(path, merged, kind, body);
+          outbox.enqueue({ path: path, body: body });
+          scheduleFlush();
+        }
       } else {
         updateShadowFromMerged(path, merged, kind, null);
       }
@@ -2341,6 +2414,8 @@
         });
       }
       if (adapter && verifyOnStart) { try { verifyRole(); } catch (e) {} }
+      /* 태블릿 역할인데 예전에 쌓인 「보낼 수 없는」 실패 항목이 있으면 한 번 정리한다 */
+      if (isEffectiveTablet()) { try { clearFailed(); } catch (e) {} }
       /* 태블릿 역할인데 이 기기에 아직 개인정보가 남아 있으면 한 번 알린다 */
       if (isEffectiveTablet()) {
         var privateCount = countPrivateStudents(readValue('students'));
@@ -2380,6 +2455,8 @@
       setRole: function (r) { return setDeviceRole(r); },
       setDeviceRole: setDeviceRole,
       scrubTabletPII: scrubTabletPII,
+      /* 「🗑️ 실패 비우기」 — failed 항목만 지운다 (인자 없으면 태블릿이 보낼 수 없는 경로만) */
+      clearFailed: clearFailed,
       countPrivateStudents: function () { return countPrivateStudents(readValue('students')); },
       role: function () { return effectiveRole(); },
       effectiveRole: effectiveRole,
