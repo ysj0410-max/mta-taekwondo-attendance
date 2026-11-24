@@ -125,6 +125,7 @@
       keys: keys || undefined,
       adapter: adapter,
       deviceId: deviceId(),
+      deviceLabel: (S.cfg.role === 'tablet' ? '출석 태블릿' : '관리자 기기') + ' ' + deviceId(),
       dojangId: S.cfg.dojangId,
       role: S.cfg.role,
       /* 실제 Firebase 모드에서는 화면 선택값이 아니라 서버 roles/{uid} 로 권한을 잠근다 */
@@ -401,7 +402,7 @@
     if (tag) { tag.style.display = 'none'; }
     var usageDate = S.engine ? String(S.engine.usage.snapshot().date || '').replace(/^pt:/, '') : '';
     setText('fb-usage-note', S.engine
-      ? (usageDate + ' 기준(미국 태평양 자정 = 한국 오후 4~5시 초기화) · 이 기기에서 센 추정치 (PC·태블릿 합산 아님)')
+      ? (usageDate + ' 기준(미국 태평양 자정 = 한국 오후 4~5시 초기화) · 이 기기 추정치 + 다른 기기 합산')
       : '동기화를 켜면 표시됩니다');
     var lastSync = (S.engine && S.engine.errors().lastSyncAt) || S.cfg.lastSyncAt || '';
     setText('fb-sync-note', '마지막 동기화: ' + (lastSync ? nowText(lastSync) : '아직 없음') +
@@ -424,18 +425,44 @@
     var snap = S.engine ? S.engine.usage.snapshot() : {
       reads: 0, writes: 0, deletes: 0,
       limits: { reads: FB.SPARK.reads, writes: FB.SPARK.writes, deletes: FB.SPARK.deletes },
-      pct: { reads: 0, writes: 0, deletes: 0 }, level: 0
+      pct: { reads: 0, writes: 0, deletes: 0 }, level: 0,
+      mine: { reads: 0, writes: 0, deletes: 0 },
+      total: { reads: 0, writes: 0, deletes: 0 },
+      totalPct: { reads: 0, writes: 0, deletes: 0 },
+      deviceCount: 1, syncAllowed: false
     };
+    /* 바에는 전체 기기 합산을, 아래 작은 줄에 이 기기 값과 합산 기기 수를 함께 보여 준다 */
+    var total = snap.total || { reads: snap.reads, writes: snap.writes, deletes: snap.deletes };
+    var totalPct = snap.totalPct || snap.pct || {};
     [['reads', 'read', '읽기'], ['writes', 'write', '쓰기'], ['deletes', 'del', '삭제']].forEach(function (row) {
       var k = row[0], barId = 'fb-bar-' + row[1], txtId = 'fb-use-' + row[1];
-      var pct = Math.min(1, snap.pct[k] || 0);
+      var pct = Math.min(1, totalPct[k] || 0);
       var bar = $(barId);
       if (bar) {
         bar.style.width = Math.round(pct * 100) + '%';
         bar.className = pct >= 1 ? 'danger' : (pct >= FB.SPARK.warnRatio ? 'warn' : '');
       }
-      setText(txtId, numText(snap[k]) + ' / ' + numText(snap.limits[k]) + '  (' + Math.floor((snap.pct[k] || 0) * 100) + '%)');
+      setText(txtId, numText(total[k]) + ' / ' + numText(snap.limits[k]) + '  (' + Math.floor((totalPct[k] || 0) * 100) + '%)');
     });
+    var mine = snap.mine || { reads: snap.reads, writes: snap.writes, deletes: snap.deletes };
+    var devCount = Number(snap.deviceCount) || 1;
+    var line = '이 기기: 읽기 ' + numText(mine.reads) + ' · 쓰기 ' + numText(mine.writes) + ' · 삭제 ' + numText(mine.deletes);
+    if (!S.engine) {
+      line += ' · 동기화를 켜면 기기별 합산이 표시됩니다';
+    } else if (snap.syncAllowed === false) {
+      line += ' · 다른 기기 합산은 관리자 PC에 표시됩니다';
+    } else {
+      line += ' · 합산 기기 ' + devCount + '대';
+    }
+    var devLine = $('fb-usage-devices');
+    if (devLine) {
+      devLine.textContent = line;
+      var rows = (snap.devices || []).map(function (d) {
+        return (d.label || d.deviceId) + ' — 읽기 ' + numText(d.reads) + ' · 쓰기 ' + numText(d.writes) +
+          ' · 삭제 ' + numText(d.deletes) + (d.blocked ? ' (한도 초과)' : '');
+      });
+      devLine.title = rows.length ? ('기기별 사용량\n' + rows.join('\n')) : '';
+    }
     var note = $('fb-usage-note');
     if (note && snap.level >= 2) { note.textContent = '한도 초과 — 동기화를 멈추고 기기에 보관 중 (전체 사용량은 콘솔에서 확인)'; }
     else if (note && snap.level >= 1) { note.textContent = '이 기기 기준 80%를 넘었습니다 — 콘솔에서 전체 사용량을 확인하세요'; }

@@ -15,6 +15,7 @@
        dojangs/{dojangId}/tuition/{YYYY-MM}_{studentId}  원생·월 원비 1건 = 문서 1개
        dojangs/{dojangId}/counsel|shuttle|coupons/{id}   기록 1건 = 문서 1개
        dojangs/{dojangId}/meta/{설정문서}                설정·단가표·문구·로그·계정
+       dojangs/{dojangId}/meta/usage                     기기별 무료 한도 추정 사용량 합산(관리자 전용 · 60초 간격)
        dojangs/{dojangId}/roles/{uid}                    권한(관리자/출석 태블릿)
      · 기기 로컬 전용(절대 업로드하지 않음)
        tdk.faces.v1(원생 얼굴 128차원), tdk.adminFace.v1(관리자 얼굴),
@@ -31,7 +32,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.2.0';
+  var VERSION = '1.3.0';
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -136,6 +137,108 @@
       ymd = d.getUTCFullYear() + '-' + p2(d.getUTCMonth() + 1) + '-' + p2(d.getUTCDate());
     }
     return 'pt:' + ymd;
+  }
+
+  /* =========================================================================
+     기기별 사용량 합산 문서 (dojangs/{도장}/meta/usage)
+     ----------------------------------------------------------------------------
+     관리자 PC·폰·태블릿이 각자 센 무료 한도 추정치를 한 문서에 모아 서로 더해 본다.
+       { date: 'pt:YYYY-MM-DD',
+         devices: { [deviceId]: { date, label, reads, writes, deletes, blocked, updatedAt } } }
+     · 문서 하나뿐이라 규칙(firestore.rules)을 고치지 않아도 관리자 계정으로 바로 쓴다
+       (meta 는 이미 isAdmin 읽기·쓰기 허용 — 태블릿에는 permission-denied 이며 조용히 건너뛴다)
+     · 날짜가 바뀌면(태평양 자정 = 한국 오후 4~5시) 지난 날짜 기기 항목은 합산에서 뺀다
+     · 이 문서의 쓰기·수신은 계량기(tdk.fbUsage.v1)에 넣지 않는다 —
+       계량기에 넣으면 "합산 문서를 쓰느라 사용량이 올라 다시 쓰는" 되먹임 고리가 생긴다.
+     ========================================================================= */
+  var USAGE_SYNC = {
+    doc: 'usage',
+    minReads: 20,          /* 이만큼 쌓였을 때만 서버에 올린다 (쓰기 한도 보호) */
+    minWrites: 5,
+    minDeletes: 5,
+    intervalMs: 60000,     /* 두 번 올리는 사이 최소 간격 */
+    tickMs: 30000,         /* 간격이 차면 스스로 한 번 확인하는 주기 */
+    debounceMs: 3000       /* 사용량이 늘어난 직후 몰아서 한 번 */
+  };
+
+  /* 문서에 담긴 기기 항목 중 "오늘" 것만 골라낸다 (지난 날짜·모양이 깨진 항목은 버린다) */
+  function usageDeviceEntries(doc, today) {
+    var out = [];
+    if (!isPlain(doc) || !isPlain(doc.devices)) { return out; }
+    var docDate = String(doc.date == null ? '' : doc.date);
+    var day = String(today == null ? '' : today);
+    Object.keys(doc.devices).forEach(function (id) {
+      var e = doc.devices[id];
+      if (!isPlain(e)) { return; }
+      var eDate = String(e.date == null ? docDate : e.date);
+      if (!day || eDate !== day) { return; }
+      out.push({
+        deviceId: String(id),
+        label: String(e.label == null ? id : e.label),
+        date: eDate,
+        reads: Math.max(0, num(e.reads)),
+        writes: Math.max(0, num(e.writes)),
+        deletes: Math.max(0, num(e.deletes)),
+        blocked: !!e.blocked,
+        updatedAt: String(e.updatedAt == null ? '' : e.updatedAt)
+      });
+    });
+    return out;
+  }
+
+  /* meta/usage 문서 → 기기별 항목 · 합계 (같은 날짜만)
+       mine      내 deviceId 항목(서버에 올라간 사본, 없으면 null)
+       others    내 기기를 뺀 나머지 기기 합계
+       totals    문서에 있는 전체 합계 */
+  function usageTotals(doc, today, myDeviceId) {
+    var day = String(today == null ? sparkDayOf(Date.now()) : today);
+    var me = String(myDeviceId == null ? '' : myDeviceId);
+    var rows = usageDeviceEntries(doc, day);
+    var totals = { reads: 0, writes: 0, deletes: 0 };
+    var others = { reads: 0, writes: 0, deletes: 0 };
+    var mine = null;
+    var othersCount = 0;
+    rows.forEach(function (r) {
+      totals.reads += r.reads; totals.writes += r.writes; totals.deletes += r.deletes;
+      if (r.deviceId === me) { mine = r; return; }
+      others.reads += r.reads; others.writes += r.writes; others.deletes += r.deletes;
+      othersCount++;
+    });
+    return {
+      date: day,
+      devices: rows,
+      count: rows.length,
+      othersCount: othersCount,
+      totals: totals,
+      others: others,
+      mine: mine
+    };
+  }
+
+  /* 이번에 서버로 올릴지 판단 — 60초 간격 · 최소 변화량 · 차단 상태 변화
+       local     { date, reads, writes, deletes, blocked }
+       lastSent  마지막으로 올린 값(없으면 null)
+       atMs      지금 시각, lastAtMs 마지막으로 올린 시각 */
+  function usagePushDecision(local, lastSent, atMs, lastAtMs) {
+    var l = isPlain(local) ? local : {};
+    var at = num(atMs == null ? Date.now() : atMs);
+    var lastAt = num(lastAtMs);
+    var throttled = lastAt > 0 && (at - lastAt) < USAGE_SYNC.intervalMs;
+    if (!isPlain(lastSent)) { return { push: !throttled, reason: throttled ? 'throttle' : 'first' }; }
+    var changed = '';
+    if (String(l.date || '') !== String(lastSent.date || '')) { changed = 'new-day'; }
+    else if (!!l.blocked !== !!lastSent.blocked) { changed = 'blocked'; }
+    else {
+      var dr = num(l.reads) - num(lastSent.reads);
+      var dw = num(l.writes) - num(lastSent.writes);
+      var dd = num(l.deletes) - num(lastSent.deletes);
+      /* 계량기를 0 으로 되돌린 경우는 "줄어든 변화"도 그대로 알린다 */
+      if (dr < 0 || dw < 0 || dd < 0) { changed = 'reset'; }
+      else if (dr >= USAGE_SYNC.minReads || dw >= USAGE_SYNC.minWrites || dd >= USAGE_SYNC.minDeletes) { changed = 'delta'; }
+    }
+    if (!changed) { return { push: false, reason: 'small' }; }
+    if (throttled) { return { push: false, reason: 'throttle', pending: changed }; }
+    return { push: true, reason: changed };
   }
 
   /* Firestore 문서 ID로 쓸 수 없는 문자 정리 ( '/' '.' '#' '$' '[' ']' 등 ) */
@@ -1074,6 +1177,7 @@
     var outbox = createOutbox(storage, { now: now, onError: noteStorageError });
     /* 사용량이 경고(80%)·차단(100%) 단계로 넘어가면 화면에 바로 알린다 */
     var rawUsageRecord = usage.record;
+    var rawUsageSnapshot = usage.snapshot;
     usage.record = function (kind, n) {
       var before = 0;
       try { before = usage.snapshot().level; } catch (e) { before = 0; }
@@ -1081,6 +1185,8 @@
       var after = 0;
       try { after = usage.snapshot().level; } catch (e) { after = 0; }
       if (after !== before) { emit('usage', usage.snapshot()); }
+      /* 사용량이 늘었으면 잠시 뒤 한 번만 합산 문서에 올려 본다(60초 간격·최소 변화량은 pushUsageNow 가 판단) */
+      scheduleUsagePush();
     };
     var deviceId = opts.deviceId || 'dev_local';
     var dojangId = safeId(opts.dojangId || 'mta-tkd');
@@ -1092,6 +1198,169 @@
     /* 시작할 때 서버 roles 를 자동으로 확인할지 (테스트에서 순서를 직접 잡을 때만 false) */
     var verifyOnStart = opts.verifyOnStart !== false;
     var adapter = opts.adapter || null;
+
+    /* ---------- 기기별 사용량 합산 (dojangs/{도장}/meta/usage) ----------
+       · 관리자로 확인된 기기에서만 읽고 쓴다. 태블릿은 규칙상 meta 를 읽을 수 없으므로
+         meta/usage 구독·쓰기를 아예 시도하지 않는다(오류도 내지 않는다).
+       · 이 문서의 쓰기·수신은 계량기(tdk.fbUsage.v1)에 넣지 않는다 —
+         합산 문서 자체가 사용량을 늘려 다시 쓰는 되먹임 고리를 막기 위해서다.
+       · 올리기는 최소 60초 간격 + 읽기 20/쓰기·삭제 5 이상 변화일 때만. */
+    var usageSync = {
+      remote: null,        /* 서버에서 받은 마지막 meta/usage 문서 */
+      last: null,          /* 마지막으로 올린 내 값 */
+      lastAt: 0,           /* 마지막으로 올린 시각(ms) */
+      lastPushAt: '',
+      busy: false,
+      timer: null,
+      tick: null,
+      pushes: 0,
+      skipped: 0,
+      lastError: ''
+    };
+    var deviceLabel = String(opts.deviceLabel || deviceId);
+    function usageMetaPath() { return basePath() + '/meta/usage'; }
+    function usageSyncReason() {
+      if (!adapter) { return 'no-adapter'; }
+      if (effectiveRole() === 'tablet') { return 'tablet-role'; }
+      if (!isEffectiveAdmin()) { return 'role-unverified'; }
+      return '';
+    }
+    function usageSyncAllowed() { return usageSyncReason() === ''; }
+
+    function myUsageEntry(at) {
+      var s = rawUsageSnapshot();
+      return {
+        date: s.date, label: deviceLabel,
+        reads: s.reads, writes: s.writes, deletes: s.deletes,
+        blocked: !!s.blocked, updatedAt: isoOf(at == null ? now() : at)
+      };
+    }
+
+    /* 지금 화면에 보일 "전체 기기 합산" — 내 기기의 살아 있는 값 + 서버에서 받은 다른 기기들의 오늘 값 */
+    function usageTotalView(snap) {
+      var s = snap || rawUsageSnapshot();
+      var t = usageTotals(usageSync.remote, s.date, deviceId);
+      var mine = { reads: s.reads, writes: s.writes, deletes: s.deletes, blocked: !!s.blocked };
+      var totals = {
+        reads: mine.reads + t.others.reads,
+        writes: mine.writes + t.others.writes,
+        deletes: mine.deletes + t.others.deletes
+      };
+      var limits = s.limits || { reads: SPARK.reads, writes: SPARK.writes, deletes: SPARK.deletes };
+      var pct = {
+        reads: totals.reads / (limits.reads || SPARK.reads),
+        writes: totals.writes / (limits.writes || SPARK.writes),
+        deletes: totals.deletes / (limits.deletes || SPARK.deletes)
+      };
+      var devices = [];
+      t.devices.forEach(function (r) {
+        if (r.deviceId === String(deviceId)) { return; }
+        devices.push(r);
+      });
+      devices.push({
+        deviceId: String(deviceId), label: deviceLabel, date: s.date,
+        reads: mine.reads, writes: mine.writes, deletes: mine.deletes,
+        blocked: !!mine.blocked, updatedAt: usageSync.lastPushAt, mine: true
+      });
+      return {
+        date: s.date,
+        mine: mine,
+        others: t.others,
+        otherDevices: t.othersCount,
+        totals: totals,
+        limits: { reads: limits.reads, writes: limits.writes, deletes: limits.deletes },
+        pct: pct,
+        maxPct: Math.max(pct.reads, pct.writes, pct.deletes),
+        deviceCount: t.othersCount + 1,
+        devices: devices
+      };
+    }
+
+    /* usage.snapshot() 에 합산값을 함께 담아 준다 (기존 필드는 그대로 둔다) */
+    usage.snapshot = function () {
+      var s = rawUsageSnapshot();
+      var v = usageTotalView(s);
+      s.mine = v.mine;
+      s.others = v.others;
+      s.otherDevices = v.otherDevices;
+      s.total = v.totals;
+      s.totalPct = v.pct;
+      s.totalMaxPct = v.maxPct;
+      s.deviceCount = v.deviceCount;
+      s.devices = v.devices;
+      s.syncAllowed = usageSyncAllowed();
+      s.syncReason = usageSyncReason();
+      s.syncAt = usageSync.lastPushAt;
+      s.syncCount = usageSync.pushes;
+      return s;
+    };
+
+    /* meta/usage 에 쓸 문서 — 오늘의 다른 기기 항목은 그대로 두고 내 항목만 새 값으로 바꾼다 */
+    function usageBodyToWrite(entry) {
+      var devices = {};
+      usageDeviceEntries(usageSync.remote, entry.date).forEach(function (r) {
+        if (r.deviceId === String(deviceId)) { return; }
+        devices[r.deviceId] = {
+          date: r.date, label: r.label, reads: r.reads, writes: r.writes,
+          deletes: r.deletes, blocked: r.blocked, updatedAt: r.updatedAt
+        };
+      });
+      devices[safeId(deviceId)] = clone(entry) || entry;
+      return { date: entry.date, devices: devices };
+    }
+
+    /* 한 번 올려 본다. force 를 주면 간격·변화량 판단을 건너뛴다(진단용).
+       어떤 실패든 조용히 넘긴다 — 화면 경고·동기화 상태·전송 큐를 건드리지 않는다. */
+    function pushUsageNow(force) {
+      var reason = usageSyncReason();
+      if (reason) { return Promise.resolve({ ok: false, pushed: false, reason: reason, skipped: true }); }
+      if (usageSync.busy) { return Promise.resolve({ ok: false, pushed: false, reason: 'busy' }); }
+      var at = now();
+      var local = myUsageEntry(at);
+      var d = (force === true) ? { push: true, reason: 'force' } : usagePushDecision(local, usageSync.last, at, usageSync.lastAt);
+      if (!d.push) { usageSync.skipped++; return Promise.resolve({ ok: true, pushed: false, reason: d.reason }); }
+      var body = usageBodyToWrite(local);
+      usageSync.busy = true;
+      var p;
+      try { p = adapter.writeBatch([{ path: usageMetaPath(), body: body, merge: true }]); }
+      catch (e) { p = Promise.reject(e); }
+      return Promise.resolve(p).then(function () {
+        usageSync.busy = false;
+        usageSync.last = local;
+        usageSync.lastAt = at;
+        usageSync.lastPushAt = isoOf(at);
+        usageSync.pushes++;
+        usageSync.lastError = '';
+        emit('usage-sync', { pushed: true, at: usageSync.lastPushAt, count: usageSync.pushes, deviceId: String(deviceId) });
+        return { ok: true, pushed: true, reason: d.reason, at: usageSync.lastPushAt };
+      }, function (err) {
+        usageSync.busy = false;
+        /* 태블릿·규칙 거부·오프라인 — 모두 조용히 건너뛴다 */
+        usageSync.lastError = errorText(err);
+        return { ok: false, pushed: false, reason: 'write-failed', error: usageSync.lastError, silent: true };
+      });
+    }
+
+    function scheduleUsagePush(delayMs) {
+      /* 테스트·수동 모드(autoflush:false)에서는 타이머를 걸지 않는다 — pushUsageNow() 로만 */
+      if (opts.autoflush === false || !usageSyncAllowed()) { return; }
+      if (usageSync.timer) { return; }
+      usageSync.timer = setTimeout(function () {
+        usageSync.timer = null;
+        pushUsageNow().then(function () {}, function () {});
+      }, Math.max(0, num(delayMs) || USAGE_SYNC.debounceMs));
+    }
+
+    function stopUsageSync() {
+      if (usageSync.timer) { try { clearTimeout(usageSync.timer); } catch (e) {} usageSync.timer = null; }
+      if (usageSync.tick) { try { clearInterval(usageSync.tick); } catch (e) {} usageSync.tick = null; }
+    }
+
+    /* 다른 기기가 올린 meta/usage 를 받았을 때 — 합산 표시만 새로 하고 되쓰지 않는다 */
+    function onRemoteUsage(data) {
+      usageSync.remote = isPlain(data) ? (clone(data) || null) : null;
+      emit('usage', usage.snapshot());
+    }
 
     /* ---------- 그림자(shadow) 상태 ----------
        정본은 인메모리 shadow · 사본은 IndexedDB. localStorage 는 부팅 때 옛 값을 옮기고 비운다. */
@@ -1213,6 +1482,7 @@
         if (adapter && typeof adapter.setRole === 'function') { try { adapter.setRole(after); } catch (e) {} }
         resubscribe();
         emit('role', { role: after, deviceRole: deviceRole, verified: verifiedRole });
+        if (after === 'admin') { scheduleUsagePush(1500); }
         if (after === 'tablet') { try { clearFailed(); } catch (e) {} }
       }
       return after;
@@ -1229,7 +1499,7 @@
         resubscribe();
         emit('role', { role: after, deviceRole: deviceRole, verified: verifiedRole });
         /* 잠겨 있는 동안(역할 미확인)에 기기에서 고친 내용을 역할이 풀리는 순간 한 번 훑는다 */
-        if (after === 'admin') { rescanLocal(); }
+        if (after === 'admin') { rescanLocal(); scheduleUsagePush(1500); }
         /* 태블릿으로 확인되는 순간, 보낼 수 없는 경로의 실패 항목을 한 번 정리한다 */
         if (after === 'tablet') { try { clearFailed(); } catch (e) {} }
       }
@@ -1855,6 +2125,8 @@
 
     /* 원격 문서 수신 */
     function onRemote(path, data, meta) {
+      /* 기기별 사용량 합산 문서 — 화면 합산에만 쓰고, 이 수신 때문에 되쓰지 않는다(무한 쓰기 방지) */
+      if (path === usageMetaPath()) { onRemoteUsage(data); return; }
       if (!entryByPath(path)) { return; }
       usage.record('reads', 1);
       var remoteDoc = {};
@@ -2458,6 +2730,16 @@
         });
       }
       if (adapter && verifyOnStart) { try { verifyRole(); } catch (e) {} }
+      /* 관리자로 확인되면 기기별 사용량 합산 문서(meta/usage)도 주기적으로 올린다 */
+      if (opts.autoflush !== false) {
+        scheduleUsagePush(1500);
+        if (!usageSync.tick) {
+          usageSync.tick = setInterval(function () {
+            if (!usageSyncAllowed()) { return; }
+            pushUsageNow().then(function () {}, function () {});
+          }, USAGE_SYNC.tickMs);
+        }
+      }
       /* 태블릿 역할인데 예전에 쌓인 「보낼 수 없는」 실패 항목이 있으면 한 번 정리한다 */
       if (isEffectiveTablet()) { try { clearFailed(); } catch (e) {} }
       /* 태블릿 역할인데 이 기기에 아직 개인정보가 남아 있으면 한 번 알린다 */
@@ -2471,6 +2753,7 @@
 
     function stop() {
       started = false;
+      stopUsageSync();
       if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
       if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
       if (root.removeEventListener) {
@@ -2490,6 +2773,21 @@
       stop: stop,
       status: status,
       usage: usage,
+      /* 기기별 사용량 합산 — 지금 상태(마지막으로 받은 문서·올린 횟수) */
+      usageSync: function () {
+        return {
+          allowed: usageSyncAllowed(),
+          reason: usageSyncReason(),
+          path: usageMetaPath(),
+          pushes: usageSync.pushes,
+          skipped: usageSync.skipped,
+          lastPushAt: usageSync.lastPushAt,
+          lastError: usageSync.lastError,
+          remoteDate: usageSync.remote ? String(usageSync.remote.date || '') : '',
+          remoteDevices: usageTotals(usageSync.remote, rawUsageSnapshot().date, deviceId).devices.length
+        };
+      },
+      pushUsageNow: pushUsageNow,
       outbox: outbox,
       registry: function () { return registry.map(function (e) { return clone(e); }); },
       basePath: basePath,
@@ -3039,6 +3337,10 @@
     buildRegistry: buildRegistry,
     createEngine: createEngine,
     createUsage: createUsage,
+    USAGE_SYNC: USAGE_SYNC,
+    usageTotals: usageTotals,
+    usageDeviceEntries: usageDeviceEntries,
+    usagePushDecision: usagePushDecision,
     createOutbox: createOutbox,
     createMockServer: createMockServer,
     createMockAdapter: createMockAdapter,
