@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=30"></script>
-<script src="firebase-sync-ui.js?v=30"></script>
+<script src="firebase-sync.js?v=31"></script>
+<script src="firebase-sync-ui.js?v=31"></script>
 <title>경희대MTA태권도 · AI 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -522,8 +522,39 @@
   /* 국기원 심사접수용 — 생년월일 · 티콘 ID 인라인 입력 */
   #gk-table input[data-gk="birthDate"]{width:126px; min-width:126px}
   #gk-table input[data-gk="tconId"]{width:108px; min-width:104px; font-weight:700; color:var(--navy); letter-spacing:-.2px}
-  #gk-table td:first-child{min-width:82px; white-space:nowrap}
+  #gk-table td:nth-child(2){min-width:82px; white-space:nowrap}
+  #gk-table td:first-child{width:28px; min-width:28px; padding-right:0}
+  /* 국기원 표 — 「관원 띠」 열(띠 배지 + 이름)과 이달 명단 담기 버튼 */
+  #gk-table td.gk-beltcell{white-space:nowrap}
+  #gk-table td.gk-beltcell .belt-name{font-size:12px; font-weight:800; color:#344054; margin-left:4px}
+  #gk-table tr.gk-inlist td{background:#f4f9ff}
   .ck{width:17px; height:17px; accent-color:#16294f; cursor:pointer; vertical-align:middle}
+  /* 국기원 탭 — 검색창 · 「이달의 국기원 대상자 명단」 */
+  .guk-search{height:38px; flex:1 1 240px; min-width:200px; max-width:360px}
+  .gmk{border:1px solid #d9e3f4; border-radius:13px; margin:0 16px 11px; background:#f7fbff; overflow:hidden}
+  .gmk-head{display:flex; align-items:center; gap:8px; padding:8px 12px; background:#e9f1fd; border-bottom:1px solid #d9e3f4; flex-wrap:wrap}
+  .gmk-title{display:inline-flex; align-items:center; gap:7px; border:0; background:none; padding:0; cursor:pointer; font-size:12.5px; font-weight:900; color:var(--navy); letter-spacing:-.2px}
+  .gmk-title .gmk-caret{font-size:10px; color:#7a8699}
+  .gmk-count{background:var(--navy); color:#fff; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:800}
+  .gmk-month{font-size:11px; font-weight:800; color:#5b6b85}
+  .gmk-month.stale{color:#b54708}
+  .gmk-body{padding:9px 12px 10px}
+  .gmk-empty{font-size:11.5px; font-weight:600; color:#5b6b85; line-height:1.65}
+  .gmk-list{display:flex; flex-wrap:wrap; gap:6px}
+  .gmk-item{display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid #dbe5f4; border-radius:999px; padding:4px 6px 4px 10px; font-size:11.5px}
+  .gmk-item .gmk-name{font-weight:900; color:var(--navy)}
+  .gmk-item .gmk-belt{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; color:#475467}
+  .gmk-item .gmk-extra{font-size:10.5px; font-weight:800; color:#7a8699}
+  .gmk-x{border:0; background:#eef2f9; color:#7a8699; width:19px; height:19px; border-radius:50%; font-size:10.5px; font-weight:900; line-height:1; padding:0; cursor:pointer}
+  .gmk-x:hover{background:#ffe4e4; color:#c02626}
+  @media (max-width:640px){
+    #gk-table td.gk-beltcell .belt-name{display:none}
+  }
+  /* 인쇄 — 이달 명단은 그대로 찍히되 누를 것(검색·체크·✕·일괄 버튼)은 빼고 */
+  @media print{
+    .guk-search, #guk-bulk, #gmk-restart, .gmk-x, .ck{display:none !important}
+    .gmk{border:1px solid #c9d3e4; background:#fff}
+  }
   .grade-chip{font-size:10px; font-weight:800; color:#475467; background:#eef2f9; padding:2px 6px; border-radius:6px; margin-left:4px; white-space:nowrap}
   /* 승급심사 표: 띠·급수 배지와 다음 띠·상태가 두 줄로 꺾이지 않게 한 줄로 */
   #promo-table td:nth-child(3), #promo-table td:nth-child(4){white-space:nowrap}
@@ -2089,16 +2120,43 @@
               <div class="panel">
                 <div class="panel-head"><h3>🏅 국기원 승품·승단 심사</h3><div class="spacer"></div><span class="tiny-note" id="gk-note">-</span><button class="btn btn-sm" id="btn-gk-csv">📥 심사 명단 CSV</button></div>
                 <div class="promo-filters" id="guk-filters" style="padding:11px 16px 0; margin-bottom:9px">
-                  <select class="input mon-select" id="guk-sort" aria-label="국기원 명단 정렬 방식" title="국기원 명단 정렬 — 품·단 보유자가 위로 옵니다">
+                  <input class="input guk-search" id="gk-search" type="search" placeholder="🔍 이름·초성·띠·티콘 ID 검색" autocomplete="off" spellcheck="false" aria-label="국기원 명단 이름·초성·띠·티콘 ID 검색">
+                  <select class="input mon-select" id="guk-sort" aria-label="국기원 명단 정렬 방식" title="국기원 명단 정렬 — 이달의 대상자 명단과 아래 표에 함께 적용됩니다">
                     <option value="name">이름순 (가나다)</option>
+                    <option value="beltHigh">띠순 (높은 띠부터)</option>
+                    <option value="beltLow">띠순 (낮은 띠부터)</option>
                     <option value="poomdan">구분·품·단순 (품 → 단 → 급)</option>
-                    <option value="beltLow">띠순 (낮은 띠→높은 띠)</option>
+                    <option value="division">부서·수업별</option>
                     <option value="status">심사 상태별</option>
                   </select>
+                  <span class="tiny-note" id="guk-filter-note"></span>
+                </div>
+                <!-- 📋 이달의 국기원 대상자 명단 — 표에서 체크해 담거나 줄 끝 버튼으로 바로 담고 뺀다 -->
+                <div class="gmk" id="guk-monthly">
+                  <div class="gmk-head">
+                    <button class="gmk-title" id="gmk-toggle" aria-expanded="true" aria-controls="gmk-body">
+                      <span class="gmk-caret" id="gmk-caret">▼</span>📋 이달의 국기원 대상자 명단
+                      <span class="gmk-count" id="gmk-count">0명</span>
+                      <span class="gmk-month" id="gmk-month"></span>
+                    </button>
+                    <div class="spacer"></div>
+                    <button class="btn btn-sm btn-ghost" id="gmk-restart" style="display:none" title="지난달 명단을 비우고 이번 달 명단을 새로 시작합니다">이번 달로 새로 시작</button>
+                  </div>
+                  <div class="gmk-body" id="gmk-body">
+                    <div class="gmk-empty" id="gmk-empty">아직 담은 관원이 없어요. 아래 표에서 원생을 체크하고 <b>+ 이달의 대상자에 추가</b>를 누르거나, 줄 끝의 <b>＋ 명단 담기</b> 버튼으로 바로 담을 수 있어요.</div>
+                    <div class="gmk-list" id="gmk-list"></div>
+                  </div>
+                </div>
+                <div class="bulk-bar" id="guk-bulk" style="display:none; margin:0 16px 10px">
+                  <b id="guk-bulk-count">0명 선택</b>
+                  <button class="btn btn-sm btn-primary" id="btn-guk-add">+ 이달의 대상자에 추가</button>
+                  <button class="btn btn-sm" id="btn-guk-remove">이달의 대상자에서 빼기</button>
+                  <div class="spacer"></div>
+                  <button class="btn btn-sm btn-ghost" id="btn-guk-clear">선택 해제</button>
                 </div>
                 <div class="tablewrap">
                   <table class="tb">
-                    <thead><tr><th>관원</th><th>생년월일</th><th>티콘 ID</th><th>현재 품·단</th><th>급수</th><th>목표</th><th>응시 상태</th><th>심사일</th><th style="width:132px"></th></tr></thead>
+                    <thead><tr><th style="width:28px"><input type="checkbox" class="ck" id="guk-check-all" aria-label="전체 선택"></th><th>관원</th><th>관원 띠</th><th>생년월일</th><th>티콘 ID</th><th>현재 품·단</th><th>급수</th><th>목표</th><th>응시 상태</th><th>심사일</th><th style="width:238px"></th></tr></thead>
                     <tbody id="gk-table"></tbody>
                   </table>
                 </div>
@@ -2121,7 +2179,8 @@
                   <div class="help">
                     <b>대상 · 서류준비 · 접수완료</b> 관원에게 안내가 나갑니다. <b>합격</b> 처리하면 현재 품·단이 목표로 바뀌고 학부모님께 축하 문자를 보냅니다.
                     품·단과 응시 상태는 표에서 바로 바꿀 수 있습니다.
-                    <b>생년월일 · 티콘 ID</b>는 국기원 심사접수에 필요한 정보로, 여기서 바로 고치면 「🥋 원생 관리」 명단에도 함께 저장됩니다(표에서 바로 접수·복사). 이 두 칸은 <b>관리자 화면에만</b> 보이고 출석 키오스크·공개 안내에는 나오지 않습니다.
+                    <b>생년월일 · 티콘 ID</b>는 국기원 심사접수에 필요한 정보로, 여기서 바로 고치면 「🥋 원생 관리」 명단에도 함께 저장됩니다(표에서 바로 접수·복사). 이 두 칸은 <b>관리자 화면에만</b> 보이고 출석 키오스크·공개 안내에는 나오지 않습니다.<br>
+                    왼쪽 <b>체크</b>로 여러 명을 한 번에 <b>이달의 국기원 대상자 명단</b>에 담거나 뺄 수 있고, 줄 끝의 <b>＋ 명단 담기</b> 버튼으로 한 명씩 바로 담을 수도 있습니다. 검색창은 <b>이름·초성·띠·티콘 ID</b>로 찾고, 정렬은 이달 명단과 아래 표에 함께 적용됩니다.
                   </div>
                 </div>
               </div>
@@ -2994,8 +3053,10 @@
     },
     guk: {
       name: '이름순 (가나다)',
+      beltHigh: '띠순 (높은 띠부터)',
+      beltLow: '띠순 (낮은 띠부터)',
       poomdan: '구분·품·단순 (품 → 단 → 급)',
-      beltLow: '띠순 (낮은 띠→높은 띠)',
+      division: '부서·수업별',
       status: '심사 상태별'
     }
   };
@@ -3111,7 +3172,9 @@
       if (ra !== rb) { return ra - rb; }
       return rosterSort(a, b);
     }
+    if (m === 'beltHigh') { return beltOrder(a, b, true); }
     if (m === 'beltLow') { return beltOrder(a, b, false); }
+    if (m === 'division') { return divisionOrder(a, b); }
     if (m === 'status') {
       var sa = GK_STATUS_ORDER.indexOf(gkStatusOf(a)), sb = GK_STATUS_ORDER.indexOf(gkStatusOf(b));
       if (sa !== sb) { return sa - sb; }
@@ -3308,6 +3371,9 @@
     stuFilter: 'active',   // 기본은 재원생만 — 휴관생은 「🛌 휴관생 관리」·「휴관생」 칩에서 따로 본다
     stuQuery: '',          // 「📋 재원생 전체 명단」 실시간 검색어(이름·초성·전화 뒷자리)
     sortUI: null,          // 탭별 표 정렬 방식(promo · stu · pz · guk) — 화면 표시 순서만 바꾼다
+    gukQuery: '',          // 「🏅 국기원」 실시간 검색어(이름·초성·띠·티콘 ID)
+    gukSelected: {},       // 국기원 표에서 체크한 줄 — 담기/빼기 버튼을 쓰고 나면 비운다
+    gukMonthlyOpen: true,  // 「📋 이달의 국기원 대상자 명단」 펼침 상태(저장하지 않는다)
     attFilter: 'all',
     attQuery: '',
     feeTable: null,
@@ -3566,6 +3632,9 @@
       (settings && settings.visibility) || {}
     );
     if (!app.settings.gukTime) { app.settings.gukTime = '10:00'; }
+    /* 「📋 이달의 국기원 대상자 명단」 — { month:'YYYY-MM', ids:[원생ID…] }
+       저장은 설정(tdk.settings.v1)에 함께 → Firebase meta/settings 동기화·드라이브 백업에 자동 포함 */
+    app.settings.gukMonthly = gukMonthlyState();
 
     // AI 얼굴인식 설정 (판정 거리 · 쿨다운 · 자동 출석)
     app.settings.face = Object.assign({}, DEFAULT_SETTINGS.face, (settings && settings.face) || {});
@@ -7846,6 +7915,8 @@
       s.gukStatus = 'passed';
       s.targetPoomDan = '없음';
       saveStudents();
+      /* 합격한 관원은 「이달의 국기원 대상자 명단」에서 자동으로 뺀다 */
+      gukMonthlyRemove([s.id]);
       addLog(s, 'in', fmtTime(), { kind: 'guk_pass', text: msg });
       renderAll();
       toast('🎉 ' + s.name + ' 관원 국기원 ' + grade + ' 합격 처리했어요.');
@@ -7915,21 +7986,42 @@
     el('gk-holders').innerHTML = holders + '<small>명</small>';
     if (el('gk-note')) { el('gk-note').textContent = fmtDateKorean(now) + ' 기준'; }
     if (el('guk-sort')) { el('guk-sort').value = sortMode('guk'); }
+    if (el('gk-search') && String(el('gk-search').value || '') !== String(app.gukQuery || '')) {
+      el('gk-search').value = String(app.gukQuery || '');
+    }
 
     if (el('gk-date') && !el('gk-date').value) { el('gk-date').value = app.settings.gukDate || defaultExamDate(); }
     if (el('gk-time') && !el('gk-time').value) { el('gk-time').value = app.settings.gukTime || '10:00'; }
     if (el('gk-place') && !el('gk-place').value) { el('gk-place').value = app.settings.gukPlace || (app.settings.dojoName + ' 도장'); }
 
-    var rows = activeStudents().slice().sort(gukOrder);
+    renderGukMonthly();
+
+    var q = String(app.gukQuery || '');
+    var total = activeStudents().length;
+    var rows = gukRows();
+    if (el('guk-filter-note')) {
+      el('guk-filter-note').textContent = (q ? '검색 ' + rows.length + '명 / 전체 ' + total + '명' : '전체 ' + total + '명') +
+        (sortMode('guk') === 'name' ? '' : ' · ' + sortLabelOf('guk'));
+    }
+
+    var sel = app.gukSelected || (app.gukSelected = {});
+    Object.keys(sel).forEach(function (id) { if (!byId(id)) { delete sel[id]; } });
+
     var tbody = el('gk-table');
     if (!rows.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="9">등록된 관원이 없습니다</td></tr>';
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="11">' +
+        (q ? '검색 결과가 없어요. 다른 이름·초성·띠로 찾아보세요.' : '등록된 관원이 없습니다') + '</td></tr>';
+      if (el('guk-check-all')) { el('guk-check-all').checked = false; }
+      renderGukBulk();
       return;
     }
     tbody.innerHTML = rows.map(function (s) {
       var grade = studentGrade(s);
-      return '<tr>' +
-        '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(s.belt || '') + (grade ? ' · ' + esc(grade) : '') + '</div></td>' +
+      var inList = gukMonthlyHas(s.id);
+      return '<tr' + (inList ? ' class="gk-inlist"' : '') + '>' +
+        '<td><input type="checkbox" class="ck" data-gkcheck="' + esc(s.id) + '"' + (sel[s.id] ? ' checked' : '') + ' aria-label="' + esc(s.name) + ' 선택"></td>' +
+        '<td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(studentLabel(s)) + '</div></td>' +
+        '<td class="gk-beltcell">' + beltSwatchHtml(s.belt) + '<span class="belt-name">' + esc(s.belt || '미지정') + '</span></td>' +
         '<td><input type="date" class="input mini" data-gk="birthDate" data-sid="' + esc(s.id) + '" value="' + esc(birthOf(s)) + '" aria-label="' + esc(s.name) + ' 생년월일" title="생년월일 (국기원 심사접수용)"></td>' +
         '<td><input type="text" class="input mini" data-gk="tconId" data-sid="' + esc(s.id) + '" value="' + esc(tconOf(s)) + '" maxlength="40" placeholder="티콘 ID" autocomplete="off" spellcheck="false" aria-label="' + esc(s.name) + ' 티콘 ID" title="티콘 ID (국기원 심사접수용)"></td>' +
         '<td>' + poomSelect(s.id, 'poomDan', s.poomDan) + '</td>' +
@@ -7938,12 +8030,168 @@
         '<td>' + statusSelect(s.id, gkStatusOf(s)) + '</td>' +
         '<td><input type="date" class="input mini" data-gk="gukExamDate" data-sid="' + esc(s.id) + '" value="' + esc(s.gukExamDate || '') + '"></td>' +
         '<td style="white-space:nowrap">' +
+        '<button class="btn btn-sm' + (inList ? ' btn-ghost' : '') + '" data-gkmtoggle="' + esc(s.id) + '" title="' +
+          (inList ? '이달의 국기원 대상자 명단에서 빼기' : '이달의 국기원 대상자 명단에 담기') + '">' +
+          (inList ? '✓ 명단 담김' : '＋ 명단 담기') + '</button> ' +
         '<button class="btn btn-sm" data-gknotice="' + esc(s.id) + '">안내</button> ' +
         ((s.targetPoomDan && s.targetPoomDan !== '없음')
           ? '<button class="btn btn-sm btn-primary" data-gkpass="' + esc(s.id) + '">합격</button>'
           : '') +
         '</td></tr>';
     }).join('');
+    var all = el('guk-check-all');
+    if (all) {
+      all.checked = rows.length > 0 && rows.every(function (s) { return !!sel[s.id]; });
+    }
+    renderGukBulk();
+  }
+
+  /* =========================================================
+     「📋 이달의 국기원 대상자 명단」 — 표에서 담고 빼는 명단
+     · 저장: app.settings.gukMonthly = { month:'YYYY-MM', ids:['원생ID', …] }
+       → Firebase meta/settings 는 필드 단위로 병합되므로 다른 기기와 실시간으로 같아지고,
+         구글 드라이브 백업(buildBackup 의 settings)에도 함께 실려 간다.
+       → 출석 태블릿용 kioskStudents 에는 넣지 않는다(개인정보 없는 최소 정보 규칙 그대로).
+     · 달이 바뀌면 지난달 명단으로 표시하고 「이번 달로 새로 시작」으로 비운다.
+     · 글자는 앱의 다른 명단과 같이 이름 가나다순·띠순 등 「정렬」 고른 순서를 따른다.
+     ========================================================= */
+  function gukMonthKey(d) {
+    var x = d || new Date();
+    return x.getFullYear() + '-' + pad2(x.getMonth() + 1);
+  }
+  function gukMonthLabel(key) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(key || ''));
+    return m ? (m[1] + '년 ' + Number(m[2]) + '월') : '';
+  }
+  /* 저장된 명단을 안전하게 읽는다 — 모양이 깨졌으면 이번 달 빈 명단으로 본다 */
+  function gukMonthlyState() {
+    var v = (app.settings && app.settings.gukMonthly) || null;
+    var month = (/^\d{4}-\d{2}$/.test(String((v && v.month) || '')) ? String(v.month) : gukMonthKey());
+    var ids = [], seen = {};
+    (v && Array.isArray(v.ids) ? v.ids : []).forEach(function (id) {
+      var k = String(id == null ? '' : id);
+      if (!k || seen[k]) { return; }
+      seen[k] = 1;
+      ids.push(k);
+    });
+    return { month: month, ids: ids };
+  }
+  function gukMonthlyIds() { return gukMonthlyState().ids; }
+  function gukMonthlyHas(id) { return gukMonthlyIds().indexOf(String(id)) !== -1; }
+  /* 저장 — 없는 관원 ID는 버리고, 같은 ID는 한 번만 남긴다 */
+  function writeGukMonthly(month, ids) {
+    var keep = [];
+    (ids || []).forEach(function (id) {
+      var k = String(id == null ? '' : id);
+      if (!k || !byId(k) || keep.indexOf(k) !== -1) { return; }
+      keep.push(k);
+    });
+    app.settings.gukMonthly = {
+      month: (/^\d{4}-\d{2}$/.test(String(month || '')) ? String(month) : gukMonthKey()),
+      ids: keep
+    };
+    saveSettings();
+    return app.settings.gukMonthly;
+  }
+  function gukMonthlyAdd(ids) {
+    var cur = gukMonthlyState();
+    var list = cur.ids.slice();
+    var added = 0, skipped = 0;
+    (ids || []).forEach(function (id) {
+      var k = String(id == null ? '' : id);
+      if (!k || !byId(k)) { return; }
+      if (list.indexOf(k) !== -1) { skipped++; return; }
+      list.push(k); added++;
+    });
+    if (added) { writeGukMonthly(cur.month, list); }
+    return { added: added, skipped: skipped };
+  }
+  function gukMonthlyRemove(ids) {
+    var cur = gukMonthlyState();
+    var drop = {};
+    (ids || []).forEach(function (id) { drop[String(id == null ? '' : id)] = 1; });
+    var list = cur.ids.filter(function (id) { return !drop[id]; });
+    var removed = cur.ids.length - list.length;
+    if (removed) { writeGukMonthly(cur.month, list); }
+    return { removed: removed };
+  }
+  function gukMonthlyStudents() {
+    var out = [];
+    gukMonthlyIds().forEach(function (id) { var s = byId(id); if (s) { out.push(s); } });
+    return out;
+  }
+  /* 명단에서 바로 담기/빼기 */
+  function toggleGukMonthly(id) {
+    var s = byId(id);
+    if (!s) { return; }
+    if (gukMonthlyHas(id)) {
+      gukMonthlyRemove([id]);
+      renderGukgiwon();
+      toast(s.name + ' 관원을 이달의 국기원 대상자 명단에서 뺐어요.');
+      return;
+    }
+    gukMonthlyAdd([id]);
+    renderGukgiwon();
+    toast('🎯 ' + s.name + ' 관원을 이달의 국기원 대상자 명단에 담았어요.');
+  }
+  /* 국기원 검색 — 이름·초성·띠·티콘 ID (+ 부서·수업·전화 뒷자리) */
+  function matchGukQuery(s, rawQuery) {
+    var q = String(rawQuery == null ? '' : rawQuery).replace(/\s+/g, '');
+    if (!q) { return true; }
+    if (matchRosterQuery(s, q)) { return true; }
+    var lq = q.toLowerCase();
+    var belt = String((s && s.belt) || '').replace(/\s+/g, '').toLowerCase();
+    if (belt && belt.indexOf(lq) !== -1) { return true; }
+    var poom = String((s && s.poomDan) || '').replace(/\s+/g, '').toLowerCase();
+    if (poom && poom !== '없음' && poom.indexOf(lq) !== -1) { return true; }
+    return false;
+  }
+  /* 표에 보이는 줄 — 정렬 → 검색 순서로 거른다 */
+  function gukRows() {
+    var q = String(app.gukQuery || '');
+    return activeStudents().slice().sort(gukOrder).filter(function (s) { return matchGukQuery(s, q); });
+  }
+  function gukSelectedIds() {
+    var sel = app.gukSelected || {};
+    return Object.keys(sel).filter(function (id) { return sel[id] && byId(id); });
+  }
+  function renderGukBulk() {
+    var bar = el('guk-bulk');
+    if (!bar) { return; }
+    var ids = gukSelectedIds();
+    bar.style.display = ids.length ? 'flex' : 'none';
+    if (el('guk-bulk-count')) { el('guk-bulk-count').textContent = ids.length + '명 선택'; }
+  }
+  function renderGukMonthly() {
+    var list = el('gmk-list');
+    if (!list) { return; }
+    var st = gukMonthlyState();
+    var rows = gukMonthlyStudents().sort(gukOrder);
+    var stale = st.month !== gukMonthKey();
+    if (el('gmk-count')) { el('gmk-count').textContent = rows.length + '명'; }
+    if (el('gmk-month')) {
+      el('gmk-month').textContent = gukMonthLabel(st.month) + (stale ? ' 명단 · 지난달' : '');
+      el('gmk-month').classList.toggle('stale', stale);
+    }
+    if (el('gmk-restart')) { el('gmk-restart').style.display = stale ? 'inline-flex' : 'none'; }
+    if (el('gmk-empty')) { el('gmk-empty').style.display = rows.length ? 'none' : 'block'; }
+    list.innerHTML = rows.map(function (s) {
+      var grade = studentGrade(s);
+      var extra = [];
+      if (s.poomDan && s.poomDan !== '없음') { extra.push(s.poomDan); }
+      if (grade) { extra.push(grade); }
+      return '<span class="gmk-item">' +
+        '<span class="gmk-name">' + esc(s.name) + '</span>' +
+        '<span class="gmk-belt">' + beltSwatchHtml(s.belt) + esc(s.belt || '미지정') + '</span>' +
+        (extra.length ? '<span class="gmk-extra">' + esc(extra.join(' · ')) + '</span>' : '') +
+        (isPaused(s) ? '<span class="gmk-extra" style="color:#b54708">휴관</span>' : '') +
+        '<button class="gmk-x" data-gmkr="' + esc(s.id) + '" title="명단에서 빼기" aria-label="' + esc(s.name) + ' 명단에서 빼기">✕</button>' +
+        '</span>';
+    }).join('');
+    var body = el('gmk-body');
+    if (body) { body.style.display = app.gukMonthlyOpen === false ? 'none' : 'block'; }
+    if (el('gmk-caret')) { el('gmk-caret').textContent = app.gukMonthlyOpen === false ? '▶' : '▼'; }
+    if (el('gmk-toggle')) { el('gmk-toggle').setAttribute('aria-expanded', app.gukMonthlyOpen === false ? 'false' : 'true'); }
   }
 
   /* 국기원 심사 명단 CSV — 급수까지 화면과 같은 값으로 내보낸다 (생년월일·티콘 ID 포함: 접수에 그대로 사용) */
@@ -15857,6 +16105,112 @@
 
     // 국기원 심사
     el('atab-gukgiwon').addEventListener('click', function () { setAdminTab('gukgiwon'); });
+    if (el('gk-search')) {
+      el('gk-search').addEventListener('input', function () {
+        app.gukQuery = String(el('gk-search').value || '');
+        renderGukgiwon();
+      });
+      /* type=search의 ✕·Esc로 지웠을 때도 바로 전체 명단으로 돌아오게 */
+      el('gk-search').addEventListener('search', function () {
+        app.gukQuery = String(el('gk-search').value || '');
+        renderGukgiwon();
+      });
+    }
+    /* 이달의 국기원 대상자 명단 — 체크 담기/빼기 · 줄 단위 담기/빼기 · 펼치기/새로 시작 */
+    if (el('gk-table')) {
+      el('gk-table').addEventListener('change', function (e) {
+        var cb = e.target.closest && e.target.closest('[data-gkcheck]');
+        if (!cb) { return; }
+        var id = cb.getAttribute('data-gkcheck');
+        app.gukSelected = app.gukSelected || {};
+        if (cb.checked) { app.gukSelected[id] = true; } else { delete app.gukSelected[id]; }
+        renderGukBulk();
+        /* 머리글 체크도 지금 보이는 줄 전체가 선택됐는지에 맞춘다 */
+        var all = el('guk-check-all');
+        if (all) {
+          var vis = gukRows().map(function (s) { return s.id; });
+          all.checked = vis.length > 0 && vis.every(function (v) { return !!app.gukSelected[v]; });
+        }
+      });
+    }
+    if (el('guk-check-all')) {
+      el('guk-check-all').addEventListener('change', function (e) {
+        var ids = gukRows().map(function (s) { return s.id; });
+        app.gukSelected = app.gukSelected || {};
+        if (e.target.checked) {
+          ids.forEach(function (id) { app.gukSelected[id] = true; });
+        } else {
+          ids.forEach(function (id) { delete app.gukSelected[id]; });
+        }
+        renderGukgiwon();
+      });
+    }
+    if (el('btn-guk-add')) {
+      el('btn-guk-add').addEventListener('click', function () {
+        var ids = gukSelectedIds();
+        if (!ids.length) { toast('먼저 아래 표에서 관원을 체크해 주세요.'); return; }
+        var r = gukMonthlyAdd(ids);
+        app.gukSelected = {};
+        renderGukgiwon();
+        toast(r.added
+          ? (r.added + '명을 이달의 국기원 대상자 명단에 담았어요' + (r.skipped ? ' · 이미 담긴 ' + r.skipped + '명 제외' : ''))
+          : ('선택한 ' + r.skipped + '명은 이미 이달 명단에 다 담겨 있어요.'));
+      });
+    }
+    if (el('btn-guk-remove')) {
+      el('btn-guk-remove').addEventListener('click', function () {
+        var ids = gukSelectedIds();
+        if (!ids.length) { toast('먼저 아래 표에서 관원을 체크해 주세요.'); return; }
+        var r = gukMonthlyRemove(ids);
+        app.gukSelected = {};
+        renderGukgiwon();
+        toast(r.removed
+          ? (r.removed + '명을 이달의 국기원 대상자 명단에서 뺐어요.')
+          : '선택한 관원은 이달 명단에 없어요.');
+      });
+    }
+    if (el('btn-guk-clear')) {
+      el('btn-guk-clear').addEventListener('click', function () {
+        app.gukSelected = {};
+        renderGukgiwon();
+      });
+    }
+    if (el('gmk-list')) {
+      el('gmk-list').addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('[data-gmkr]');
+        if (!b) { return; }
+        var id = b.getAttribute('data-gmkr');
+        var s = byId(id);
+        var r = gukMonthlyRemove([id]);
+        renderGukgiwon();
+        if (r.removed && s) { toast(s.name + ' 관원을 이달의 국기원 대상자 명단에서 뺐어요.'); }
+      });
+    }
+    if (el('gmk-toggle')) {
+      el('gmk-toggle').addEventListener('click', function () {
+        app.gukMonthlyOpen = app.gukMonthlyOpen === false;
+        renderGukMonthly();
+      });
+    }
+    if (el('gmk-restart')) {
+      el('gmk-restart').addEventListener('click', function () {
+        var st = gukMonthlyState();
+        openModal({
+          title: '이번 달 국기원 명단을 새로 시작할까요?',
+          sub: gukMonthLabel(st.month) + ' 명단 ' + gukMonthlyStudents().length + '명을 비우고 ' + gukMonthLabel(gukMonthKey()) + ' 명단을 빈 상태로 시작합니다.',
+          body: '<div class="help" style="margin-top:0">관원 정보(품·단·급수·심사 상태)는 그대로 남고, <b>「이달의 국기원 대상자 명단」에서만</b> 빠집니다.</div>',
+          actions: [
+            { label: '취소', value: false, kind: 'btn-ghost' },
+            { label: '새로 시작', value: true, kind: 'btn-primary' }
+          ]
+        }).then(function (ok) {
+          if (!ok) { return; }
+          writeGukMonthly(gukMonthKey(), []);
+          renderGukgiwon();
+          toast('이번 달 국기원 명단을 새로 시작했어요. 표에서 다시 담아 주세요.');
+        });
+      });
+    }
     el('gk-table').addEventListener('change', function (e) {
       var f = e.target.closest('[data-gk]');
       if (!f) { return; }
@@ -15905,6 +16259,8 @@
     });
     el('btn-gk-csv').addEventListener('click', downloadGkCSV);
     el('gk-table').addEventListener('click', function (e) {
+      var t = e.target.closest('[data-gkmtoggle]');
+      if (t) { toggleGukMonthly(t.getAttribute('data-gkmtoggle')); return; }
       var n = e.target.closest('[data-gknotice]');
       if (n) { var s1 = byId(n.getAttribute('data-gknotice')); if (s1) { sendGukNotice(s1); } return; }
       var p = e.target.closest('[data-gkpass]');
@@ -17047,7 +17403,29 @@
       dateText: gkDateText,
       notice: buildGukNotice,
       gradeSelect: gradeSelect,
-      poomGrades: poomGradesOf
+      poomGrades: poomGradesOf,
+      /* 검색 · 체크 · 이달의 대상자 명단 */
+      query: function (v) {
+        app.gukQuery = (v == null ? '' : String(v));
+        if (el('gk-search')) { el('gk-search').value = app.gukQuery; }
+        renderGukgiwon();
+        return app.gukQuery;
+      },
+      matches: matchGukQuery,
+      rows: gukRows,
+      selected: gukSelectedIds,
+      toggle: toggleGukMonthly,
+      monthKey: gukMonthKey,
+      monthLabel: gukMonthLabel,
+      monthly: {
+        state: gukMonthlyState,
+        ids: gukMonthlyIds,
+        has: gukMonthlyHas,
+        add: gukMonthlyAdd,
+        remove: gukMonthlyRemove,
+        write: writeGukMonthly,
+        students: gukMonthlyStudents
+      }
     },
     bulkSms: {
       limit: BULK_SMS_LIMIT,
