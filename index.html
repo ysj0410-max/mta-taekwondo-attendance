@@ -8177,9 +8177,11 @@
     if (el('gmk-empty')) { el('gmk-empty').style.display = rows.length ? 'none' : 'block'; }
     list.innerHTML = rows.map(function (s) {
       var grade = studentGrade(s);
+      var beltG = beltGrade(s.belt);
       var extra = [];
       if (s.poomDan && s.poomDan !== '없음') { extra.push(s.poomDan); }
-      if (grade) { extra.push(grade); }
+      /* 급수는 띠 기준 급수와 다를 때만 (예: 유품자 2품 3급) — 「2단 · 단」처럼 겹쳐 보이지 않게 */
+      if (grade && grade !== beltG) { extra.push(grade); }
       return '<span class="gmk-item">' +
         '<span class="gmk-name">' + esc(s.name) + '</span>' +
         '<span class="gmk-belt">' + beltSwatchHtml(s.belt) + esc(s.belt || '미지정') + '</span>' +
