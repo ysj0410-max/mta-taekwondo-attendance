@@ -15052,6 +15052,8 @@
         return;
       }
       out.matched++;
+      /* 예전 모양(phone 하나)이면 먼저 모·부 칸을 만들어 둔다 — 모 번호를 잃지 않게 */
+      ensureParentPhones(hit);
       /* 번호는 빈 칸만 채운다 — 이미 있는 모·부 번호와 문자 발송 대상은 그대로 둔다 */
       var filledNow = false;
       if (!parentPhoneFrom(hit, 'mother') && parentPhoneFrom(s, 'mother')) {
