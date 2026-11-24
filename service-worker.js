@@ -21,7 +21,7 @@ var APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
   './pwa-install.js',
-  /* Firebase 실시간 동기화 (v31) — 스크립트·스타일·보안 규칙을 함께 캐시해 오프라인에서도 열린다 */
+  /* Firebase 실시간 동기화 (v32) — 스크립트·스타일·보안 규칙을 함께 캐시해 오프라인에서도 열린다 */
   './firebase-sync.js',
   './firebase-sync-ui.js',
   './firebase-sync.css',
