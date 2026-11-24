@@ -129,6 +129,21 @@
     #app-refresh-btn{width:40px; min-width:40px; padding:0; justify-content:center}
     #app-refresh-btn .rf-txt{display:none}
   }
+  /* 좁은 화면에서 도구가 줄면서 글자가 줄바뀜되지 않게 — 간격·글자 크기만 줄인다 */
+  @media (max-width:1080px){
+    .brand{flex:1 1 auto; min-width:0}
+    .mode-toggle, .mode-btn, .clock, .hdr-fb-chip, #app-refresh-btn, #mute-btn, .tabs, .tab-btn{flex:0 0 auto}
+    .topbar{gap:10px}
+  }
+  @media (max-width:900px){
+    .dojo-name{width:142px; font-size:16px}
+    .clock-time{font-size:20px}
+    .clock-date{font-size:10px}
+    .mode-btn{padding:8px 12px; font-size:13px}
+    .tab-btn{padding:8px 10px; font-size:12.5px}
+    .icon-btn{width:36px; height:36px}
+    #app-refresh-btn{width:36px; min-width:36px; height:36px}
+  }
   .tabs{display:flex; gap:3px; background:rgba(0,0,0,.22); padding:4px; border-radius:13px}
   .tab-btn{
     border:0; background:transparent; color:rgba(255,255,255,.65); font-weight:800; font-size:13.5px;
