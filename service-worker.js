@@ -5,13 +5,13 @@
    · HTML(화면 문서)  : network-first  → 새로 배포한 화면이 바로 보이게
      (인터넷이 없거나 느릴 때만 캐시로 대신함)
    · 아이콘·manifest 등 정적 파일 : cache-first + 뒤에서 조용히 갱신
-   · 다른 사이트(CDN: xlsx, face-api 등)는 손대지 않고 브라우저에 맡김
+   · 다른 사이트(CDN: xlsx 등)는 손대지 않고 브라우저에 맡김
    이 앱에서 가장 위험한 사고는 "옛 index.html이 캐시에 남아 업데이트가
    안 보이는 것"이라, 화면 문서만은 항상 네트워크를 먼저 확인합니다.
    배포할 때마다 아래 VERSION 값을 올리면 옛 캐시가 정리됩니다.
    ============================================================= */
 
-var VERSION = 'v43-2026-11-25';
+var VERSION = 'v44-2026-11-25';
 var CACHE_NAME = 'mta-taekwondo-' + VERSION;
 var HTML_TIMEOUT_MS = 6000;
 

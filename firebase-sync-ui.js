@@ -784,7 +784,6 @@
     }
     var msg = '현재 이 기기의 데이터 ' + numText(S.plan.total) + '건을 Firestore로 보냅니다.\n\n' +
       '· 이미 Firestore에 있는 문서는 건드리지 않습니다(덮어쓰기 없음).\n' +
-      '· 얼굴 특징값 2종은 이 기기에만 남습니다.\n' +
       '· 약 ' + Math.max(1, Math.ceil(S.plan.total / 400)) + '초 걸립니다.\n\n진행할까요?';
     if (typeof window.confirm === 'function' && !window.confirm(msg)) { return; }
     S.busy = true;

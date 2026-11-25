@@ -2,7 +2,7 @@
   "id": "./",
   "name": "경희대MTA태권도",
   "short_name": "MTA태권도",
-  "description": "경희대MTA태권도 도장 앱 — AI 얼굴인식 출석, 원비·문자 관리, 월간 출석부",
+  "description": "경희대MTA태권도 도장 앱 — 바코드 출석, 원비·문자 관리, 월간 출석부",
   "lang": "ko",
   "dir": "ltr",
   "start_url": "./",

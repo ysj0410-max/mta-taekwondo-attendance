@@ -17,7 +17,6 @@
        dojangs/{dojangId}/meta/usage                     기기별 무료 한도 추정 사용량 합산(관리자 전용 · 60초 간격)
        dojangs/{dojangId}/roles/{uid}                    권한(관리자) — 'admin' 이 아니면 서버로 아무것도 보내지 않는다
      · 기기 로컬 전용(절대 업로드하지 않음) — tdk.fbLastSync.v1(컬렉션별 마지막 동기화 시각) 포함
-       tdk.faces.v1(원생 얼굴 128차원), tdk.adminFace.v1(관리자 얼굴),
        그리고 이 엔진의 상태 키(tdk.fb*.v1)
    · 문서마다 `_ver`(문서 버전) · `_updatedAt` · `_updatedBy`(기기 ID) ·
      `_fieldMeta`(필드별 버전/수정시각/수정기기)를 붙여,
@@ -678,7 +677,8 @@
   /* =========================================================================
      3. 저장 키 분류 (기존 localStorage 17개 키 전수)
      -------------------------------------------------------------------------
-     · faces/adminFace → 기기 로컬 전용 (업로드 금지)
+     · v44 — 얼굴인식 데이터(tdk.faces.v1 · tdk.adminFace.v1)는 앱에서 사라졌다.
+       예전 기기에 남아 있어도 올리지 않고, 앱이 시작할 때 localStorage 에서 지운다.
      · 나머지 전부 → Firestore 문서로 이전
      · 앱의 실제 LS 객체(__tdk.LS)에 새 키가 생기면 자동으로 meta/{키} 문서로 포함된다
      ========================================================================= */
@@ -696,9 +696,7 @@
     { name: 'smsTemplates', key: 'tdk.smsTemplates.v1', label: '단체문자 문구', icon: '📝', kind: 'value', meta: 'smsTemplates', union: true, desc: 'meta/smsTemplates · 항목 합집합' },
     { name: 'couponTypes', key: 'tdk.couponTypes.v1', label: '쿠폰 종류', icon: '🧾', kind: 'value', meta: 'couponTypes', union: true, desc: 'meta/couponTypes · 항목 합집합' },
     { name: 'logs', key: 'tdk.logs.v1', label: '문자 발송 로그(최근 200)', icon: '📨', kind: 'value', meta: 'logs', union: true, desc: 'meta/logs · 항목 합집합' },
-    { name: 'muted', key: 'tdk.muted.v1', label: '효과음 끔', icon: '🔇', kind: 'value', meta: 'muted', desc: 'meta/muted' },
-    { name: 'faces', key: 'tdk.faces.v1', label: '원생 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' },
-    { name: 'adminFace', key: 'tdk.adminFace.v1', label: '관리자 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' }
+    { name: 'muted', key: 'tdk.muted.v1', label: '효과음 끔', icon: '🔇', kind: 'value', meta: 'muted', desc: 'meta/muted' }
     /* v43 — kioskStudents·kioskConfig(태블릿용 사본)는 더 만들지도 구독하지도 않는다.
        모든 기기가 관리자 계정으로 students 원본을 그대로 받는다 */
   ];

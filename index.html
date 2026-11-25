@@ -16,24 +16,20 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=43"></script>
-<script src="firebase-sync-ui.js?v=43"></script>
-<title>경희대MTA태권도 · AI 출석 알림</title>
+<script src="firebase-sync.js?v=44"></script>
+<script src="firebase-sync-ui.js?v=44"></script>
+<title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
-  window.__faceApiFailed = false;
   window.addEventListener('error', function (e) {
     if (!e || !e.target || e.target.tagName !== 'SCRIPT') { return; }
     var src = String(e.target.src || '');
     if (src.indexOf('xlsx') !== -1) { window.__xlsxLoadFailed = true; }
-    if (src.indexOf('face-api') !== -1) { window.__faceApiFailed = true; }
   }, true);
 </script>
 <!-- 엑셀 읽기/쓰기 (SheetJS). 1차 CDN 이 막히면 jsDelivr 판으로 한 번 더 시도한다 -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
         onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';document.head.appendChild(s);})()"></script>
-<!-- 온디바이스 얼굴인식 엔진 (face-api.js · TF.js 번들). 로드 실패 시 터치·시뮬레이션으로 자동 전환 -->
-<script async src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
 <style>
   :root{
     --navy:#0d1b3e; --navy-2:#16294f; --navy-3:#22386a;
@@ -231,20 +227,9 @@
   .cam-status{font-size:11.5px; color:var(--muted); font-weight:600; line-height:1.45}
   .cam-status b{color:var(--navy)}
 
-  /* ---------- v40 출석 인식 방식 (얼굴 / 바코드) ---------- */
+  /* ---------- v44 출석 인식 방식 (바코드 전용) ---------- */
   .mode-bar{flex:0 0 auto; display:flex; align-items:center; gap:9px; padding:11px 14px 0}
-  .mode-switch{display:flex; gap:3px; padding:3px; background:#eef3fb; border:1px solid var(--line); border-radius:12px; flex:0 0 auto}
-  .ms-btn{
-    border:0; background:transparent; color:var(--muted); font-weight:800; font-size:12px;
-    padding:7px 12px; border-radius:9px; cursor:pointer; white-space:nowrap; letter-spacing:-.3px;
-    font-family:inherit; transition:background .13s, box-shadow .13s;
-  }
-  .ms-btn.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.12)}
-  .ms-btn:active{transform:translateY(1px)}
   .mode-note{font-size:11.5px; color:var(--muted); font-weight:600; line-height:1.35; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-  /* 바코드 모드에서는 AI 얼굴 박스·시뮬레이션 버튼을 쓰지 않는다 */
-  body.barcode-mode #face-overlay{display:none}
-  body.barcode-mode #btn-pick-sim, body.barcode-mode #btn-random-sim{display:none}
   /* v42 COM(시리얼) 리더기 — 연결되면 초록 글자로 표시, 바코드 모드에서도 그대로 보인다 */
   #btn-com-reader.on, #btn-com-reader-admin.on{border-color:#0b7a55; color:#0b7a55; font-weight:800; background:#eefaf5}
 
@@ -254,7 +239,7 @@
     align-items:center; justify-content:center; gap:11px; padding:18px; text-align:center; pointer-events:none;
   }
   body.barcode-mode .barcode-guide{display:flex}
-  /* 카메라가 꺼져 있어도 바코드 안내만 보이게 (얼굴 안내 문구와 겹치지 않도록) */
+  /* 카메라가 꺼져 있어도 바코드 안내만 보이게 */
   body.barcode-mode .stage-ph{opacity:0; visibility:hidden}
   .bg-frame{
     position:relative; width:min(80%,430px); height:clamp(74px,13vh,110px);
@@ -722,7 +707,7 @@
   .mon-legend .lg-dot{width:9px; height:9px; border-radius:50%; background:var(--mint); display:inline-block; margin-right:4px}
   .mon-legend .lg-dot.m{background:#f0a020}
 
-  /* ---------- 실제 AI 얼굴인식 ---------- */
+  /* ---------- 출석 인식 상태 칩 ---------- */
   .ai-chip{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; background:#f0f3f9; color:#6b7280; white-space:nowrap}
   .ai-chip::before{content:""; width:6px; height:6px; border-radius:50%; background:#b0b8c6; flex:0 0 auto}
   .ai-chip.loading{background:#fff4e6; color:#a35b00}
@@ -732,48 +717,7 @@
   .ai-chip.offline{background:#fdecec; color:#c0392b}
   .ai-chip.offline::before{background:#e23b3b}
   @keyframes aiPulse{0%,100%{opacity:.35}50%{opacity:1}}
-  #face-overlay{position:absolute; inset:0; width:100%; height:100%; z-index:3; pointer-events:none; display:none}
-  body.cam-live #face-overlay{display:block}
-  .face-cell{display:flex; align-items:center; gap:5px; flex-wrap:wrap}
-  .face-badge{display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:800; padding:3px 7px; border-radius:999px; background:#f0f3f9; color:#8a94a6; white-space:nowrap}
-  .face-badge.on{background:#e6f7f0; color:#0b7a55}
-  .face-thumb{width:26px; height:26px; border-radius:8px; object-fit:cover; border:1px solid #dbe3f0; background:#f6f8fc; flex:0 0 auto}
-  .face-cam{position:relative; width:100%; aspect-ratio:4/3; border-radius:15px; overflow:hidden; background:radial-gradient(120% 90% at 50% 0%,#2b4373 0%,#16274a 48%,#0a1428 100%); margin-bottom:10px}
-  .face-cam video{width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block}
-  .face-cam .face-frame{position:absolute; left:50%; top:50%; width:56%; aspect-ratio:.78; transform:translate(-50%,-52%); border:2px dashed rgba(142,245,213,.55); border-radius:46% 46% 42% 42%; pointer-events:none}
-  .face-cam .face-frame::after{content:"얼굴을 이 안에 맞춰 주세요"; position:absolute; left:50%; bottom:7px; transform:translateX(-50%); font-size:10.5px; font-weight:700; color:rgba(223,232,251,.82); background:rgba(6,14,30,.55); border:1px solid rgba(255,255,255,.13); padding:3px 8px; border-radius:999px; white-space:nowrap}
-  .face-status{font-size:11.5px; font-weight:700; border-radius:11px; padding:9px 12px; margin-bottom:10px; background:#f7f9fd; border:1px solid #e9eef7; color:#667085; line-height:1.55}
-  .face-status.ok{background:#e9f9f1; color:#0b7a55; border-color:#bfe9d4}
-  .face-status.err{background:#fdecec; color:#c0392b; border-color:#f6c9c9}
-  .face-status.wait{background:#fff7e8; color:#8a5300; border-color:#f4e0b6}
-  .face-tip{font-size:10.5px; color:#8a94a6; font-weight:600; line-height:1.6; margin-top:8px}
-  .face-preview{display:flex; align-items:center; gap:9px; margin-top:10px}
-  .face-preview:empty{display:none}
-  .face-preview img{width:64px; height:64px; border-radius:12px; object-fit:cover; border:1px solid #dbe3f0}
-  .face-preview .face-preview-txt{font-size:11px; color:#667085; font-weight:700; line-height:1.5}
-  /* 관리자(관장님) 얼굴 등록 · 얼굴 로그인 */
-  .admin-face-block{margin-top:15px; padding-top:13px; border-top:1px dashed #e3e8f2}
-  .admin-face-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:9px}
-  .admin-face-head b{font-size:12.5px; color:var(--navy); letter-spacing:-.2px}
-  .admin-face-body{display:flex; align-items:center; gap:11px; margin-bottom:10px; flex-wrap:wrap}
-  /* 관리자 얼굴 목록 (최대 5개) — 썸네일 카드 */
-  .adm-face-list{display:flex; flex-direction:column; gap:7px; margin:0 0 11px}
-  .adm-face-card{display:flex; align-items:center; gap:9px; border:1px solid #e7edf7; background:#fbfcff; border-radius:12px; padding:7px 9px; min-width:0}
-  .adm-face-card-thumb{width:44px; height:44px; border-radius:11px; border:1px solid #dbe3f0; background:#f4f7fc; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:19px; color:#9aa6bb; flex:0 0 auto}
-  .adm-face-card-thumb img{width:100%; height:100%; object-fit:cover; display:block}
-  .adm-face-card-txt{flex:1 1 auto; min-width:0}
-  .adm-face-card-name{display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:12px; color:var(--navy); line-height:1.35}
-  .adm-face-card-name b{font-size:12.5px; letter-spacing:-.2px; overflow-wrap:anywhere}
-  .adm-face-card-num{font-size:10px; font-weight:800; color:#8a94a6; background:#f0f3f9; border-radius:999px; padding:2px 7px; flex:0 0 auto}
-  .adm-face-card-when{font-size:10.5px; font-weight:700; color:#8a94a6; margin-top:2px; line-height:1.4}
-  .adm-face-card-del{flex:0 0 auto; padding:6px 10px; font-size:12px; line-height:1}
-  .afr-name{margin-bottom:11px}
-  .admin-face-meta{flex:1 1 190px; min-width:0; font-size:11px; font-weight:700; color:#667085; line-height:1.6}
-  .admin-face-meta b{color:var(--navy)}
-  .adm-face-login{border-bottom:1px dashed #e3e8f2; padding-bottom:13px; margin-bottom:13px}
-  .adm-face-login > .btn{width:100%}
-  .adm-face-login .tiny-note{display:block; margin-top:7px; text-align:center; line-height:1.55}
-  .adm-face-live{margin-top:11px}
+  /* 관리자 계정 초기화(🔓) · Firebase 본인 확인 초기화(🔑) */
   .adm-reset{margin-top:13px; padding-top:12px; border-top:1px dashed #e3e8f2}
   .adm-reset > .btn{width:100%}
   .adm-reset .tiny-note{display:block; margin-top:7px; line-height:1.55}
@@ -786,7 +730,7 @@
   .adm-fb-box .tiny-note{display:block; margin-top:8px; line-height:1.6}
   .adm-or{display:flex; align-items:center; gap:9px; color:#98a2b3; font-size:10.5px; font-weight:800; margin:0 0 12px}
   .adm-or::before, .adm-or::after{content:""; flex:1; height:1px; background:#e6ebf4}
-  .face-cam.sm{aspect-ratio:1/1; max-width:270px; margin:0 auto 9px; border-radius:14px}
+
   /* 재원생 전체 명단: 화면 가로 전체 · 넉넉한 높이 */
   .stu-wide-panel{margin-bottom:15px}
   .stu-tablewrap{max-height:min(62vh,680px); overflow:auto; border:1px solid #eef2f8; border-radius:12px; -webkit-overflow-scrolling:touch}
@@ -1274,7 +1218,7 @@
     #view-attendance .card-title .dot{width:6px; height:6px}
     #cam-head-note{display:none}
     .ai-chip{font-size:9.5px; padding:2px 7px}
-    /* 카메라 화면: 세로 폰에서도 얼굴이 크게 비치도록 4:3에 가까운 높이로 (예전 76~112px는 너무 납작했다) */
+    /* 카메라 화면: 세로 폰에서도 바코드가 크게 비치도록 4:3에 가까운 높이로 (예전 76~112px는 너무 납작했다) */
     .stage{flex:0 0 auto; height:clamp(230px,34dvh,320px); margin:0 9px; border-radius:13px}
     .stage-ph{gap:8px; padding:14px 12px 26px}
     .stage-ph .ph-icon{display:grid; width:54px; height:54px; border-radius:18px; font-size:25px; margin-bottom:0}
@@ -1345,8 +1289,6 @@
     .field label{font-size:11px}
     .help{font-size:11px; padding:10px 11px}
     .modal{padding:18px 16px 14px; border-radius:16px; width:min(520px,92vw); max-height:88dvh; overflow-y:auto}
-    .face-cam.sm{max-width:230px}
-    .admin-face-body{gap:9px}
     .stu-wide-panel{margin-bottom:10px}
     .stu-tablewrap{max-height:min(56vh,440px); border-radius:10px}
     /* 폰에서는 표 안에서 옆으로 밀어 봄 — 비고 열까지 잘리지 않게 */
@@ -1412,7 +1354,7 @@
       <div class="brand-mark">🥋</div>
       <div class="brand-txt">
         <input id="dojo-name" class="dojo-name" value="경희대MTA태권도" aria-label="도장 이름" spellcheck="false">
-        <div class="brand-sub">AI 얼굴인식 출석 · 무료문자 알림</div>
+        <div class="brand-sub">바코드 출석 · 무료문자 알림</div>
       </div>
     </div>
 
@@ -1448,50 +1390,38 @@
 
       <div class="card cam-card">
         <div class="card-head">
-          <div class="card-title"><span class="dot"></span>AI 얼굴인식 출석</div>
+          <div class="card-title"><span class="dot"></span>바코드 출석</div>
           <div class="spacer"></div>
-          <span class="tiny-note" id="cam-head-note">시뮬레이션 모드</span>
-          <span class="ai-chip loading" id="ai-state">AI 모델 준비 중…</span>
+          <span class="tiny-note" id="cam-head-note">리더기 연결 대기</span>
+          <span class="ai-chip ready" id="ai-state">바코드 인식 준비</span>
         </div>
 
         <div class="mode-bar" id="mode-bar">
-          <div class="mode-switch" role="group" aria-label="출석 인식 방식">
-            <button type="button" class="ms-btn active" id="km-face" data-kmode="face" aria-pressed="true" title="카메라에 얼굴을 비추면 자동 출석">🙂 얼굴인식</button>
-            <button type="button" class="ms-btn" id="km-barcode" data-kmode="barcode" aria-pressed="false" title="출석 카드의 바코드를 비추면 자동 출석 (얼굴인식 꺼짐)">📷 바코드</button>
-          </div>
-          <span class="mode-note" id="mode-note">얼굴을 비추면 등원 처리</span>
+          <span class="mode-note" id="mode-note">출석 카드 바코드를 비추면 등원 처리</span>
         </div>
 
         <div class="stage" id="camera-stage">
           <video id="camera-video" autoplay muted playsinline></video>
           <div class="stage-ph" id="stage-ph">
             <div class="ph-icon">📷</div>
-            <p id="stage-ph-text">카메라를 연결하거나 <b>관원 선택 인식</b>으로<br>AI 얼굴인식을 체험해 보세요</p>
-            <div class="ph-sub" id="stage-ph-sub">웹캠이 없어도 시뮬레이션으로 그대로 테스트할 수 있어요</div>
+            <p id="stage-ph-text">카메라를 연결하고 <b>출석 카드의 바코드</b>를<br>가이드 안에 비춰 주세요</p>
+            <div class="ph-sub" id="stage-ph-sub">카메라가 없으면 리더기로 찍거나 「📷 바코드 번호」에 넣어도 됩니다</div>
           </div>
           <div class="scanline"></div>
-          <canvas id="face-overlay" aria-hidden="true"></canvas>
           <div class="barcode-guide" id="barcode-guide" aria-hidden="true">
             <div class="bg-frame"><div class="bg-line"></div></div>
             <div class="bg-text">📷 바코드를 카메라에 비추거나 리더기로 찍어주세요</div>
             <div class="bg-sub">카메라가 없어도 USB·블루투스 리더기나 「📷 바코드 번호」로 출석할 수 있어요</div>
           </div>
           <div class="barcode-last" id="barcode-last"></div>
-          <div class="bbox" id="bbox">
-            <span class="corner c1"></span><span class="corner c2"></span>
-            <span class="corner c3"></span><span class="corner c4"></span>
-            <span class="bbox-label"><b id="bbox-name">관원</b> · 일치율 <b id="bbox-match">0%</b></span>
-          </div>
-          <div class="stage-tip" id="stage-tip">AI ENGINE · READY</div>
+          <div class="stage-tip" id="stage-tip">BARCODE · READY</div>
           <div class="stage-hud"><span class="hud-dot"></span><span id="cam-status">웹캠 대기</span></div>
         </div>
 
         <div class="cam-bar">
-          <div class="cam-status" id="cam-help">관원을 선택하면 인식 → 자동 출석까지 재생됩니다.</div>
+          <div class="cam-status" id="cam-help">출석 카드의 <b>바코드</b>를 카메라에 비추면 자동으로 <b>등원</b> 처리합니다.</div>
           <div class="spacer"></div>
           <button class="btn" id="btn-com-reader" title="USB·시리얼(COM 포트) 바코드 리더기를 연결합니다">🔌 COM 리더기</button>
-          <button class="btn btn-mint" id="btn-pick-sim">🎯 관원 선택 인식</button>
-          <button class="btn btn-ghost" id="btn-random-sim">🎲 랜덤 데모</button>
           <button class="btn" id="btn-camera">📷 카메라 연결</button>
         </div>
       </div>
@@ -1674,48 +1604,6 @@
                 </div>
               </div>
 
-              <div class="panel">
-                <div class="panel-head"><h3>🧠 출석 인식 설정 (얼굴 · 바코드)</h3><div class="spacer"></div><span class="chip" id="ai-admin-state">확인 중…</span></div>
-                <div class="panel-body">
-                  <div class="field">
-                    <label>출석 인식 방식</label>
-                    <select class="input" id="kiosk-mode" aria-label="출석 인식 방식">
-                      <option value="face">🙂 얼굴인식 — 카메라에 얼굴을 비추면 자동 등원/하원</option>
-                      <option value="barcode">📷 바코드 인식 — 출석 카드 바코드를 비추면 자동 등원/하원</option>
-                    </select>
-                  </div>
-                  <div class="tiny-note" style="margin:-2px 0 11px; line-height:1.55">바코드 인식 모드에서는 <b>AI 얼굴인식이 완전히 꺼집니다</b>(카메라에 얼굴이 비쳐도 얼굴로 출석되지 않습니다). 출석 화면 위쪽 <b>🙂 얼굴인식 / 📷 바코드</b> 버튼으로도 바로 바꿀 수 있어요. 원생관리 파일의 <b>번호</b> 열이 그대로 바코드 번호로 들어옵니다.<br>출석 화면에서는 <b>USB·블루투스 바코드 리더기</b>로 찍어도 입력칸을 누르지 않고 바로 등원/하원 처리됩니다(카메라 없이도 동작).</div>
-                  <div class="field">
-                    <label>일치 판정 거리 (낮을수록 엄격 · 기본 0.48)</label>
-                    <div class="range-row">
-                      <input type="range" id="face-threshold" min="0.30" max="0.65" step="0.01" value="0.48" aria-label="일치 판정 거리">
-                      <b id="face-threshold-val">0.48</b>
-                    </div>
-                  </div>
-                  <div class="row2">
-                    <div class="field"><label>재인식 쿨다운(초)</label><input class="input" id="face-cooldown" type="number" min="5" max="300" step="1" value="20" inputmode="numeric"></div>
-                    <div class="field"><label>자동 출석</label>
-                      <select class="input" id="face-auto">
-                        <option value="on">켜짐 — 인식되면 바로 등원/하원</option>
-                        <option value="off">꺼짐 — 인식만 표시</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div class="form-actions">
-                    <button class="btn btn-primary" id="btn-face-save">설정 저장</button>
-                    <button class="btn btn-sm" id="btn-face-retry">🔄 AI 모델 다시 불러오기</button>
-                    <div class="spacer"></div>
-                    <span class="tiny-note" id="face-reg-count">0 / 0명 등록</span>
-                  </div>
-                  <div class="tiny-note" id="face-load-error" style="margin-top:7px; color:#c0392b; word-break:break-all"></div>
-                  <div class="help" style="margin-top:10px">
-                    웹캠이 켜져 있고 얼굴이 등록된 관원이 있으면 <b>약 0.9초마다</b> 화면을 분석해 자동으로 출석 처리합니다. 같은 관원이 연속으로 찍히지 않도록 <b>쿨다운</b>을 두고, 등록되지 않은 얼굴은 <b>터치 출석</b>으로 안내합니다.
-                    얼굴이 서로 닮은 관원이 많으면 판정 거리를 <b>0.42~0.45</b>로 낮추고, 인식이 자주 안 되면 <b>0.50</b>까지 올려 보세요.
-                    <br><b>v39 정확도 보완</b> — 같은 관원으로 <b>연속 2프레임</b> 확인돼야 출석되고(1프레임만 스치면 출석 안 됨), 1·2등 판정이 비슷하게 애매하면 「인식 확인 중…」으로 넘깁니다. 출석하면서 아주 확실하게 본 얼굴은 관원당 최대 3장까지 <b>자동으로 쌓여</b> 조명·각도가 달라도 잘 알아봅니다(등록 사진은 그대로 유지).
-                    얼굴 특징값(128개 숫자)은 <b>이 태블릿의 localStorage에만</b> 저장되고 외부 서버로 전송되지 않습니다. 관원별 등록은 「관원 명단 관리」 표의 <b>📸 얼굴 등록</b>에서 하세요.
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1727,7 +1615,7 @@
               <h3>📋 재원생 전체 명단</h3>
               <div class="spacer"></div>
               <span class="tiny-note" id="stu-count">0명</span>
-              <button class="btn btn-sm" id="btn-stu-dedupe" title="이름이 같은 관원이 두 번 들어갔을 때, 얼굴·띠·수업·출결이 있는 기존 관원을 남기고 중복만 지우며 빈 모·부 번호·성함·주소를 채웁니다">🧹 중복 관원 정리</button>
+              <button class="btn btn-sm" id="btn-stu-dedupe" title="이름이 같은 관원이 두 번 들어갔을 때, 출결·수업 기록이 있는 기존 관원을 남기고 중복만 지우며 빈 모·부 번호·성함·주소를 채웁니다">🧹 중복 관원 정리</button>
               <button class="btn btn-sm" id="btn-stu-csv" title="지금 고른 필터(재원생·휴관생·전체)와 검색어에 맞는 관원 명단을 엑셀에서 바로 여는 CSV로 내려받습니다">📤 명단 CSV</button>
             </div>
             <div class="panel-body">
@@ -1750,7 +1638,7 @@
               <div class="stu-tablehint" id="stu-tablehint">← → 옆으로 밀면 특이사항·비고까지 볼 수 있어요</div>
               <div class="tablewrap stu-tablewrap">
                 <table class="tb stu-tb">
-                  <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>부 · 모</th><th>생년월일</th><th>티콘 ID</th><th>첫 등록일</th><th>원비 날짜</th><th>특이사항 · 비고</th><th>얼굴</th><th style="width:150px"></th></tr></thead>
+                  <thead><tr><th>이름</th><th>부서 · 수업</th><th>띠</th><th>부 · 모</th><th>생년월일</th><th>티콘 ID</th><th>첫 등록일</th><th>원비 날짜</th><th>특이사항 · 비고</th><th style="width:150px"></th></tr></thead>
                   <tbody id="stu-table"></tbody>
                 </table>
               </div>
@@ -2033,7 +1921,7 @@
                       </table>
                     </div>
                     <div class="help" style="margin-top:8px">
-                      현재 이 기기에 있는 <b>모든 저장 키</b>를 빠짐없이 확인해, 얼굴 특징값 2종(기기 전용)만 빼고 모두 옮깁니다.
+                      현재 이 기기에 있는 <b>모든 저장 키</b>를 빠짐없이 확인해 모두 옮깁니다.
                       원생 명단(<b>students</b>)은 개인정보까지 그대로 보내고, 출석 화면도 같은 명단을 씁니다(v43 — 태블릿용 사본은 더 만들지 않습니다).
                       <b>이미 Firestore에 있는 문서는 건드리지 않으므로</b> 여러 번 눌러도 안전합니다.
                       이전 전에 「💾 도장 데이터 전체 백업」으로 파일 하나 받아 두시길 권합니다.
@@ -2042,7 +1930,6 @@
 
                   <div class="help">
                     <b>무료로만 씁니다.</b> Spark 요금제에는 결제 수단이 필요 없고, 사용량이 한도를 넘으면 그날은 잠시 멈출 뿐 자동 결제되지 않습니다.
-                    <b>얼굴 특징값(원생·관리자)</b>은 이 기기(localStorage)에만 남고 Firestore로 보내지 않습니다.
                     자세한 순서는 <b>📋 설정 안내서</b>와 같은 폴더의 <b>SETUP_GUIDE.md</b>에 있습니다.
                   </div>
                 </div>
@@ -2051,7 +1938,7 @@
           <div class="admin-grid">
             <div class="admin-col">
               <div class="panel" id="admin-account-panel">
-                <div class="panel-head"><h3>🔐 관리자 계정 (ID · 비밀번호 · 얼굴)</h3><div class="spacer"></div><span class="tiny-note" id="adm-state">-</span></div>
+                <div class="panel-head"><h3>🔐 관리자 계정 (ID · 비밀번호)</h3><div class="spacer"></div><span class="tiny-note" id="adm-state">-</span></div>
                 <div class="panel-body">
                   <div class="row3">
                     <div class="field"><label>현재 비밀번호</label><input class="input" id="adm-cur-pw" type="password" autocomplete="current-password" placeholder="현재 비밀번호"></div>
@@ -2074,23 +1961,6 @@
                     <span class="tiny-note">비밀번호는 Web Crypto(SHA-256) 해시로만 저장되고 평문은 남지 않아요.</span>
                   </div>
 
-                  <div class="admin-face-block" id="admin-face-block">
-                    <div class="admin-face-head">
-                      <b>📷 관장님(관리자) 얼굴 등록</b>
-                      <span class="face-badge" id="admin-face-badge">미등록</span>
-                      <span class="tiny-note">최대 5개</span>
-                    </div>
-                    <div class="admin-face-body">
-                      <div class="admin-face-meta" id="admin-face-meta">아직 등록된 얼굴이 없어요. 등록하면 아이디·비밀번호 없이 <b>얼굴로</b> 관리자 화면에 들어올 수 있어요.</div>
-                    </div>
-                    <div class="adm-face-list" id="admin-face-list" style="display:none"></div>
-                    <div class="form-actions" style="flex-wrap:wrap">
-                      <button class="btn btn-mint" id="btn-admin-face-open">📷 얼굴 추가 등록 (0/5)</button>
-                      <button class="btn btn-sm" id="btn-admin-face-del" style="display:none" disabled>🗑️ 전체 삭제</button>
-                      <div class="spacer"></div>
-                      <span class="tiny-note">얼굴 특징값(128개 숫자)은 이 기기 안에만 저장돼요.</span>
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -2121,7 +1991,7 @@
             </div>
             <div class="admin-col">
               <div class="panel">
-                <div class="panel-head"><h3>💾 도장 데이터 전체 백업 / 복원 (JSON)</h3><div class="spacer"></div><span class="tiny-note">명단 · 얼굴 · 출석 이력</span></div>
+                <div class="panel-head"><h3>💾 도장 데이터 전체 백업 / 복원 (JSON)</h3><div class="spacer"></div><span class="tiny-note">명단 · 출석 이력 · 원비</span></div>
                 <div class="panel-body">
                   <div class="form-actions" style="flex-wrap:wrap">
                     <button class="btn btn-primary" id="btn-backup-all">⬇ 전체 백업 내려받기</button>
@@ -2129,7 +1999,7 @@
                     <input type="file" id="restore-input" accept=".json,application/json" style="display:none">
                   </div>
                   <div class="help" style="margin-top:10px">
-                    관원 명단 · <b>얼굴 특징값</b> · 날짜별 출석 이력 · 띠 체계 · 문자 발송 설정과 로그를 <b>파일 하나(JSON)</b>로 내려받습니다. 태블릿을 바꾸거나 브라우저 저장소를 지워야 할 때 이 파일 하나로 그대로 되살릴 수 있어요.
+                    관원 명단 · 날짜별 출석 이력 · 띠 체계 · 원비 · 문자 발송 설정과 로그를 <b>파일 하나(JSON)</b>로 내려받습니다. 태블릿을 바꾸거나 브라우저 저장소를 지워야 할 때 이 파일 하나로 그대로 되살릴 수 있어요.
                     복원은 지금 화면의 데이터를 <b>백업 파일 내용으로 바꾸는</b> 작업이라, 실행 전에 한 번 더 확인합니다.
                   </div>
                 </div>
@@ -2153,7 +2023,7 @@
                   <div class="tiny-note" id="drive-last" style="margin-top:8px">마지막 드라이브 백업: 아직 없음</div>
                   <div class="tiny-note" id="drive-local">이 기기 마지막 수정: 아직 없음</div>
                   <div class="help" style="margin-top:10px">
-                    관장님 구글 드라이브 안의 <b>「경희대MTA태권도 백업」</b> 폴더에 관원 명단 · 얼굴 · 출석 이력 · 원비를 <b>mta-taekwondo-backup-latest.json</b>으로 저장하고, 날짜별 사본도 함께 남깁니다.
+                    관장님 구글 드라이브 안의 <b>「경희대MTA태권도 백업」</b> 폴더에 관원 명단 · 출석 이력 · 원비를 <b>mta-taekwondo-backup-latest.json</b>으로 저장하고, 날짜별 사본도 함께 남깁니다.
                     태블릿을 바꾸거나 브라우저 저장소를 지워도 <b>📥 드라이브에서 불러오기</b>로 그대로 이어 쓸 수 있어요(새 도장폰·PC에서 이어쓰기).
                     처음 한 번만 <b>📋 Apps Script 코드 보기/복사</b>의 <b>4단계</b>(약 2분)를 따라 웹 앱 주소를 만들면 됩니다.
                     웹 앱 주소는 관장님 드라이브에만 연결되는 긴 비밀 주소라, 화면을 다른 사람과 공유하거나 주소를 메신저에 그대로 붙여넣지 마세요.
@@ -2171,7 +2041,7 @@
                 <div class="panel-head"><h3>ℹ️ 이 프로토타입에 대해</h3></div>
                 <div class="panel-body">
                   <div class="help" style="margin-top:0">
-                    명단·출석 기록·설정은 모두 <b>이 브라우저(localStorage)</b>에 저장됩니다. <b>얼굴 특징값(128개 숫자)</b>도 이 태블릿에만 저장되고 어디로도 전송되지 않으며, 얼굴 사진 원본은 저장하지 않습니다(작은 썸네일만 선택 저장). 무료문자 자동발송을 켜면 <b>문자 발송에 필요한 이름·번호·문구만</b> 입력한 웹훅 주소(도장폰 MacroDroid)로 전송되고, 그 밖의 데이터는 어디로도 가지 않아요.
+                    명단·출석 기록·설정은 모두 <b>이 브라우저(localStorage)</b>에 저장됩니다. 무료문자 자동발송을 켜면 <b>문자 발송에 필요한 이름·번호·문구만</b> 입력한 웹훅 주소(도장폰 MacroDroid)로 전송되고, 그 밖의 데이터는 어디로도 가지 않아요.
                     태블릿에서 실제로 쓰려면 이 파일을 태블릿에 저장해 열거나, 웹에 올려 홈 화면에 추가하면 됩니다.
                     실제 운영 시에는 여러 기기 기록 동기화·개인정보 보관을 위해 서버와 DB가 필요합니다.
                     다만 위의 <b>☁️ 구글 드라이브 자동 백업</b>을 설정하면, 서버 없이도 관장님 개인 드라이브에 하루 한 번 자동으로 백업하고 다른 기기(태블릿↔도장폰↔PC)에서 되살릴 수 있어요.
@@ -2980,9 +2850,9 @@
             </div>
             <div class="panel-body" style="border-top:1px solid #eef1f6">
               <div class="help" style="margin-top:0">
-                휴관생은 <b>출석 키오스크(얼굴·키패드·이름검색)·오늘 미등원 집계·월간 출석부·원비 예상액·승급심사·단체문자 전체 선택</b>에서 저절로 빠집니다.
-                누적 출석·띠·얼굴 등록 정보는 지우지 않고 그대로 보관되므로, <b>🔄 재원 복귀</b>를 누르면 바로 이어집니다.<br>
-                <b>📤 가져오기</b>는 이름+보호자 연락처가 같은 관원이 이미 있으면 <b>휴관생으로 상태만 바꾸고</b>, 새 관원이면 휴관생으로 추가합니다(누적 출석·얼굴은 유지).
+                휴관생은 <b>출석 키오스크(바코드·키패드·이름검색)·오늘 미등원 집계·월간 출석부·원비 예상액·승급심사·단체문자 전체 선택</b>에서 저절로 빠집니다.
+                누적 출석·띠 정보는 지우지 않고 그대로 보관되므로, <b>🔄 재원 복귀</b>를 누르면 바로 이어집니다.<br>
+                <b>📤 가져오기</b>는 이름+보호자 연락처가 같은 관원이 이미 있으면 <b>휴관생으로 상태만 바꾸고</b>, 새 관원이면 휴관생으로 추가합니다(누적 출석은 유지).
                 <b>교체</b>는 파일에 없는 휴관생을 명단에서 빼지만 재원생은 건드리지 않아요. 파일의 <b>상태·구분</b> 열도 인식합니다.
               </div>
             </div>
@@ -3011,12 +2881,10 @@
     logs: 'tdk.logs.v1',
     muted: 'tdk.muted.v1',
     attendance: 'tdk.attendance.v1',
-    faces: 'tdk.faces.v1',
     tuition: 'tdk.tuition.v1',
     feeTable: 'tdk.feeTable.v1',
     smsTemplates: 'tdk.smsTemplates.v1',
     admin: 'tdk.admin.v1',
-    adminFace: 'tdk.adminFace.v1',
     counsel: 'tdk.counsel.v1',
     shuttle: 'tdk.shuttle.v1',
     coupons: 'tdk.coupons.v1',
@@ -3433,7 +3301,7 @@
   var DEFAULT_SETTINGS = {
     dojoName: '경희대MTA태권도',
     mode: 'in',
-    kioskMode: 'face',
+    kioskMode: 'barcode',
     promotionThreshold: 20,
     examDate: '',
     examTime: '10:00',
@@ -3442,7 +3310,6 @@
     gukTime: '10:00',
     gukPlace: '',
     visibility: { beltSystem: true, promotion: true, gukgiwon: false },
-    face: { threshold: 0.48, cooldown: 20, auto: true },
     sms: { webhookUrl: '', method: 'query', autoSend: true, testPhone: '' },
     tuition: { defaultFee: 150000, dueDay: 5, bankAccount: '' },
     drive: { webhookUrl: '', autoBackup: false, autoSyncOnBoot: true, localUpdatedAt: '', lastBackupAt: '' },
@@ -3520,7 +3387,6 @@
     pin: '',
     busy: false,
     cameraStream: null,
-    faces: {},
     beltDraft: null,
     beltPicker: null,
     promoSelected: {},
@@ -3548,8 +3414,6 @@
     shuttle: [],
     shuttleUI: null,
     admin: null,
-    adminFaces: [],
-    adminFace: null,
     adminAuthed: false
   };
 
@@ -3910,8 +3774,10 @@
     if (!app.settings.examTime) { app.settings.examTime = '10:00'; }
     if (!app.settings.examPlace) { app.settings.examPlace = DEFAULT_SETTINGS.examPlace; }
     if (app.settings.mode !== 'out') { app.settings.mode = 'in'; }
-    // v40 — 출석 인식 방식 (face 얼굴인식 · barcode 바코드 인식)
-    if (app.settings.kioskMode !== 'barcode') { app.settings.kioskMode = 'face'; }
+    // v44 — 출석 인식은 바코드 전용 (얼굴인식 제거)
+    app.settings.kioskMode = 'barcode';
+    // 예전 설정·백업에 남아 있던 얼굴인식 설정은 더 쓰지 않는다
+    if (Object.prototype.hasOwnProperty.call(app.settings, 'face')) { delete app.settings.face; }
 
     // 띠 체계(순서·이름·색상·급수·기준) 복원
     var rawBelts = (settings && Array.isArray(settings.belts)) ? settings.belts : null;
@@ -3936,14 +3802,6 @@
        저장은 설정(tdk.settings.v1)에 함께 → Firebase meta/settings 동기화·드라이브 백업에 자동 포함 */
     app.settings.gukMonthly = gukMonthlyState();
 
-    // AI 얼굴인식 설정 (판정 거리 · 쿨다운 · 자동 출석)
-    app.settings.face = Object.assign({}, DEFAULT_SETTINGS.face, (settings && settings.face) || {});
-    var fth = parseFloat(app.settings.face.threshold);
-    app.settings.face.threshold = (isNaN(fth) || fth < 0.30 || fth > 0.65) ? DEFAULT_SETTINGS.face.threshold : Math.round(fth * 100) / 100;
-    var fcd = parseInt(app.settings.face.cooldown, 10);
-    app.settings.face.cooldown = (isNaN(fcd) || fcd < 5 || fcd > 300) ? DEFAULT_SETTINGS.face.cooldown : fcd;
-    app.settings.face.auto = app.settings.face.auto !== false;
-
     // 원비 설정 (기본 월 원비 · 납부 기한 · 입금 계좌)
     app.settings.tuition = Object.assign({}, DEFAULT_SETTINGS.tuition, (settings && settings.tuition) || {});
     var tfee = parseInt(app.settings.tuition.defaultFee, 10);
@@ -3965,7 +3823,6 @@
       lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(String(rawDrive.lastBackupAt || '')) ? String(rawDrive.lastBackupAt) : ''
     };
 
-    app.faces = loadFaces();
     app.tuition = loadTuition();
 
     var records = readJSON(LS.records, {});
@@ -3989,8 +3846,6 @@
     app.coupons = loadCoupons();
     app.couponUI = null;
     app.admin = loadAdminAccount();
-    app.adminFaces = loadAdminFace();
-    syncAdminFaceAlias();
     app.adminAuthed = false;
 
     var logs = readJSON(LS.logs, []);
@@ -4012,115 +3867,27 @@
   function saveRecords() { writeJSON(LS.records, app.records); driveTouchData(); }
   function saveLogs() { writeJSON(LS.logs, app.logs.slice(0, 200)); }
   function saveAttendance() { writeJSON(LS.attendance, app.attendance); driveTouchData(); }
-  function saveFaces() { writeJSON(LS.faces, app.faces); driveTouchData(); }
   function saveTuition() { writeJSON(LS.tuition, app.tuition); driveTouchData(); }
   function saveBulkTemplates() { writeJSON(LS.smsTemplates, app.smsTemplates || []); driveTouchData(); }
 
-  /* =========================================================
-     3-A. 얼굴 특징값 저장소 (온디바이스 전용)
-     구조: { studentId: { descriptor:[128 floats], thumb:'data:image/jpeg;…', at:ISO } }
-     ========================================================= */
   /* ---------------------------------------------------------
-     v39 — 얼굴 정확도 고도화 설정값
-     · 기존 descriptor(1장)는 절대 건드리지 않고, 자동 보강본(extraDescriptors)을
-       최대 2장까지 덧붙인다(관원당 총 3장). extraDescriptors 가 없으면 예전과 똑같이 동작한다.
+     v44 — 예전 버전이 이 기기에 남긴 얼굴 데이터 정리
+     · tdk.faces.v1(원생 얼굴) · tdk.adminFace.v1(관리자 얼굴)은 이제 쓰지 않는다.
+     · 예전 기기에는 얼굴 특징값·썸네일이 4MB 넘게 쌓여 localStorage 를 꽉 채웠으므로
+       앱을 열 때 바로 비워 저장 공간을 되찾는다 (명단·출결·원비는 건드리지 않는다).
      --------------------------------------------------------- */
-  var FACE_EXTRA_MAX = 2;            // 자동 보강으로 더 저장하는 최대 장수
-  var FACE_SAMPLE_MIN_GAP = 0.14;    // 이미 가진 샘플과 이만큼(거리) 달라야 새 각도로 저장
-  var FACE_AUTO_MAX_DIST = 0.35;     // 키오스크 자동 보강: 이보다 확실할 때만 저장
-  var FACE_AUTO_MARGIN = 0.04;       //            (판정 거리 − 0.04 와 비교해 더 엄격한 쪽)
-  var FACE_TOUCH_MAX_DIST = 0.40;    // 터치 출석 보강: 이보다 확실할 때만 (넘으면 절대 저장 금지)
-  var FACE_TOUCH_WINDOW_MS = 3000;   // 터치 직전 3초 안에 잡힌 얼굴만 보강
-  var FACE_SAMPLE_MIN_SCORE = 0.60;  // 선명(검출 신뢰도) 조건
-  var FACE_MIN_BOX = 64;             // 너무 작은 배경 얼굴은 제외 — 가로/세로 64px 미만
-  var FACE_DETECT_INPUT_SIZE = 416;  // 얼굴 탐지 입력 해상도 320 → 416
-  var FACE_DETECT_SCORE = 0.55;      // 얼굴 탐지 신뢰도 0.5 → 0.55 상향
-  var FACE_STREAK_NEED = 2;          // 연속 몇 프레임 같은 관원이어야 확정할지
-  var FACE_STREAK_MS = 3000;         // 연속으로 인정하는 최대 간격
-  var FACE_MARGIN_MIN_DIST = 0.30;   // 1등이 이보다 애매할 때만 1·2등 차이를 본다
-  var FACE_MARGIN_GAP = 0.045;       // 1·2등 차이가 이보다 작으면 애매 → 출석하지 않음
-
-  function sanitizeDescriptor(d) {
-    if (!Array.isArray(d) || d.length !== 128) { return null; }
-    var vec = [];
-    for (var i = 0; i < 128; i++) {
-      var v = Number(d[i]);
-      if (typeof v !== 'number' || !isFinite(v)) { return null; }
-      vec.push(v);
+  var LEGACY_FACE_KEYS = ['tdk.faces.v1', 'tdk.adminFace.v1'];
+  function purgeLegacyFaceData() {
+    var freed = 0;
+    for (var i = 0; i < LEGACY_FACE_KEYS.length; i++) {
+      var k = LEGACY_FACE_KEYS[i];
+      try {
+        var raw = localStorage.getItem(k);
+        if (raw) { freed += raw.length; }
+        localStorage.removeItem(k);
+      } catch (e) {}
     }
-    return vec;
-  }
-
-  function sanitizeFace(f) {
-    if (!f || typeof f !== 'object' || Array.isArray(f)) { return null; }
-    var vec = sanitizeDescriptor(f.descriptor);
-    if (!vec) { return null; }
-    var out = { descriptor: vec, at: String(f.at || '') };
-    // v39 — 자동 보강본(하위 호환: 없으면 키를 만들지 않는다)
-    var extras = [];
-    if (Array.isArray(f.extraDescriptors)) {
-      for (var k = 0; k < f.extraDescriptors.length && extras.length < FACE_EXTRA_MAX; k++) {
-        var e = sanitizeDescriptor(f.extraDescriptors[k]);
-        if (e) { extras.push(e); }
-      }
-    }
-    if (extras.length) { out.extraDescriptors = extras; }
-    if (typeof f.thumb === 'string' && /^data:image\//.test(f.thumb)) { out.thumb = f.thumb; }
-    return out;
-  }
-  function loadFaces() {
-    var raw = readJSON(LS.faces, {});
-    var out = {};
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      Object.keys(raw).forEach(function (sid) {
-        var f = sanitizeFace(raw[sid]);
-        if (f) { out[sid] = f; }
-      });
-    }
-    return out;
-  }
-
-  /* 관리자(관장님) 얼굴 특징값 — 관원 얼굴과 분리해 tdk.adminFace.v1 에 저장
-     구조: [ { id, label, descriptor:[128 floats], thumb:'data:image/jpeg;…', at:ISO }, … ] 최대 5개
-     예전 버전이 저장한 단일 객체 { descriptor, thumb, at } 도 그대로 읽어 길이 1 배열로 바꾼다 */
-  function sanitizeAdminFaceItem(f) {
-    var base = sanitizeFace(f);
-    if (!base) { return null; }
-    var item = {
-      id: (f && typeof f.id === 'string') ? f.id.slice(0, 40) : '',
-      label: cleanAdminFaceLabel(f && f.label),
-      descriptor: base.descriptor,
-      thumb: base.thumb || '',
-      at: base.at || ''
-    };
-    if (!item.id) { item.id = adminFaceNewId(); }
-    return item;
-  }
-  /* 배열 · 예전 단일 객체 · null/없음 → 최대 5개 배열 */
-  function sanitizeAdminFaces(raw) {
-    var src = [];
-    if (Array.isArray(raw)) { src = raw; }
-    else if (raw && typeof raw === 'object') { src = [raw]; }
-    var out = [];
-    var seen = {};
-    for (var i = 0; i < src.length && out.length < ADMIN_FACE_MAX; i++) {
-      var item = sanitizeAdminFaceItem(src[i]);
-      if (!item) { continue; }
-      if (seen[item.id]) { item.id = adminFaceNewId(); }
-      seen[item.id] = true;
-      out.push(item);
-    }
-    return out;
-  }
-  function loadAdminFace() {
-    return sanitizeAdminFaces(readJSON(LS.adminFace, null));
-  }
-  function saveAdminFaceData() {
-    syncAdminFaceAlias();
-    var list = adminFaceList();
-    if (list.length) { writeJSON(LS.adminFace, list); }
-    else { try { localStorage.removeItem(LS.adminFace); } catch (e) {} }
-    driveTouchData();
+    return freed;
   }
 
   /* =========================================================
@@ -5092,8 +4859,6 @@
       toast(student.name + ' 관원은 휴관생이에요. 「🛌 휴관생 관리」에서 복귀 처리하면 다시 출석할 수 있어요.');
       return { ok: false, reason: 'paused' };
     }
-    // v39 — 터치 출석 직전에 잡힌 얼굴이 «본인임이 확실할 때만» 그 각도를 자동 보강
-    if (source === 'touch') { tryTouchAugment(student); }
     var mode = app.settings.mode;
     var rec = recordOf(student.id);
     var now = new Date();
@@ -5141,7 +4906,7 @@
   function flushToday() { saveRecords(); renderAll(); }
 
   /* =========================================================
-     10. 카메라 / AI 시뮬레이션
+     10. 카메라 연결 (바코드 인식용)
      ========================================================= */
   function setCamStatus(text) {
     el('cam-status').textContent = text;
@@ -5149,7 +4914,7 @@
 
   function startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast('이 브라우저에서는 카메라를 열 수 없어요. 시뮬레이션으로 체험해 주세요.');
+      toast('이 브라우저에서는 카메라를 열 수 없어요. 리더기나 「📷 바코드 번호」로 출석해 주세요.');
       return;
     }
     setCamStatus('카메라 연결 중…');
@@ -5163,31 +4928,20 @@
       var p = video.play();
       if (p && p.catch) { p.catch(function () {}); }
       document.body.classList.add('cam-live');
-      ai.lastStatus = '';
-      if (isBarcodeMode()) {
-        setCamStatus('웹캠 LIVE · 출석 카드 바코드를 비춰 주세요');
-        el('cam-head-note').textContent = '웹캠 연결됨';
-        el('btn-camera').textContent = '📷 카메라 끄기';
-        el('stage-tip').textContent = 'BARCODE · LIVE';
-        refreshAiHint();
-        startBarcodeLoop();
-        toast('카메라가 연결됐어요. 출석 카드의 바코드를 비추면 자동으로 출석 처리됩니다.');
-        return;
-      }
-      setCamStatus('웹캠 LIVE · 얼굴을 비춰 주세요');
+      setCamStatus('웹캠 LIVE · 출석 카드 바코드를 비춰 주세요');
       el('cam-head-note').textContent = '웹캠 연결됨';
       el('btn-camera').textContent = '📷 카메라 끄기';
-      el('stage-tip').textContent = 'AI ENGINE · LIVE';
+      el('stage-tip').textContent = 'BARCODE · LIVE';
       refreshAiHint();
-      toast(ai.ready ? '카메라가 연결됐어요. 등록된 관원은 자동으로 출석 처리됩니다.' : '카메라가 연결됐어요. 관원을 선택해 인식을 재생해 볼 수 있습니다.');
+      startBarcodeLoop();
+      toast('카메라가 연결됐어요. 출석 카드의 바코드를 비추면 자동으로 출석 처리됩니다.');
     }).catch(function (err) {
       document.body.classList.remove('cam-live');
-      ai.lastStatus = '';
-      setCamStatus('웹캠 사용 불가 · 시뮬레이션 모드');
-      el('cam-head-note').textContent = '시뮬레이션 모드';
+      setCamStatus('웹캠 사용 불가 · 리더기로 출석');
+      el('cam-head-note').textContent = '리더기 연결 대기';
       el('btn-camera').textContent = '📷 카메라 연결';
       var reason = (err && err.name) ? err.name : 'error';
-      toast('카메라를 열 수 없어요 (' + reason + '). 시뮬레이션 모드로 체험할 수 있습니다.');
+      toast('카메라를 열 수 없어요 (' + reason + '). 리더기나 「📷 바코드 번호」로 출석할 수 있습니다.');
     });
   }
 
@@ -5199,12 +4953,10 @@
     var video = el('camera-video');
     video.srcObject = null;
     document.body.classList.remove('cam-live');
-    ai.lastStatus = '';
-    clearFaceOverlay();
     setCamStatus('웹캠 대기');
-    el('cam-head-note').textContent = '시뮬레이션 모드';
+    el('cam-head-note').textContent = '리더기 연결 대기';
     el('btn-camera').textContent = '📷 카메라 연결';
-    el('stage-tip').textContent = isBarcodeMode() ? 'BARCODE · READY' : 'AI ENGINE · READY';
+    el('stage-tip').textContent = 'BARCODE · READY';
     refreshAiHint();
   }
 
@@ -5213,972 +4965,50 @@
     else { startCamera(); }
   }
 
-  async function runRecognition(student) {
-    if (!student) { return; }
-    if (app.busy) { return; }
-    app.busy = true;
-    ai.suppress = true;
-    clearFaceOverlay();
-    hideBanner();
-
-    var stage = el('camera-stage');
-    var bbox = el('bbox');
-    var matchEl = el('bbox-match');
-    var nameEl = el('bbox-name');
-
-    nameEl.textContent = student.name + ' 관원';
-    matchEl.textContent = '0%';
-
-    // 인식 박스 위치를 살짝씩 다르게
-    var left = 22 + Math.round(Math.random() * 18);
-    var top = 14 + Math.round(Math.random() * 14);
-    var w = 40 + Math.round(Math.random() * 10);
-    var h = 50 + Math.round(Math.random() * 10);
-    bbox.style.left = left + '%';
-    bbox.style.top = top + '%';
-    bbox.style.width = w + '%';
-    bbox.style.height = h + '%';
-
-    bbox.classList.add('show');
-    stage.classList.add('scanning');
-    el('stage-tip').textContent = 'SCANNING…';
-
-    var target = 94.6 + Math.random() * 4.6;
-    var steps = 22;
-    for (var i = 1; i <= steps; i++) {
-      matchEl.textContent = (target * i / steps).toFixed(1) + '%';
-      await sleep(38);
-    }
-    matchEl.textContent = target.toFixed(1) + '%';
-    await sleep(240);
-
-    stage.classList.remove('scanning');
-    bbox.classList.remove('show');
-    el('stage-tip').textContent = document.body.classList.contains('cam-live') ? 'AI ENGINE · LIVE' : 'AI ENGINE · READY';
-
-    app.busy = false;
-    ai.suppress = false;
-    checkIn(student, 'ai');
-  }
-
-  function openSimPicker() {
-    if (!app.students.length) { toast('명단이 비어 있어요. 관리자 탭에서 관원을 추가해 주세요.'); return; }
-    var body = '<div class="pick-grid">' + app.students.slice()
-      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); })
-      .map(function (s) {
-      return '<button class="pick" data-pick="' + esc(s.id) + '">' +
-        '<b>' + esc(s.name) + '</b><span>' + esc(s.belt || '') + '</span>' +
-        '<span>' + esc(studentLabel(s)) + '</span></button>';
-    }).join('') + '</div>';
-    openModal({
-      title: '카메라 앞에 설 관원을 선택하세요',
-      sub: '선택하면 AI가 얼굴을 인식하는 장면이 재생되고, 자동으로 ' +
-        (app.settings.mode === 'in' ? '등원' : '하원') + ' 처리됩니다.',
-      body: body,
-      actions: [{ label: '닫기', value: null, kind: 'btn-ghost' }]
-    }).then(function (studentId) {
-      if (!studentId) { return; }
-      var s = app.students.filter(function (x) { return x.id === studentId; })[0];
-      if (s) { runRecognition(s); }
-    });
-  }
-
   /* =========================================================
-     10-B. 실제 AI 얼굴인식 (face-api.js · 온디바이스)
-     - 모델: tinyFaceDetector + faceLandmark68 + faceRecognition(128차원)
-     - 모든 분석은 브라우저 안에서만, 특징값은 이 기기 localStorage에만 저장
+     10-B. 출석 인식 방식 — 바코드 전용 (v44)
+     ---------------------------------------------------------
+     · v44 에서 온디바이스 얼굴인식(face-api)을 걷어냈다.
+       출석은 출석 카드의 바코드로만 한다 — 카메라 바코드 · USB·블루투스 리더기 ·
+       🔌 COM(시리얼) 리더기 · 「📷 바코드 번호」 직접 입력이 모두 같은 경로로 처리된다.
      ========================================================= */
-  var FACE_MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
-  var FACE_LOAD_TIMEOUT = 25000;
-  var FACE_LOOP_MS = 900;
+  function isBarcodeMode() { return true; }
 
-  var ai = {
-    state: 'idle',          // idle | loading | ready | offline
-    ready: false,
-    lib: null,
-    error: '',
-    loopTimer: null,
-    detecting: false,
-    suppress: false,        // 시뮬레이션 재생 중에는 실시간 루프를 쉼
-    lastSeen: {},           // studentId -> timestamp (쿨다운)
-    lastUnknownAt: 0,
-    lastStatus: '',
-    streak: {},             // v39 — 관원별 연속 일치 횟수 { studentId: {count, at} }
-    lastFrame: null         // v39 — 직전 프레임의 단일 얼굴(터치 출석 보강용)
-  };
-
-  function setAiState(state, text) {
-    ai.state = state;
-    renderAiChip();
-    refreshAiHint();
-  }
-  /* AI 상태 칩 — 바코드 모드에서는 「얼굴인식 꺼짐」으로 표시한다 */
+  /* 인식 상태 칩 — 「바코드 인식 준비」 하나만 보여 준다 */
   function renderAiChip() {
     var chip = el('ai-state');
     var admin = el('ai-admin-state');
-    var barcodeOn = isBarcodeMode();
-    var state = barcodeOn ? 'ready' : ai.state;
-    var text = barcodeOn ? '바코드 인식 · 얼굴인식 꺼짐'
-      : ai.state === 'ready' ? 'AI 얼굴인식 준비 완료'
-      : ai.state === 'loading' ? 'AI 모델 준비 중…'
-      : ai.state === 'offline' ? '오프라인 · 터치/시뮬레이션' : 'AI 대기';
-    if (chip) { chip.className = 'ai-chip ' + (state === 'idle' ? 'loading' : state); chip.textContent = text; }
-    if (admin) {
-      admin.className = 'chip ' + (state === 'ready' ? 'ok' : state === 'offline' ? 'off' : 'wait');
-      admin.textContent = text;
-    }
+    var text = '바코드 인식 준비';
+    if (chip) { chip.className = 'ai-chip ready'; chip.textContent = text; }
+    if (admin) { admin.className = 'chip ok'; admin.textContent = text; }
   }
 
-  function faceCount() {
-    var n = 0;
-    Object.keys(app.faces || {}).forEach(function (sid) { if (byId(sid)) { n++; } });
-    return n;
+  function refreshAiHint() {
+    var help = el('cam-help');
+    if (!help) { return; }
+    var modeTxt = app.settings.mode === 'in' ? '등원' : '하원';
+    help.innerHTML = '출석 카드의 <b>바코드</b>를 카메라에 비추면 자동으로 <b>' + modeTxt +
+      '</b> 처리합니다. 카메라가 없으면 <b>USB·블루투스 리더기</b>로 찍거나 <b>📷 바코드 번호</b>에 직접 넣어도 됩니다.';
   }
 
-  function faceThreshold() {
-    var f = app.settings && app.settings.face;
-    var t = f ? Number(f.threshold) : 0.48;
-    return (isNaN(t) || t < 0.30 || t > 0.65) ? 0.48 : t;
-  }
-  function faceCooldownMs() {
-    var f = app.settings && app.settings.face;
-    var s = f ? parseInt(f.cooldown, 10) : 20;
-    if (isNaN(s) || s < 5 || s > 300) { s = 20; }
-    return s * 1000;
-  }
-  function faceAutoOn() {
-    return !(app.settings && app.settings.face && app.settings.face.auto === false);
-  }
-  function cooldownActive(studentId, now) {
-    var t = (ai.lastSeen && ai.lastSeen[studentId]) || 0;
-    return (now - t) < faceCooldownMs();
-  }
-
-  function euclideanDistance(a, b) {
-    if (!a || !b || a.length !== b.length) { return Infinity; }
-    var s = 0;
-    for (var i = 0; i < a.length; i++) {
-      var d = a[i] - b[i];
-      s += d * d;
-    }
-    return Math.sqrt(s);
-  }
-
-  // 등록된 모든 얼굴과 비교해 가장 가까운 관원을 찾는다 (거리 자체는 판정하지 않음)
-  // v39 — 관원당 샘플(기본 1장 + 자동 보강 최대 2장) 중 가장 가까운 값을 그 관원의 거리로 쓰고,
-  //        2등(다른 관원)까지 함께 돌려준다. 1·2등 차이(마진)를 보기 위해서다.
-  function faceSamplesOf(f) {
-    var out = [];
-    if (f && f.descriptor && f.descriptor.length === 128) { out.push(f.descriptor); }
-    var extras = (f && f.extraDescriptors) || [];
-    for (var i = 0; i < extras.length; i++) {
-      if (extras[i] && extras[i].length === 128) { out.push(extras[i]); }
-    }
-    return out;
-  }
-
-  function bestFaceMatch(descriptor) {
-    if (!descriptor || descriptor.length !== 128) { return null; }
-    var best = null;
-    var second = null;
-    Object.keys(app.faces || {}).forEach(function (sid) {
-      var f = app.faces[sid];
-      var student = byId(sid);
-      if (!f || !student) { return; }
-      // 휴관생은 키오스크 얼굴인식 대상에서 뺀다 (등록 얼굴·특징값은 보관)
-      if (isPaused(student)) { return; }
-      var samples = faceSamplesOf(f);
-      if (!samples.length) { return; }
-      var dist = Infinity;
-      for (var i = 0; i < samples.length; i++) {
-        var d = euclideanDistance(descriptor, samples[i]);
-        if (d < dist) { dist = d; }
-      }
-      if (!best || dist < best.distance) {
-        second = best;
-        best = { studentId: sid, student: student, distance: dist };
-      } else if (!second || dist < second.distance) {
-        second = { studentId: sid, student: student, distance: dist };
-      }
-    });
-    if (!best) { return null; }
-    // 하위 호환: studentId·student·distance 는 그대로 두고 2등 정보만 덧붙인다
-    best.second = second || null;
-    best.secondDistance = second ? second.distance : Infinity;
-    return best;
-  }
-
-  /* v39 — 정면·크기 필터: 배경에 작게 잡힌 얼굴과 심하게 돌아간 얼굴은 오인식 위험이 커서 뺀다. */
-  function faceBoxUsable(r, sourceWidth) {
-    var box = (r && r.detection && r.detection.box) ? r.detection.box : null;
-    if (!box) { return false; }
-    // 작은 테스트 캔버스·저해상도 영상에서는 64px 기준을 적용하지 않는다
-    if (!(Number(sourceWidth) >= 320)) { return true; }
-    return !(box.width < FACE_MIN_BOX || box.height < FACE_MIN_BOX);
-  }
-
-  function landmarkPoints(r) {
-    var lm = r && r.landmarks;
-    if (!lm) { return null; }
-    try {
-      if (typeof lm.getLeftEye === 'function' && typeof lm.getRightEye === 'function' && typeof lm.getNoseTip === 'function') {
-        var le = lm.getLeftEye(), re = lm.getRightEye(), nt = lm.getNoseTip();
-        if (le && re && nt && le.length && re.length && nt.length) {
-          return { left: le[0], right: re[0], nose: nt[0] };
-        }
-        return null;
-      }
-      if (lm.positions && lm.positions.length >= 68) {
-        var p = lm.positions;
-        return {
-          left: { x: (p[36].x + p[39].x) / 2, y: (p[36].y + p[39].y) / 2 },
-          right: { x: (p[42].x + p[45].x) / 2, y: (p[42].y + p[45].y) / 2 },
-          nose: { x: p[30].x, y: p[30].y }
-        };
-      }
-    } catch (e) { return null; }
-    return null;
-  }
-
-  // 코끝이 양쪽 눈 사이에서 얼마나 치우쳤는지(0=왼눈 쪽, 1=오른눈 쪽).
-  // 심하게 돌아간 얼굴은 0.22 미만이나 0.78 초과로 치우진다. 랜드마크가 없으면 통과시킨다.
-  function faceFacingFront(r) {
-    var pts = landmarkPoints(r);
-    if (!pts) { return true; }
-    var x0 = Math.min(pts.left.x, pts.right.x);
-    var x1 = Math.max(pts.left.x, pts.right.x);
-    if (!(x1 - x0 > 1)) { return true; }
-    var ratio = (pts.nose.x - x0) / (x1 - x0);
-    return ratio >= 0.22 && ratio <= 0.78;
-  }
-
-  function faceFrontalScore(r) {
-    var score = (r && r.detection && typeof r.detection.score === 'number') ? r.detection.score : 1;
-    return score >= FACE_SAMPLE_MIN_SCORE;
-  }
-
-  /* v39 — 연속 2프레임 확인: 한 프레임만 스쳐도 출석되지 않게 한다.
-     관원별로 따로 센다 — 둘이 나란히 서 있어도 각자 «자기 기준» 2프레임이면 확정된다. */
-  function resetFaceStreak() { ai.streak = {}; }
-  function noteFaceStreak(studentId, now) {
-    if (!ai.streak) { resetFaceStreak(); }
-    var st = ai.streak[studentId];
-    if (st && (now - st.at) <= FACE_STREAK_MS) { st.count += 1; }
-    else { st = { count: 1, at: now }; ai.streak[studentId] = st; }
-    st.at = now;
-    // 오래된 기록은 정리(메모리·오판 방지)
-    Object.keys(ai.streak).forEach(function (k) {
-      if ((now - ai.streak[k].at) > FACE_STREAK_MS * 4) { delete ai.streak[k]; }
-    });
-    return st.count;
-  }
-  function faceStreakCount(studentId) {
-    var st = ai.streak && ai.streak[studentId];
-    return (st && st.count) || 0;
-  }
-  // 가장 최근에 갱신된 관원 한 명의 상태(화면·검사용)
-  function faceStreakInfo() {
-    var sid = '';
-    var best = null;
-    Object.keys(ai.streak || {}).forEach(function (k) {
-      var st = ai.streak[k];
-      if (!best || st.at >= best.at) { best = st; sid = k; }
-    });
-    return { studentId: sid, count: best ? best.count : 0, at: best ? best.at : 0, need: FACE_STREAK_NEED,
-             perStudent: Object.keys(ai.streak || {}).length };
-  }
-
-  // 1등과 2등이 너무 비슷하면 «누구인지 애매한 판정» — 출석하지 않고 「인식 확인 중…」
-  function ambiguousFaceMatch(best) {
-    if (!best || !best.second) { return false; }
-    if (!(best.distance > FACE_MARGIN_MIN_DIST)) { return false; }
-    return (best.secondDistance - best.distance) < FACE_MARGIN_GAP;
-  }
-
-  /* v39 — 자동 보강: 이미 가진 샘플과 충분히 다른 각도·조명일 때만 최대 2장까지 덧붙인다. */
-  function addFaceSample(studentId, descriptor) {
-    var f = app.faces && app.faces[studentId];
-    if (!f) { return false; }
-    var vec = sanitizeDescriptor(descriptor);
-    if (!vec) { return false; }
-    var samples = faceSamplesOf(f);
-    if (!samples.length || samples.length >= 1 + FACE_EXTRA_MAX) { return false; }
-    var minGap = Infinity;
-    for (var i = 0; i < samples.length; i++) {
-      var d = euclideanDistance(vec, samples[i]);
-      if (d < minGap) { minGap = d; }
-    }
-    if (!(minGap >= FACE_SAMPLE_MIN_GAP)) { return false; }   // 중복 프레임은 저장하지 않는다
-    f.extraDescriptors = (f.extraDescriptors || []).concat([vec]);
-    saveFaces();
-    renderFaceSummary();
-    return true;
-  }
-
-  function faceExtraSampleCount() {
-    var n = 0;
-    Object.keys(app.faces || {}).forEach(function (sid) {
-      var f = app.faces[sid];
-      if (f && f.extraDescriptors && f.extraDescriptors.length) { n += f.extraDescriptors.length; }
-    });
-    return n;
-  }
-
-  // 키오스크: 아주 확실한 본인 일치 + 정면·선명 조건을 통과할 때만 보강
-  function autoAugmentFromFrame(student, r, best, threshold) {
-    if (!student || !r || !r.descriptor) { return false; }
-    var cap = Math.min(FACE_AUTO_MAX_DIST, threshold - FACE_AUTO_MARGIN);
-    if (!(best && best.studentId === student.id && best.distance <= cap)) { return false; }
-    if (!faceFrontalScore(r) || !faceFacingFront(r)) { return false; }
-    return addFaceSample(student.id, r.descriptor);
-  }
-
-  // 터치 출석 직전(3초)에 잡힌 단일 얼굴이 «내가 선택한 그 관원»임이 확실할 때만 보강
-  function tryTouchAugment(student) {
-    if (!student || !app.cameraStream || !ai.lastFrame) { return false; }
-    var fr = ai.lastFrame;
-    if (!fr.descriptor || fr.count !== 1) { return false; }
-    if ((Date.now() - fr.at) > FACE_TOUCH_WINDOW_MS) { return false; }
-    if (!(fr.score >= FACE_SAMPLE_MIN_SCORE) || fr.frontal === false) { return false; }
-    var best = bestFaceMatch(fr.descriptor);
-    if (!best || best.studentId !== student.id) { return false; }
-    if (!(best.distance <= FACE_TOUCH_MAX_DIST)) { return false; }   // 다른 사람일 수 있으면 절대 저장 안 함
-    return addFaceSample(student.id, fr.descriptor);
-  }
-
-  function waitFaceLib() {
-    return new Promise(function (resolve, reject) {
-      var start = Date.now();
-      (function poll() {
-        if (window.faceapi) { resolve(window.faceapi); return; }
-        if (window.__faceApiFailed) { reject(new Error('cdn')); return; }
-        if (Date.now() - start > FACE_LOAD_TIMEOUT) { reject(new Error('timeout')); return; }
-        setTimeout(poll, 250);
-      })();
-    });
-  }
-
-  function initFaceAI() {
-    /* v40 — 바코드 모드에서는 무거운 얼굴 모델을 내려받지도 않는다 */
-    if (isBarcodeMode()) { ai.state = 'idle'; renderAiChip(); return; }
-    if (ai.state === 'loading') { return; }
-    setAiState('loading', 'AI 모델 준비 중…');
-    waitFaceLib().then(function (fa) {
-      ai.lib = fa;
-      if (!fa.nets || !fa.nets.tinyFaceDetector) { throw new Error('engine'); }
-      var tf = fa.tf;
-      var prep = Promise.resolve();
-      // face-api 번들은 wasm 백엔드를 최우선으로 등록하지만, wasm 파일을 못 받으면
-      // 초기화되지 않은 채로 남아 모델 로드가 실패한다. WebGL → CPU 순으로 명시적으로 깨운다.
-      if (tf && tf.setBackend) {
-        prep = tf.setBackend('webgl').then(function (ok) {
-          if (ok === false) { throw new Error('webgl'); }
-          return tf.ready();
-        }).catch(function () {
-          return tf.setBackend('cpu').then(function () { return tf.ready(); });
-        }).catch(function () {
-          return tf.ready().catch(function () {});
-        });
-      } else if (tf && tf.ready) {
-        prep = tf.ready().catch(function () {});
-      }
-      return prep.then(function () {
-        return fa.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
-      }).then(function () {
-        return fa.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL);
-      }).then(function () {
-        return fa.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL);
-      });
-    }).then(function () {
-      ai.ready = true;
-      ai.error = '';
-      setAiState('ready', 'AI 얼굴인식 준비 완료');
-      var okNote = el('face-load-error');
-      if (okNote) { okNote.textContent = ''; }
-      startFaceLoop();
-    }).catch(function (err) {
-      ai.ready = false;
-      ai.error = (err && (err.message || err)) ? String(err.message || err) : 'error';
-      setAiState('offline', '오프라인 · 터치/시뮬레이션');
-      var note = el('face-load-error');
-      if (note) { note.textContent = 'AI 모델을 불러오지 못했습니다: ' + ai.error; }
-    });
-  }
-
-  function detectorOptions(inputSize) {
-    var fa = ai.lib || window.faceapi;
-    // v39 — 탐지 정밀도 상향: 입력 320 → 416, 신뢰도 0.5 → 0.55 (기존 호출부는 그대로 동작)
-    return new fa.TinyFaceDetectorOptions({ inputSize: inputSize || FACE_DETECT_INPUT_SIZE, scoreThreshold: FACE_DETECT_SCORE });
-  }
-
-  function detectFaces(input, inputSize) {
-    var fa = ai.lib || window.faceapi;
-    if (!fa || !ai.ready) { return Promise.reject(new Error('AI 모델 준비 안 됨')); }
-    return fa.detectAllFaces(input, detectorOptions(inputSize)).withFaceLandmarks().withFaceDescriptors();
-  }
-
-  function startFaceLoop() {
-    if (ai.loopTimer) { clearInterval(ai.loopTimer); ai.loopTimer = null; }
-    /* v40 — 바코드 인식 모드에서는 얼굴인식 루프를 만들지 않는다 (카메라에 얼굴이 비쳐도 출석 없음) */
-    if (isBarcodeMode()) { return; }
-    ai.loopTimer = setInterval(faceLoopTick, FACE_LOOP_MS);
-  }
-
-  function aiStatus(text) {
-    if (ai.lastStatus === text) { return; }
-    ai.lastStatus = text;
-    setCamStatus(text);
-  }
-
-  function faceLoopTick() {
-    /* v40 — 바코드 모드: AI 얼굴인식(detectAllFaces)을 0회로 만든다 */
-    if (isBarcodeMode()) { return; }
-    if (!ai.ready || ai.detecting || app.busy || ai.suppress) { return; }
-    if (!app.cameraStream) { return; }
-    if (typeof document.hidden !== 'undefined' && document.hidden) { return; }
-    var modal = el('modal-root');
-    if (modal && modal.classList.contains('open')) { return; }
-    if (faceCount() === 0) { aiStatus('등록된 얼굴이 없어요 · 관리자 → 관원 명단에서 얼굴 등록'); return; }
-    var video = el('camera-video');
-    if (!video || !video.videoWidth) { return; }
-    ai.detecting = true;
-    detectFaces(video, FACE_DETECT_INPUT_SIZE).then(function (results) {
-      ai.detecting = false;
-      if (ai.suppress || !app.cameraStream) { return; }
-      handleKioskFaces(results, video);
-    }).catch(function () {
-      ai.detecting = false;
-    });
-  }
-
-  function handleKioskFaces(results, video) {
-    /* v40 — 바코드 모드에서는 얼굴 결과를 아예 처리하지 않는다(이중 안전장치) */
-    if (isBarcodeMode()) { return; }
-    var items = [];
-    var matched = null;
-    var pendingName = '';
-    var unknown = 0;
-    var now = Date.now();
-    var mode = app.settings.mode;
-    var threshold = faceThreshold();
-    var sourceWidth = (video && (video.videoWidth || video.width)) || 0;
-    var live = [];
-
-    // v39 — 배경의 작은 얼굴·심하게 돌아간 얼굴은 판정 대상에서 빼다 (오인식 방지)
-    (results || []).forEach(function (r) {
-      var box = (r && r.detection && r.detection.box) ? r.detection.box : null;
-      if (!box) { return; }
-      if (!faceBoxUsable(r, sourceWidth)) { return; }
-      if (!faceFacingFront(r)) { return; }
-      live.push(r);
-    });
-
-    // 터치 출석 보강용: 화면에 얼굴이 딱 한 명일 때만 그 프레임을 기억한다
-    if (live.length === 1) {
-      var only = live[0];
-      ai.lastFrame = {
-        descriptor: only.descriptor ? Array.prototype.slice.call(only.descriptor) : null,
-        at: now,
-        count: 1,
-        score: (only.detection && typeof only.detection.score === 'number') ? only.detection.score : 1,
-        frontal: faceFacingFront(only)
-      };
-    } else {
-      ai.lastFrame = null;
-    }
-
-    live.forEach(function (r) {
-      var box = r.detection.box;
-      var best = bestFaceMatch(r.descriptor);
-      if (best && best.distance <= threshold) {
-        var s = best.student;
-        var pct = Math.max(0, Math.min(100, Math.round((1 - best.distance) * 100)));
-        var label;
-        if (ambiguousFaceMatch(best)) {
-          // 1·2등이 너무 비슷해 누구인지 애매 → 이 프레임은 없는 셈 치고 출석하지 않는다
-          resetFaceStreak();
-          pendingName = s.name;
-          items.push({ box: box, label: s.name + ' · 인식 확인 중…', ok: false });
-          return;
-        }
-        var streakOk = noteFaceStreak(s.id, now) >= FACE_STREAK_NEED;
-        // 확실한 프레임만 조용히 학습(최대 2장, 중복 프레임은 자동으로 걸러진다)
-        if (streakOk) { autoAugmentFromFrame(s, r, best, threshold); }
-        if (cooldownActive(s.id, now)) {
-          label = s.name + ' · 재인식 대기';
-        } else {
-          var rec = recordOf(s.id);
-          if (!faceAutoOn()) {
-            ai.lastSeen[s.id] = now;
-            label = s.name + ' · 인식됨';
-          } else if (mode === 'in' && rec.in) {
-            ai.lastSeen[s.id] = now;
-            label = s.name + ' · 이미 등원';
-          } else if (mode === 'out' && rec.out) {
-            ai.lastSeen[s.id] = now;
-            label = s.name + ' · 이미 하원';
-          } else if (!streakOk) {
-            // 1프레임째 — 이름과 「확인 중」만 띄우고 출석은 아직 찍지 않는다
-            label = s.name + ' · 확인 중';
-          } else {
-            ai.lastSeen[s.id] = now;
-            label = s.name + ' · 자동 ' + (mode === 'in' ? '등원' : '하원');
-            checkIn(s, 'ai');
-          }
-        }
-        items.push({ box: box, label: label, ok: true, pct: pct });
-        matched = matched || s;
-      } else {
-        unknown++;
-        items.push({ box: box, label: '미등록 얼굴', ok: false });
-      }
-    });
-
-    // 다른 사람 얼굴이 섞여 있으면 연속 확인을 끊는다(얼굴이 아예 안 보인 프레임은 유지)
-    if (live.length && !matched && !pendingName) { resetFaceStreak(); }
-
-    drawFaceOverlay(video, items);
-
-    if (matched) {
-      aiStatus(matched.name + ' 관원 인식 · ' + (mode === 'in' ? '등원' : '하원') + ' 모드');
-    } else if (pendingName) {
-      aiStatus(pendingName + ' 관원 인식 확인 중… 잠시만 서 주세요');
-    } else if (unknown > 0) {
-      aiStatus('미등록 얼굴 — 터치로 출석해 주세요');
-      if (now - ai.lastUnknownAt > 8000) {
-        ai.lastUnknownAt = now;
-        toast('미등록 얼굴이에요. 얼굴을 등록하거나 터치로 출석해 주세요.');
-      }
-    } else {
-      aiStatus('얼굴을 찾는 중 · 카메라 앞에 서 주세요');
-    }
-  }
-
-  function drawFaceOverlay(video, items) {
-    var canvas = el('face-overlay');
-    var stage = el('camera-stage');
-    if (!canvas || !stage) { return; }
-    var w = stage.clientWidth || 0;
-    var h = stage.clientHeight || 0;
-    if (!w || !h) { return; }
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-    var ctx = canvas.getContext ? canvas.getContext('2d') : null;
-    if (!ctx) { return; }
-    ctx.clearRect(0, 0, w, h);
-    if (!items || !items.length) { return; }
-    var vw = video.videoWidth || 0;
-    var vh = video.videoHeight || 0;
-    if (!vw || !vh) { return; }
-    // object-fit:cover 로 표시된 영상 좌표 → 화면 좌표 (영상은 CSS로 좌우 반전됨)
-    var scale = Math.max(w / vw, h / vh);
-    var ox = (w - vw * scale) / 2;
-    var oy = (h - vh * scale) / 2;
-
-    items.forEach(function (it) {
-      var b = it.box;
-      var bw = b.width * scale;
-      var bh = b.height * scale;
-      var x = w - ox - (b.x + b.width) * scale;
-      var y = oy + b.y * scale;
-      var color = it.ok ? '#3ce0a8' : '#f6c343';
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 12;
-      var rad = Math.min(14, bw / 5, bh / 5);
-      ctx.beginPath();
-      if (ctx.roundRect) { ctx.roundRect(x, y, bw, bh, rad); } else { ctx.rect(x, y, bw, bh); }
-      ctx.stroke();
-      ctx.restore();
-
-      var text = it.label || '';
-      ctx.font = '800 12px "Pretendard", "Apple SD Gothic Neo", system-ui, sans-serif';
-      var tw = ctx.measureText ? ctx.measureText(text).width : text.length * 7;
-      var lw = tw + 18;
-      var lh = 24;
-      var lx = Math.max(4, Math.min(w - lw - 4, x));
-      var ly = (y - lh - 6 < 4) ? y + 6 : y - lh - 6;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      if (ctx.roundRect) { ctx.roundRect(lx, ly, lw, lh, 7); } else { ctx.rect(lx, ly, lw, lh); }
-      ctx.fill();
-      ctx.fillStyle = it.ok ? '#04251a' : '#3d2a00';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(text, lx + 9, ly + lh / 2 + 0.5);
-    });
-  }
-
-  function clearFaceOverlay() {
-    var canvas = el('face-overlay');
-    if (!canvas || !canvas.getContext) { return; }
-    var ctx = canvas.getContext('2d');
-    if (ctx) { ctx.clearRect(0, 0, canvas.width, canvas.height); }
-  }
-
-  function makeFaceThumb(source, box) {
-    try {
-      var c = document.createElement('canvas');
-      var size = 160;
-      c.width = size;
-      c.height = size;
-      var ctx = c.getContext ? c.getContext('2d') : null;
-      if (!ctx) { return ''; }
-      var pad = Math.max(box.width, box.height) * 0.35;
-      var x = Math.max(0, box.x - pad);
-      var y = Math.max(0, box.y - pad);
-      var sw = Math.max(1, Math.min((source.width || 640) - x, box.width + pad * 2));
-      var sh = Math.max(1, Math.min((source.height || 480) - y, box.height + pad * 2));
-      var side = Math.min(sw, sh);
-      var sx = x + (sw - side) / 2;
-      var sy = y + (sh - side) / 2;
-      ctx.drawImage(source, sx, sy, side, side, 0, 0, size, size);
-      return c.toDataURL('image/jpeg', 0.72);
-    } catch (e) {
-      return '';
-    }
-  }
-
-  function saveFace(studentId, descriptor, thumb) {
-    var clean = sanitizeFace({ descriptor: descriptor, thumb: thumb, at: new Date().toISOString() });
-    if (!clean) { return false; }
-    app.faces[studentId] = clean;
-    saveFaces();
-    renderStudentsTable();
-    renderFaceSummary();
-    refreshAiHint();
-    return true;
-  }
-
-  function removeFace(studentId) {
-    if (!app.faces[studentId]) { return false; }
-    delete app.faces[studentId];
-    saveFaces();
-    renderStudentsTable();
-    renderFaceSummary();
-    refreshAiHint();
-    return true;
-  }
-
-  function confirmRemoveFace(studentId) {
-    var s = byId(studentId);
-    if (!s) { return; }
-    openModal({
-      title: s.name + ' 관원 얼굴 등록을 삭제할까요?',
-      sub: '삭제하면 이 관원은 자동 인식되지 않고, 터치·시뮬레이션으로만 출석할 수 있어요.',
-      actions: [
-        { label: '취소', value: false, kind: 'btn-ghost' },
-        { label: '삭제', value: true, kind: 'btn-danger' }
-      ]
-    }).then(function (ok) {
-      if (!ok) { return; }
-      removeFace(studentId);
-      toast(s.name + ' 관원 얼굴 등록을 삭제했어요.');
-    });
-  }
-
-  // 촬영/업로드한 이미지 한 장에서 정확히 얼굴 1명을 찾아 128차원 특징값을 저장
-  function registerFaceFromCanvas(student, canvas, onStatus) {
-    var setStatus = onStatus || function () {};
-    setStatus('wait', '얼굴을 분석하는 중…');
-    return detectFaces(canvas, 416).then(function (results) {
-      if (!results || !results.length) {
-        setStatus('err', '얼굴을 찾지 못했어요. 밝은 곳에서 정면을 바라봐 주세요.');
-        return false;
-      }
-      if (results.length > 1) {
-        setStatus('err', '얼굴이 ' + results.length + '명 보여요. 한 명만 비춰 주세요.');
-        return false;
-      }
-      var r = results[0];
-      var descriptor = Array.prototype.slice.call(r.descriptor);
-      var thumb = makeFaceThumb(canvas, r.detection.box);
-      if (!saveFace(student.id, descriptor, thumb)) {
-        setStatus('err', '얼굴 특징값을 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.');
-        return false;
-      }
-      setStatus('ok', '✅ ' + student.name + ' 관원 얼굴을 등록했어요. 이제 키오스크에서 자동으로 인식됩니다.');
-      playSuccess();
-      toast(student.name + ' 관원 얼굴을 등록했어요 (판정 거리 ' + faceThreshold().toFixed(2) + ' 이하).');
-      return true;
-    }).catch(function (err) {
-      setStatus('err', '얼굴 분석에 실패했어요 (' + ((err && err.message) || 'error') + '). 다시 시도해 주세요.');
-      return false;
-    });
-  }
-
-  function readImageFile(file) {
-    return new Promise(function (resolve, reject) {
-      var reader = new FileReader();
-      reader.onload = function () {
-        var img = new Image();
-        img.onload = function () { resolve(img); };
-        img.onerror = function () { reject(new Error('image')); };
-        img.src = reader.result;
-      };
-      reader.onerror = function () { reject(new Error('file')); };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function imageToCanvas(img, maxSide) {
-    var iw = img.naturalWidth || img.width || 0;
-    var ih = img.naturalHeight || img.height || 0;
-    if (!iw || !ih) { return null; }
-    var scale = Math.min(1, (maxSide || 900) / Math.max(iw, ih));
-    var canvas = document.createElement('canvas');
-    canvas.width = Math.round(iw * scale);
-    canvas.height = Math.round(ih * scale);
-    var ctx = canvas.getContext ? canvas.getContext('2d') : null;
-    if (!ctx) { return null; }
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas;
-  }
-
-  function openFaceRegister(studentId) {
-    var s = byId(studentId);
-    if (!s) { return; }
-    var existing = app.faces[s.id];
-
-    var body = '' +
-      '<div class="face-cam"><video id="face-video" autoplay muted playsinline></video>' +
-      '<div class="face-frame"></div></div>' +
-      '<div class="face-status" id="face-status">카메라를 준비하고 있어요…</div>' +
-      '<div class="form-actions" style="flex-wrap:wrap">' +
-      '<button class="btn btn-mint" id="face-capture">📷 지금 화면으로 등록</button>' +
-      '<button class="btn" id="face-upload">🖼️ 사진 파일로 등록</button>' +
-      '<input type="file" id="face-file" accept="image/*" style="display:none">' +
-      '</div>' +
-      '<div class="face-preview" id="face-preview"></div>' +
-      '<div class="face-tip">얼굴 한 명만 정면으로 비춰 주세요. 촬영·업로드한 사진은 이 태블릿 안에서만 분석되고, 저장되는 것은 128개 숫자(특징값)와 작은 썸네일뿐입니다. 외부 서버로 전송하지 않습니다.</div>';
-
-    var done = openModal({
-      title: s.name + ' 관원 얼굴 ' + (existing ? '재등록' : '등록'),
-      sub: '얼굴이 정확히 1명 검출되면 바로 저장됩니다.',
-      body: body,
-      actions: [{ label: '닫기', value: null, kind: 'btn-ghost' }]
-    });
-
-    var video = el('face-video');
-    var localStream = null;
-    var closed = false;
-
-    function setStatus(kind, text) {
-      var box = el('face-status');
-      if (!box) { return; }
-      box.className = 'face-status' + (kind ? ' ' + kind : '');
-      box.textContent = text;
-    }
-
-    function showPreview() {
-      var box = el('face-preview');
-      if (!box) { return; }
-      var f = app.faces[s.id];
-      if (!f) { box.innerHTML = ''; return; }
-      var at = f.at ? new Date(f.at) : null;
-      var atText = (at && !isNaN(at.getTime())) ? (fmtDateKorean(at) + ' ' + fmtKoreanTime(at)) : '-';
-      box.innerHTML = (f.thumb ? '<img src="' + esc(f.thumb) + '" alt="등록된 얼굴">' : '') +
-        '<div class="face-preview-txt">등록 시각 ' + esc(atText) + '</div>';
-    }
-
-    function attachCamera() {
-      if (!video) { return; }
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus('err', '이 브라우저에서는 카메라를 열 수 없어요. 사진 파일로 등록해 주세요.');
-        return;
-      }
-      if (app.cameraStream) {
-        video.srcObject = app.cameraStream;
-        var p1 = video.play();
-        if (p1 && p1.catch) { p1.catch(function () {}); }
-        setStatus('ok', '카메라 준비 완료 · 얼굴을 맞추고 촬영해 주세요.');
-        return;
-      }
-      setStatus('wait', '카메라를 켜는 중…');
-      navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false
-      }).then(function (stream) {
-        if (closed) {
-          stream.getTracks().forEach(function (t) { t.stop(); });
-          return;
-        }
-        localStream = stream;
-        video.srcObject = stream;
-        var p = video.play();
-        if (p && p.catch) { p.catch(function () {}); }
-        setStatus('ok', '카메라 준비 완료 · 얼굴을 맞추고 촬영해 주세요.');
-      }).catch(function (err) {
-        setStatus('err', '카메라를 열 수 없어요 (' + ((err && err.name) || 'error') + '). 사진 파일로 등록해 주세요.');
-      });
-    }
-
-    function captureCurrent() {
-      if (!ai.ready) {
-        setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
-        return;
-      }
-      if (!video || !video.videoWidth) {
-        setStatus('wait', '카메라 화면이 아직 준비되지 않았어요. 사진 파일로 등록할 수도 있습니다.');
-        return;
-      }
-      var canvas = document.createElement('canvas');
-      var vw = video.videoWidth;
-      var vh = video.videoHeight;
-      var scale = Math.min(1, 900 / Math.max(vw, vh));
-      canvas.width = Math.round(vw * scale);
-      canvas.height = Math.round(vh * scale);
-      var ctx = canvas.getContext ? canvas.getContext('2d') : null;
-      if (!ctx) { setStatus('err', '이 브라우저에서는 사진을 만들 수 없어요.'); return; }
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      registerFaceFromCanvas(s, canvas, function (kind, text) {
-        setStatus(kind, text);
-        if (kind === 'ok') { showPreview(); }
-      });
-    }
-
-    function handleUpload(file) {
-      if (!file) { return; }
-      if (!ai.ready) {
-        setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
-        return;
-      }
-      setStatus('wait', '사진에서 얼굴을 찾는 중…');
-      readImageFile(file).then(function (img) {
-        var canvas = imageToCanvas(img, 900);
-        if (!canvas) { throw new Error('canvas'); }
-        return registerFaceFromCanvas(s, canvas, function (kind, text) {
-          setStatus(kind, text);
-          if (kind === 'ok') { showPreview(); }
-        });
-      }).catch(function () {
-        setStatus('err', '사진 파일을 읽지 못했어요. JPG·PNG 파일로 다시 시도해 주세요.');
-      });
-    }
-
-    var capBtn = el('face-capture');
-    if (capBtn) { capBtn.addEventListener('click', captureCurrent); }
-    var upBtn = el('face-upload');
-    if (upBtn) {
-      upBtn.addEventListener('click', function () {
-        var f = el('face-file');
-        if (f) { f.click(); }
-      });
-    }
-    var fileEl = el('face-file');
-    if (fileEl) {
-      fileEl.addEventListener('change', function () {
-        if (fileEl.files && fileEl.files[0]) { handleUpload(fileEl.files[0]); }
-        fileEl.value = '';
-      });
-    }
-
-    showPreview();
-    if (!ai.ready) {
-      setStatus(ai.state === 'loading' ? 'wait' : 'err', ai.state === 'loading'
-        ? 'AI 모델을 불러오는 중이에요. 준비되면 촬영할 수 있습니다.'
-        : 'AI 모델을 불러오지 못했어요. 터치·시뮬레이션으로 출석해 주세요.');
-    }
-    attachCamera();
-
-    done.then(function () {
-      closed = true;
-      if (localStream) {
-        localStream.getTracks().forEach(function (t) { t.stop(); });
-        localStream = null;
-      }
-      clearFaceOverlay();
-    });
-  }
-
-  /* =========================================================
-     10-C. 출석 인식 방식 — 얼굴인식 / 바코드 (v40)
-     ---------------------------------------------------------
-     · app.settings.kioskMode = 'face' | 'barcode' (기본 face)
-     · barcode 모드에서는 AI 얼굴인식 루프를 만들지도, 돌리지도 않는다
-       → 카메라에 얼굴이 비쳐도 detectAllFaces 호출 0회 · 얼굴 출석 절대 없음
-     ========================================================= */
-  var KIOSK_MODE_FACE = 'face';
-  var KIOSK_MODE_BARCODE = 'barcode';
-
-  function kioskMode() {
-    var m = app.settings ? app.settings.kioskMode : '';
-    return m === KIOSK_MODE_BARCODE ? KIOSK_MODE_BARCODE : KIOSK_MODE_FACE;
-  }
-  function isBarcodeMode() { return kioskMode() === KIOSK_MODE_BARCODE; }
-  function kioskModeLabel(m) { return (m === KIOSK_MODE_BARCODE) ? '바코드 인식' : '얼굴인식'; }
-
-  /* 얼굴인식 루프를 완전히 멈춘다 — 타이머까지 지운다 */
-  function stopFaceLoop() {
-    if (ai.loopTimer) { clearInterval(ai.loopTimer); ai.loopTimer = null; }
-  }
-
-  function setKioskMode(mode, opts) {
-    opts = opts || {};
-    var next = (mode === KIOSK_MODE_BARCODE) ? KIOSK_MODE_BARCODE : KIOSK_MODE_FACE;
-    if (!app.settings) { return KIOSK_MODE_FACE; }
-    var prev = kioskMode();
-    app.settings.kioskMode = next;
-    if (!opts.silent) { saveSettings(); }
-    if (next === KIOSK_MODE_BARCODE) {
-      stopFaceLoop();
-      ai.suppress = false;
-      clearFaceOverlay();
-      startBarcodeLoop();
-    } else {
-      stopBarcodeLoop();
-      barcodeClearLast();
-      if (!ai.ready && ai.state !== 'loading') { initFaceAI(); }
-      else if (ai.ready) { ai.state = 'ready'; }
-      startFaceLoop();
-    }
-    renderKioskModeUI();
-    if (!opts.quiet && prev !== next) {
-      toast(next === KIOSK_MODE_BARCODE
-        ? '바코드 인식 모드로 바꿨어요 · 얼굴인식은 꺼집니다'
-        : '얼굴인식 모드로 바꿨어요');
-    }
-    return next;
-  }
-
+  /* 화면 표시(조준 가이드·안내 문구·상태 칩)를 지금 상태에 맞춘다 */
   function renderKioskModeUI() {
     if (!app.settings) { return; }
-    var on = isBarcodeMode();
     var modeTxt = app.settings.mode === 'out' ? '하원' : '등원';
-    if (document.body && document.body.classList) { document.body.classList.toggle('barcode-mode', on); }
-    var fb = el('km-face'), cb = el('km-barcode');
-    if (fb) { fb.classList.toggle('active', !on); fb.setAttribute('aria-pressed', on ? 'false' : 'true'); }
-    if (cb) { cb.classList.toggle('active', on); cb.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    if (document.body && document.body.classList) { document.body.classList.add('barcode-mode'); }
     var note = el('mode-note');
-    if (note) {
-      note.textContent = on
-        ? '출석 카드 바코드를 비추면 ' + modeTxt + ' 처리'
-        : (faceCount() > 0 ? '얼굴을 비추면 ' + modeTxt + ' 처리' : '얼굴 등록 후 자동 인식');
-    }
-    var sel = el('kiosk-mode');
-    if (sel && document.activeElement !== sel) { sel.value = on ? KIOSK_MODE_BARCODE : KIOSK_MODE_FACE; }
+    if (note) { note.textContent = '출석 카드 바코드를 비추면 ' + modeTxt + ' 처리'; }
     var ph = el('stage-ph-text'), phSub = el('stage-ph-sub');
-    if (ph) {
-      ph.innerHTML = on
-        ? '카메라를 연결하고 <b>출석 카드의 바코드</b>를<br>가이드 안에 비춰 주세요'
-        : '카메라를 연결하거나 <b>관원 선택 인식</b>으로<br>AI 얼굴인식을 체험해 보세요';
-    }
-    if (phSub) {
-      phSub.textContent = on
-        ? '카메라가 없으면 리더기로 찍거나 「📷 바코드 번호」에 넣어도 됩니다'
-        : '웹캠이 없어도 시뮬레이션으로 그대로 테스트할 수 있어요';
-    }
+    if (ph) { ph.innerHTML = '카메라를 연결하고 <b>출석 카드의 바코드</b>를<br>가이드 안에 비춰 주세요'; }
+    if (phSub) { phSub.textContent = '카메라가 없으면 리더기로 찍거나 「📷 바코드 번호」에 넣어도 됩니다'; }
     var tip = el('stage-tip');
-    if (tip) {
-      var live = !!app.cameraStream;
-      tip.textContent = on ? (live ? 'BARCODE · LIVE' : 'BARCODE · READY') : (live ? 'AI ENGINE · LIVE' : 'AI ENGINE · READY');
-    }
+    if (tip) { tip.textContent = app.cameraStream ? 'BARCODE · LIVE' : 'BARCODE · READY'; }
     renderAiChip();
     refreshAiHint();
   }
 
   /* =========================================================
-     10-D. 카메라 바코드 인식 엔진 (v40)
+     10-C. 카메라 바코드 인식 엔진 (v40)
      ---------------------------------------------------------
      · 네이티브 BarcodeDetector (Android Chrome · 삼성 인터넷) 먼저 사용
      · 없으면 저장소에 함께 넣은 ZXing(vendor/zxing.min.js)으로 폴백
@@ -6351,7 +5181,7 @@
     }, function () { barcode.busy = false; });
   }
 
-  /* 인식된 바코드 한 건 처리 — 등원/하원 + 효과음 + 토스트 + 문자 큐(얼굴인식과 동일)
+  /* 인식된 바코드 한 건 처리 — 등원/하원 + 효과음 + 토스트 + 문자 큐
      · opts 에 글자로 출처를 넘기면(예: 'serial') 그대로 source 로 받고 바로 처리한다 */
   function handleBarcodeScan(raw, opts) {
     if (typeof opts === 'string') { opts = { force: true, source: opts }; }
@@ -6432,29 +5262,9 @@
     return res;
   }
 
-  function refreshAiHint() {
-    var help = el('cam-help');
-    if (!help) { return; }
-    var modeTxt = app.settings.mode === 'in' ? '등원' : '하원';
-    if (isBarcodeMode()) {
-      help.innerHTML = '출석 카드의 <b>바코드</b>를 카메라에 비추면 자동으로 <b>' + modeTxt + '</b> 처리합니다. 카메라가 없으면 <b>USB·블루투스 리더기</b>로 찍거나 <b>📷 바코드 번호</b>에 직접 넣어도 됩니다.';
-      return;
-    }
-    if (ai.ready && faceCount() > 0) {
-      help.innerHTML = '카메라 앞에 서면 등록된 관원을 자동 인식해 <b>' + modeTxt + '</b> 처리합니다. 인식이 안 되면 터치로 출석하세요.';
-    } else if (ai.ready) {
-      help.innerHTML = '등록된 얼굴이 없어요. <b>관리자 → 관원 명단</b>에서 얼굴을 등록하면 자동 인식이 켜집니다.';
-    } else if (ai.state === 'loading') {
-      help.innerHTML = 'AI 모델을 준비하는 중입니다. 그동안 <b>터치 출석</b>과 시뮬레이션을 쓸 수 있어요.';
-    } else if (ai.state === 'offline') {
-      help.innerHTML = 'AI 모델을 불러오지 못했어요. <b>터치 출석</b>·시뮬레이션으로 그대로 사용할 수 있습니다.';
-    } else {
-      help.innerHTML = '카메라를 연결하거나 <b>관원 선택 인식</b>으로 AI 얼굴인식을 체험해 보세요.';
-    }
-  }
-
   /* =========================================================
-     10-E. USB · 블루투스 바코드 리더기 — 입력칸 없이 바로 찍기 (v41)
+     10-E. USB · 블루투스 바코드 리더기 — 입력칸 없이 바로 찍기 (v41)  /* =========================================================
+     10-D. USB · 블루투스 바코드 리더기 — 입력칸 없이 바로 찍기 (v41)
      ---------------------------------------------------------
      · 키보드 방식 리더기는 글자를 아주 빠르게(보통 수십 ms 간격) 보내고
        끝에 Enter 또는 Tab 을 붙인다. 그 성질로 «사람 타자»와 구분한다.
@@ -7154,20 +5964,6 @@
     return app.logs.filter(function (l) { return l.date === key && l.studentId === studentId; }).length;
   }
 
-  function faceCell(s) {
-    var f = app.faces[s.id];
-    if (f) {
-      return '<div class="face-cell">' +
-        (f.thumb ? '<img class="face-thumb" src="' + esc(f.thumb) + '" alt="">' : '') +
-        '<span class="face-badge on">✅ 등록됨</span>' +
-        '<button class="btn btn-sm" data-face-reg="' + esc(s.id) + '" title="얼굴을 다시 등록합니다">재등록</button>' +
-        '<button class="btn btn-sm btn-danger" data-face-del="' + esc(s.id) + '" title="얼굴 등록을 삭제합니다">삭제</button>' +
-        '</div>';
-    }
-    return '<div class="face-cell"><span class="face-badge">미등록</span>' +
-      '<button class="btn btn-sm" data-face-reg="' + esc(s.id) + '">📸 얼굴 등록</button></div>';
-  }
-
   /* 관원의 첫 등록일 (YYYY-MM-DD, 없으면 '') */
   function firstRegOf(s) { return (s && isDateKey(s.firstRegDate)) ? String(s.firstRegDate) : ''; }
 
@@ -7400,7 +6196,6 @@
         '<td><input class="input mini stu-tnote" type="text" value="' + esc(noteOf(s)) + '"' +
         ' data-stunote="' + esc(s.id) + '" maxlength="200" placeholder="특이사항 · 비고" autocomplete="off"' +
         ' aria-label="' + esc(s.name + ' 특이사항 · 비고') + '" title="특이사항 · 비고 (관리자 화면 전용)"></td>' +
-        '<td>' + faceCell(s) + '</td>' +
         '<td style="white-space:nowrap">' +
         '<button class="btn btn-sm" data-edit="' + esc(s.id) + '">편집</button> ' +
         (paused
@@ -7419,30 +6214,6 @@
     var wrap = document.querySelector ? document.querySelector('.stu-tablewrap') : null;
     if (!wrap) { hint.classList.remove('on'); return; }
     hint.classList.toggle('on', (wrap.scrollWidth - wrap.clientWidth) > 4);
-  }
-
-  function renderFaceAdmin() {
-    var sel = el('kiosk-mode');
-    if (sel && document.activeElement !== sel) { sel.value = isBarcodeMode() ? KIOSK_MODE_BARCODE : KIOSK_MODE_FACE; }
-    var f = app.settings.face || DEFAULT_SETTINGS.face;
-    var range = el('face-threshold');
-    if (range && document.activeElement !== range) { range.value = String(f.threshold); }
-    var lab = el('face-threshold-val');
-    if (lab) { lab.textContent = Number(f.threshold).toFixed(2); }
-    var cd = el('face-cooldown');
-    if (cd && document.activeElement !== cd) { cd.value = String(f.cooldown); }
-    var au = el('face-auto');
-    if (au) { au.value = f.auto ? 'on' : 'off'; }
-    renderFaceSummary();
-  }
-
-  function renderFaceSummary() {
-    var note = el('face-reg-count');
-    if (!note) { return; }
-    var txt = faceCount() + ' / ' + app.students.length + '명 등록';
-    var extra = faceExtraSampleCount();
-    if (extra > 0) { txt += ' · 자동 보강 ' + extra + '장'; }
-    note.textContent = txt;
   }
 
   function renderSmsState() {
@@ -7787,7 +6558,6 @@
     }).then(function (ok) {
       if (!ok) { return; }
       app.students = app.students.filter(function (x) { return x.id !== id; });
-      if (app.faces[id]) { delete app.faces[id]; saveFaces(); }
       saveStudents();
       renderAll();
       toast(s.name + ' 관원을 삭제했어요.');
@@ -8164,23 +6934,6 @@
     var acc = adminAccount();
     var isDefault = !acc || acc.mustChange;
     var draft = { id: acc ? acc.id : DEFAULT_ADMIN_ID, pw: '' };
-    var hasFace = adminFaceRegistered();
-    var faceBlock =
-      '<div class="adm-face-login">' +
-      '<button class="btn btn-mint" id="adm-face-login"' + (hasFace ? '' : ' disabled') + '>📷 얼굴 인식으로 로그인</button>' +
-      '<div class="tiny-note">' + (hasFace
-        ? '등록된 관리자 얼굴 ' + adminFaceCount() + '개 중 하나를 비추면 바로 들어갈 수 있어요. (가장 가까운 얼굴로 확인)'
-        : '아직 등록된 얼굴이 없어요 · 「🔐 관리자 계정」에서 관장님 얼굴을 먼저 등록해 주세요.') +
-      '</div>' +
-      '<div class="tiny-note" id="adm-face-stopped" style="display:none">얼굴 로그인을 멈췄습니다.</div>' +
-      '<div class="adm-face-live" id="adm-face-live" style="display:none">' +
-      '<div class="face-cam sm"><video id="adm-face-video" autoplay muted playsinline></video><div class="face-frame"></div></div>' +
-      '<div class="face-status wait" id="adm-face-status">카메라를 준비하고 있어요…</div>' +
-      '<div class="form-actions" style="margin-top:0"><button class="btn btn-sm" id="adm-face-cancel">취소하고 아이디·비밀번호로</button></div>' +
-      '</div>' +
-      '</div>' +
-      '<div class="adm-or"><span>또는 아이디 · 비밀번호</span></div>';
-
     var resetBlock = (!isDefault && adminResetAllowed())
       ? '<div class="adm-reset" id="adm-reset">' +
         '<button class="btn btn-sm btn-danger" id="adm-reset-btn">🔄 관리자 계정 초기화 (admin / 0000)</button>' +
@@ -8190,10 +6943,8 @@
 
     var done = openModal({
       title: '🔒 관리자 로그인',
-      sub: hasFace
-        ? '얼굴을 비추면 바로 들어가고, 아이디·비밀번호도 그대로 쓸 수 있어요.'
-        : '도장 관리자만 들어갈 수 있어요. 아이디와 비밀번호를 입력해 주세요.',
-      body: faceBlock +
+      sub: '도장 관리자만 들어갈 수 있어요. 아이디와 비밀번호를 입력해 주세요.',
+      body:
         '<div class="row2">' +
         '<div class="field"><label>아이디</label><input class="input" id="adm-id" autocomplete="username" value="' + esc(draft.id) + '"></div>' +
         '<div class="field"><label>비밀번호</label><input class="input" id="adm-pw" type="password" autocomplete="current-password" placeholder="••••"></div>' +
@@ -8210,24 +6961,8 @@
       onAction: function () {
         if (el('adm-id')) { draft.id = String(el('adm-id').value || '').trim(); }
         if (el('adm-pw')) { draft.pw = String(el('adm-pw').value || ''); }
-      },
-      onClose: function () { stopAdminFaceLoginCamera(); }
+      }
     });
-
-    var faceBtn = el('adm-face-login');
-    if (faceBtn) {
-      faceBtn.addEventListener('click', function () {
-        if (!adminFaceRegistered()) {
-          toast('먼저 「🔐 관리자 계정」에서 관장님 얼굴을 등록해 주세요.');
-          return;
-        }
-        startAdminFaceLogin();
-      });
-    }
-    var cancelBtn = el('adm-face-cancel');
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', function () { stopAdminFaceLoginCamera(true); });
-    }
     /* 🔓 관리자 계정 초기화 — 관리자 기기로 확인된 경우에만 그려지고, 클릭해도 권한을 다시 확인한다 */
     var resetBtn = el('adm-reset-btn');
     if (resetBtn) {
@@ -8259,7 +6994,6 @@
         setView('admin');
         setAdminTab('overview');
         renderAdminAccountState();
-        renderAdminFaceState();
         toast('관리자로 들어왔어요' + (r.mustChange ? ' · 초기 비밀번호를 꼭 바꿔 주세요' : ''));
       });
     });
@@ -8323,572 +7057,6 @@
         toast('관리자 계정을 바꿨어요 · 아이디 ' + newId + ' (SHA-256 해시 저장)');
       });
     });
-  }
-
-  /* =========================================================
-     3-E. 관리자(관장님) 얼굴 등록 · 얼굴 로그인 (최대 5개)
-     · 저장: tdk.adminFace.v1 = [ { id, label, descriptor:[128], thumb, at }, … ] — 이 기기 안에만
-       (예전 단일 객체 { descriptor, thumb, at } 도 그대로 읽어 길이 1 배열로 바꾼다)
-     · 로그인 판정 거리: 관원 출석(기본 0.48)보다 엄격한 0.42
-       등록된 얼굴(1~5개) 중 가장 가까운 거리로 판정한다
-     · 아이디·비밀번호 로그인은 백업으로 항상 남긴다
-     ========================================================= */
-  var ADMIN_FACE_MAX = 5;
-  var ADMIN_FACE_THRESHOLD = 0.42;
-  var adminFaceSeq = 0;
-  function adminFaceMax() { return ADMIN_FACE_MAX; }
-  function adminFaceThreshold() { return ADMIN_FACE_THRESHOLD; }
-  function adminFaceList() { return Array.isArray(app.adminFaces) ? app.adminFaces : []; }
-  function adminFaceCount() { return adminFaceList().length; }
-  function adminFaceRegistered() { return adminFaceCount() > 0; }
-  function adminFaceNewId() {
-    adminFaceSeq++;
-    return 'af' + Date.now().toString(36) + adminFaceSeq.toString(36);
-  }
-  function cleanAdminFaceLabel(label) {
-    return String(label == null ? '' : label).replace(/\s+/g, ' ').trim().slice(0, 20);
-  }
-  /* 이름표가 비어 있으면 순번으로 '얼굴 1' 처럼 보여 준다 */
-  function adminFaceLabel(item, index) {
-    var label = item && item.label ? String(item.label) : '';
-    return label || ('얼굴 ' + ((index || 0) + 1));
-  }
-  function adminFaceAtTextOf(item) {
-    var at = item && item.at ? new Date(item.at) : null;
-    if (!at || isNaN(at.getTime())) { return '시각 미기록'; }
-    return fmtDateKorean(at) + ' ' + fmtKoreanTime(at);
-  }
-  function adminFaceAtText() {
-    return adminFaceRegistered() ? adminFaceAtTextOf(adminFaceList()[0]) : '';
-  }
-  function syncAdminFaceAlias() {
-    // 예전 코드·백업과의 호환: app.adminFace 는 첫 번째 얼굴을 가리킨다
-    var list = adminFaceList();
-    app.adminFace = list.length ? list[0] : null;
-  }
-
-  /* 얼굴 하나 추가 (최대 5개) */
-  function saveAdminFace(descriptor, thumb, label) {
-    var list = adminFaceList();
-    if (list.length >= ADMIN_FACE_MAX) { return false; }
-    var item = sanitizeAdminFaceItem({
-      id: adminFaceNewId(),
-      label: cleanAdminFaceLabel(label),
-      descriptor: descriptor,
-      thumb: thumb,
-      at: new Date().toISOString()
-    });
-    if (!item) { return false; }
-    app.adminFaces = list.concat([item]);
-    saveAdminFaceData();
-    renderAdminFaceState();
-    return true;
-  }
-  function removeAdminFaceById(id) {
-    var list = adminFaceList();
-    var out = [];
-    var hit = false;
-    for (var i = 0; i < list.length; i++) {
-      if (list[i].id === id) { hit = true; }
-      else { out.push(list[i]); }
-    }
-    if (!hit) { return false; }
-    app.adminFaces = out;
-    saveAdminFaceData();
-    renderAdminFaceState();
-    return true;
-  }
-  /* 전체 삭제 (예전 API 이름 유지) */
-  function removeAdminFace() {
-    if (!adminFaceRegistered()) { return false; }
-    app.adminFaces = [];
-    saveAdminFaceData();
-    renderAdminFaceState();
-    return true;
-  }
-  function confirmRemoveAdminFaceOne(id) {
-    var list = adminFaceList();
-    var idx = -1;
-    for (var i = 0; i < list.length; i++) { if (list[i].id === id) { idx = i; } }
-    if (idx === -1) { toast('이미 삭제된 얼굴이에요.'); renderAdminFaceState(); return; }
-    var name = adminFaceLabel(list[idx], idx);
-    var left = list.length - 1;
-    openModal({
-      title: '「' + name + '」 얼굴 등록을 삭제할까요?',
-      sub: left
-        ? '남은 얼굴 ' + left + '개로 계속 얼굴 로그인을 할 수 있어요.'
-        : '삭제하면 얼굴로는 로그인할 수 없고, 아이디·비밀번호로만 들어갈 수 있어요.',
-      actions: [
-        { label: '취소', value: false, kind: 'btn-ghost' },
-        { label: '삭제', value: true, kind: 'btn-danger' }
-      ]
-    }).then(function (ok) {
-      if (!ok) { return; }
-      if (!removeAdminFaceById(id)) { return; }
-      toast('「' + name + '」 얼굴 등록을 삭제했어요 · 남은 얼굴 ' + adminFaceCount() + '개');
-    });
-  }
-  function confirmRemoveAdminFace() {
-    var n = adminFaceCount();
-    if (!n) { toast('등록된 관리자 얼굴이 없어요.'); return; }
-    if (n < 2) { confirmRemoveAdminFaceOne(adminFaceList()[0].id); return; }
-    openModal({
-      title: '등록된 관리자 얼굴 ' + n + '개를 모두 삭제할까요?',
-      sub: '삭제하면 얼굴로는 로그인할 수 없고, 아이디·비밀번호로만 들어갈 수 있어요.',
-      actions: [
-        { label: '취소', value: false, kind: 'btn-ghost' },
-        { label: '삭제', value: true, kind: 'btn-danger' }
-      ]
-    }).then(function (ok) {
-      if (!ok) { return; }
-      removeAdminFace();
-      toast('관리자 얼굴 등록 ' + n + '개를 모두 삭제했어요 · 아이디·비밀번호로 로그인할 수 있어요.');
-    });
-  }
-
-  function adminFaceCardHtml(item, index) {
-    var name = adminFaceLabel(item, index);
-    var thumb = (item && item.thumb)
-      ? '<img src="' + esc(item.thumb) + '" alt="' + esc(name) + '">'
-      : '<span class="adm-face-noimg">👤</span>';
-    return '<div class="adm-face-card" data-face-card="' + esc(item.id) + '">' +
-      '<div class="adm-face-card-thumb">' + thumb + '</div>' +
-      '<div class="adm-face-card-txt">' +
-      '<div class="adm-face-card-name"><b>' + esc(name) + '</b>' +
-      '<span class="adm-face-card-num">' + (index + 1) + '/' + ADMIN_FACE_MAX + '</span></div>' +
-      '<div class="adm-face-card-when">' + esc(adminFaceAtTextOf(item)) + ' 등록</div>' +
-      '</div>' +
-      '<button class="btn btn-sm adm-face-card-del" data-face-del="' + esc(item.id) + '"' +
-      ' aria-label="' + esc(name) + ' 얼굴 등록 삭제" title="이 얼굴 삭제">🗑️</button>' +
-      '</div>';
-  }
-
-  function renderAdminFaceState() {
-    var list = adminFaceList();
-    var n = list.length;
-    var max = ADMIN_FACE_MAX;
-    var badge = el('admin-face-badge');
-    if (badge) {
-      badge.className = 'face-badge' + (n ? ' on' : '');
-      badge.textContent = n ? ('✅ ' + n + '/' + max + ' 등록') : '미등록';
-    }
-    var box = el('admin-face-list');
-    if (box) {
-      var html = [];
-      for (var i = 0; i < n; i++) { html.push(adminFaceCardHtml(list[i], i)); }
-      box.innerHTML = html.join('');
-      if (box.style) { box.style.display = n ? 'flex' : 'none'; }
-    }
-    var meta = el('admin-face-meta');
-    if (meta) {
-      if (!n) {
-        meta.innerHTML = '아직 등록된 얼굴이 없어요. 등록하면 아이디·비밀번호 없이 <b>얼굴로</b> 관리자 화면에 들어올 수 있어요.';
-      } else if (n >= max) {
-        meta.innerHTML = '최대 <b>' + max + '개</b>까지 등록했어요 · 하나를 삭제한 뒤 다시 추가할 수 있어요.<br>' +
-          '판정 거리 <b>' + adminFaceThreshold().toFixed(2) + '</b> 이하일 때만 통과해요.';
-      } else {
-        meta.innerHTML = '등록 <b>' + n + '/' + max + '개</b> · 가장 최근 등록 <b>' + esc(adminFaceAtTextOf(list[n - 1])) + '</b><br>' +
-          '판정 거리 <b>' + adminFaceThreshold().toFixed(2) + '</b> 이하이면 등록된 얼굴 중 하나로 로그인돼요.';
-      }
-    }
-    var openBtn = el('btn-admin-face-open');
-    if (openBtn) {
-      openBtn.textContent = (n >= max)
-        ? ('📷 최대 ' + max + '개까지 등록됨')
-        : ('📷 얼굴 추가 등록 (' + n + '/' + max + ')');
-      openBtn.disabled = (n >= max);
-    }
-    var delBtn = el('btn-admin-face-del');
-    if (delBtn) {
-      delBtn.disabled = (n < 2);
-      if (delBtn.style) { delBtn.style.display = (n >= 2) ? '' : 'none'; }
-      delBtn.textContent = (n >= 2) ? ('🗑️ 전체 삭제 (' + n + '개)') : '🗑️ 전체 삭제';
-    }
-  }
-
-  /* 얼굴 카드의 개별 삭제 버튼 */
-  function onAdminFaceListClick(e) {
-    var t = e && e.target;
-    var btn = t && t.closest ? t.closest('[data-face-del]') : null;
-    if (!btn) { return; }
-    var id = btn.getAttribute('data-face-del');
-    if (!id) { return; }
-    confirmRemoveAdminFaceOne(id);
-  }
-
-  /* 촬영·업로드한 사진 한 장에서 정확히 얼굴 1명을 찾아 관리자 얼굴로 저장 (최대 5개) */
-  function registerAdminFaceFromCanvas(canvas, onStatus, label) {
-    var setStatus = onStatus || function () {};
-    if (adminFaceCount() >= ADMIN_FACE_MAX) {
-      setStatus('err', '관리자 얼굴은 최대 ' + ADMIN_FACE_MAX + '개까지 등록할 수 있어요. 하나를 삭제한 뒤 다시 추가해 주세요.');
-      return Promise.resolve(false);
-    }
-    if (!ai.ready) {
-      setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
-      return Promise.resolve(false);
-    }
-    setStatus('wait', '얼굴을 분석하는 중…');
-    return detectFaces(canvas, 416).then(function (results) {
-      if (!results || !results.length) {
-        setStatus('err', '얼굴을 찾지 못했어요. 밝은 곳에서 정면을 바라봐 주세요.');
-        return false;
-      }
-      if (results.length > 1) {
-        setStatus('err', '얼굴이 ' + results.length + '명 보여요. 한 명만 비춰 주세요.');
-        return false;
-      }
-      var r = results[0];
-      var thumb = makeFaceThumb(canvas, r.detection.box);
-      if (!saveAdminFace(Array.prototype.slice.call(r.descriptor), thumb, label)) {
-        setStatus('err', '얼굴 특징값을 저장하지 못했어요. 최대 ' + ADMIN_FACE_MAX + '개까지 등록할 수 있어요.');
-        return false;
-      }
-      var list = adminFaceList();
-      var saved = list[list.length - 1];
-      var shown = adminFaceLabel(saved, list.length - 1);
-      setStatus('ok', '✅ 「' + shown + '」 얼굴을 등록했어요 (' + list.length + '/' + ADMIN_FACE_MAX + '). 이제 로그인 화면의 📷 얼굴 인식으로 들어올 수 있어요.');
-      playSuccess();
-      toast('관리자 얼굴을 등록했어요 · ' + shown + ' (' + list.length + '/' + ADMIN_FACE_MAX + ')');
-      return true;
-    }).catch(function (err) {
-      setStatus('err', '얼굴 분석에 실패했어요 (' + ((err && err.message) || 'error') + '). 다시 시도해 주세요.');
-      return false;
-    });
-  }
-
-  function openAdminFaceRegister() {
-    if (adminFaceCount() >= ADMIN_FACE_MAX) {
-      toast('관리자 얼굴은 최대 ' + ADMIN_FACE_MAX + '개까지 등록할 수 있어요. 하나를 삭제한 뒤 다시 추가해 주세요.');
-      return;
-    }
-    var body = '' +
-      '<div class="field afr-name"><label>이름표 (선택 · 20자까지)</label>' +
-      '<input class="input" id="afr-label" maxlength="20" placeholder="예: 관장님 · 안경 쓴 얼굴 · 사범님"></div>' +
-      '<div class="face-cam"><video id="afr-video" autoplay muted playsinline></video>' +
-      '<div class="face-frame"></div></div>' +
-      '<div class="face-status" id="afr-status">카메라를 준비하고 있어요…</div>' +
-      '<div class="form-actions" style="flex-wrap:wrap">' +
-      '<button class="btn btn-mint" id="afr-capture">📷 지금 화면으로 등록</button>' +
-      '<button class="btn" id="afr-upload">🖼️ 사진 파일로 등록</button>' +
-      '<input type="file" id="afr-file" accept="image/*" style="display:none">' +
-      '</div>' +
-      '<div class="face-preview" id="afr-preview"></div>' +
-      '<div class="face-tip">관리자 얼굴은 이 기기 안에서만 분석되고, 저장되는 것은 128개 숫자(특징값)와 작은 썸네일뿐이에요. 외부 서버로 보내지 않습니다.<br>' +
-      '이름표를 비워 두면 「얼굴 ' + (adminFaceCount() + 1) + '」로 저장돼요. 최대 <b>' + ADMIN_FACE_MAX + '개</b>까지 등록할 수 있고, ' +
-      '관원 출석(기본 0.48)보다 엄격한 판정 거리 <b>' + adminFaceThreshold().toFixed(2) + '</b>를 써서 다른 사람 얼굴로는 통과하지 않도록 했어요. 아이디·비밀번호 로그인은 그대로 쓸 수 있습니다.</div>';
-
-    var done = openModal({
-      title: '📷 관리자 얼굴 추가 등록 (' + adminFaceCount() + '/' + ADMIN_FACE_MAX + ')',
-      sub: '정면 얼굴이 정확히 1명 검출되면 바로 저장됩니다.',
-      body: body,
-      actions: [{ label: '닫기', value: null, kind: 'btn-ghost' }],
-      onClose: function () { stopAdminFaceRegisterCamera(); }
-    });
-
-    var video = el('afr-video');
-    var closed = false;
-
-    function setStatus(kind, text) {
-      var box = el('afr-status');
-      if (!box) { return; }
-      box.className = 'face-status' + (kind ? ' ' + kind : '');
-      box.textContent = text;
-    }
-
-    function currentLabel() {
-      var f = el('afr-label');
-      return f ? String(f.value || '') : '';
-    }
-
-    function showPreview() {
-      var box = el('afr-preview');
-      if (!box) { return; }
-      var list = adminFaceList();
-      if (!list.length) { box.innerHTML = ''; return; }
-      var last = list[list.length - 1];
-      box.innerHTML = (last.thumb ? '<img src="' + esc(last.thumb) + '" alt="등록된 관리자 얼굴">' : '') +
-        '<div class="face-preview-txt">등록된 얼굴 <b>' + list.length + '/' + ADMIN_FACE_MAX + '</b>개<br>' +
-        '최근: ' + esc(adminFaceLabel(last, list.length - 1)) + ' · ' + esc(adminFaceAtTextOf(last)) + '</div>';
-    }
-
-    function attachCamera() {
-      if (!video) { return; }
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus('err', '이 브라우저에서는 카메라를 열 수 없어요. 사진 파일로 등록해 주세요.');
-        return;
-      }
-      setStatus('wait', '카메라를 켜는 중…');
-      navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false
-      }).then(function (stream) {
-        if (closed) {
-          stream.getTracks().forEach(function (t) { t.stop(); });
-          return;
-        }
-        adminFaceRegister.stream = stream;
-        try { video.srcObject = stream; } catch (e) {}
-        if (video.play) {
-          var p = video.play();
-          if (p && p.catch) { p.catch(function () {}); }
-        }
-        setStatus('ok', '카메라 준비 완료 · 얼굴을 맞추고 촬영해 주세요.');
-      }).catch(function (err) {
-        adminFaceRegister.stream = null;
-        setStatus('err', '카메라를 열 수 없어요 (' + ((err && err.name) || 'error') + '). 사진 파일로 등록해 주세요.');
-      });
-    }
-
-    function captureCurrent() {
-      if (!ai.ready) {
-        setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
-        return;
-      }
-      if (!video || !video.videoWidth) {
-        setStatus('wait', '카메라 화면이 아직 준비되지 않았어요. 사진 파일로 등록할 수도 있습니다.');
-        return;
-      }
-      var canvas = document.createElement('canvas');
-      var vw = video.videoWidth, vh = video.videoHeight;
-      var scale = Math.min(1, 900 / Math.max(vw, vh));
-      canvas.width = Math.round(vw * scale);
-      canvas.height = Math.round(vh * scale);
-      var ctx = canvas.getContext ? canvas.getContext('2d') : null;
-      if (!ctx) { setStatus('err', '이 브라우저에서는 사진을 만들 수 없어요.'); return; }
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      var label = currentLabel();
-      registerAdminFaceFromCanvas(canvas, function (kind, text) {
-        setStatus(kind, text);
-        if (kind === 'ok') { showPreview(); }
-      }, label);
-    }
-
-    function handleUpload(file) {
-      if (!file) { return; }
-      if (!ai.ready) {
-        setStatus('err', ai.state === 'loading' ? 'AI 모델을 아직 불러오는 중이에요. 잠시만 기다려 주세요.' : 'AI 모델을 불러오지 못했어요. 인터넷 연결 후 새로고침해 주세요.');
-        return;
-      }
-      setStatus('wait', '사진에서 얼굴을 찾는 중…');
-      var label = currentLabel();
-      readImageFile(file).then(function (img) {
-        var canvas = imageToCanvas(img, 900);
-        if (!canvas) { throw new Error('canvas'); }
-        return registerAdminFaceFromCanvas(canvas, function (kind, text) {
-          setStatus(kind, text);
-          if (kind === 'ok') { showPreview(); }
-        }, label);
-      }).catch(function () {
-        setStatus('err', '사진 파일을 읽지 못했어요. JPG·PNG 파일로 다시 시도해 주세요.');
-      });
-    }
-
-    var capBtn = el('afr-capture');
-    if (capBtn) { capBtn.addEventListener('click', captureCurrent); }
-    var upBtn = el('afr-upload');
-    if (upBtn) {
-      upBtn.addEventListener('click', function () {
-        var f = el('afr-file');
-        if (f) { f.click(); }
-      });
-    }
-    var fileEl = el('afr-file');
-    if (fileEl) {
-      fileEl.addEventListener('change', function () {
-        if (fileEl.files && fileEl.files[0]) { handleUpload(fileEl.files[0]); }
-        fileEl.value = '';
-      });
-    }
-
-    showPreview();
-    if (!ai.ready) {
-      setStatus(ai.state === 'loading' ? 'wait' : 'err', ai.state === 'loading'
-        ? 'AI 모델을 불러오는 중이에요. 준비되면 촬영할 수 있습니다.'
-        : 'AI 모델을 불러오지 못했어요. 사진 파일 대신 아이디·비밀번호 로그인을 쓸 수 있습니다.');
-    }
-    attachCamera();
-
-    function finish() {
-      closed = true;
-      stopAdminFaceRegisterCamera();
-    }
-    done.then(finish);
-  }
-
-  /* 얼굴 등록 모달이 쓰는 카메라 스트림 (모달을 닫으면 반드시 정리) */
-  var adminFaceRegister = { stream: null };
-  function stopAdminFaceRegisterCamera() {
-    if (adminFaceRegister.stream) {
-      try { adminFaceRegister.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
-      adminFaceRegister.stream = null;
-    }
-    var video = el('afr-video');
-    if (video) { try { video.srcObject = null; } catch (e) {} }
-  }
-
-  /* ---------- 로그인 모달의 얼굴인식 로그인 ---------- */
-  var adminFaceLogin = { stream: null, timer: null, running: false, busy: false };
-
-  function adminFaceLoginStatus(kind, text) {
-    var box = el('adm-face-status');
-    if (!box) { return; }
-    box.className = 'face-status' + (kind ? ' ' + kind : '');
-    box.textContent = text;
-  }
-
-  function stopAdminFaceLoginCamera(showNote) {
-    adminFaceLogin.running = false;
-    adminFaceLogin.busy = false;
-    if (adminFaceLogin.timer) { clearTimeout(adminFaceLogin.timer); adminFaceLogin.timer = null; }
-    if (adminFaceLogin.stream) {
-      try { adminFaceLogin.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
-      adminFaceLogin.stream = null;
-    }
-    var video = el('adm-face-video');
-    if (video) { try { video.srcObject = null; } catch (e) {} }
-    var live = el('adm-face-live');
-    if (live && live.style) { live.style.display = 'none'; }
-    if (showNote) {
-      var note = el('adm-face-stopped');
-      if (note) { note.style.display = 'block'; }
-      adminFaceLoginStatus('', '얼굴 로그인을 멈췄어요. 아이디·비밀번호로 로그인할 수 있습니다.');
-    }
-  }
-
-  function scheduleAdminFaceLoginTick(ms) {
-    if (!adminFaceLogin.running) { return; }
-    if (adminFaceLogin.timer) { clearTimeout(adminFaceLogin.timer); }
-    adminFaceLogin.timer = setTimeout(adminFaceLoginTick, ms || 600);
-  }
-
-  function startAdminFaceLogin() {
-    if (!adminFaceRegistered()) {
-      toast('먼저 「🔐 관리자 계정」에서 관장님 얼굴을 등록해 주세요.');
-      return;
-    }
-    if (adminFaceLogin.timer) { clearTimeout(adminFaceLogin.timer); adminFaceLogin.timer = null; }
-    adminFaceLogin.running = true;
-    adminFaceLogin.busy = false;
-    var live = el('adm-face-live');
-    if (live && live.style) { live.style.display = 'block'; }
-    var stopped = el('adm-face-stopped');
-    if (stopped) { stopped.style.display = 'none'; }
-    adminFaceLoginStatus('wait', '카메라를 켜는 중…');
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      adminFaceLogin.running = false;
-      adminFaceLoginStatus('err', '이 브라우저에서는 카메라를 열 수 없어요. 아이디·비밀번호로 로그인해 주세요.');
-      return;
-    }
-    if (adminFaceLogin.stream) {
-      scheduleAdminFaceLoginTick(300);
-      return;
-    }
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 540 } },
-      audio: false
-    }).then(function (stream) {
-      if (!adminFaceLogin.running) {
-        stream.getTracks().forEach(function (t) { t.stop(); });
-        return;
-      }
-      adminFaceLogin.stream = stream;
-      var video = el('adm-face-video');
-      if (video) {
-        try { video.srcObject = stream; } catch (e) {}
-        if (video.play) {
-          var p = video.play();
-          if (p && p.catch) { p.catch(function () {}); }
-        }
-      }
-      adminFaceLoginStatus('wait', '얼굴을 비춰 주세요 · 등록된 관리자 얼굴 ' + adminFaceCount() + '개와 맞는지 확인합니다.');
-      scheduleAdminFaceLoginTick(500);
-    }).catch(function (err) {
-      adminFaceLogin.running = false;
-      adminFaceLoginStatus('err', '카메라를 열 수 없어요 (' + ((err && err.name) || 'error') + '). 아이디·비밀번호로 로그인해 주세요.');
-    });
-  }
-
-  function adminFaceLoginTick() {
-    adminFaceLogin.timer = null;
-    if (!adminFaceLogin.running) { return; }
-    if (!adminFaceRegistered()) {
-      stopAdminFaceLoginCamera();
-      adminFaceLoginStatus('err', '등록된 관리자 얼굴이 없어요. 아이디·비밀번호로 로그인해 주세요.');
-      return;
-    }
-    if (!ai.ready) {
-      if (ai.state === 'offline') {
-        stopAdminFaceLoginCamera();
-        adminFaceLoginStatus('err', 'AI 모델을 불러오지 못했어요. 아이디·비밀번호로 로그인해 주세요.');
-        return;
-      }
-      adminFaceLoginStatus('wait', 'AI 모델을 준비하는 중이에요…');
-      scheduleAdminFaceLoginTick(700);
-      return;
-    }
-    var video = el('adm-face-video');
-    if (!video || !video.videoWidth) {
-      adminFaceLoginStatus('wait', '카메라 화면을 준비하는 중이에요…');
-      scheduleAdminFaceLoginTick(500);
-      return;
-    }
-    if (adminFaceLogin.busy) {
-      scheduleAdminFaceLoginTick(400);
-      return;
-    }
-    adminFaceLogin.busy = true;
-    detectFaces(video, 224).then(function (results) {
-      adminFaceLogin.busy = false;
-      if (!adminFaceLogin.running) { return; }
-      handleAdminFaceLoginResults(results || []);
-    }).catch(function (err) {
-      adminFaceLogin.busy = false;
-      if (!adminFaceLogin.running) { return; }
-      adminFaceLoginStatus('err', '얼굴 분석에 실패했어요 (' + ((err && err.message) || 'error') + '). 아이디·비밀번호로 로그인해 주세요.');
-      scheduleAdminFaceLoginTick(1500);
-    });
-  }
-
-  function handleAdminFaceLoginResults(results) {
-    if (!results.length) {
-      adminFaceLoginStatus('wait', '얼굴을 찾지 못했어요. 밝은 곳에서 정면을 비춰 주세요.');
-      scheduleAdminFaceLoginTick(600);
-      return;
-    }
-    if (results.length > 1) {
-      adminFaceLoginStatus('wait', '얼굴이 ' + results.length + '명 보여요. 한 명만 비춰 주세요.');
-      scheduleAdminFaceLoginTick(600);
-      return;
-    }
-    var desc = Array.prototype.slice.call(results[0].descriptor);
-    var list = adminFaceList();
-    var best = null;
-    for (var i = 0; i < list.length; i++) {
-      var d = euclideanDistance(desc, list[i].descriptor);
-      if (!best || d < best.dist) { best = { dist: d, face: list[i], index: i }; }
-    }
-    if (best && best.dist <= adminFaceThreshold()) {
-      adminFaceLoginSuccess(best.dist, best.face, best.index);
-      return;
-    }
-    var nearest = best ? best.dist : 0;
-    adminFaceLoginStatus('err', '등록된 관리자 얼굴과 맞지 않아요 (가장 가까운 거리 ' + nearest.toFixed(2) + ' > ' + adminFaceThreshold().toFixed(2) + '). 아이디·비밀번호로 로그인해 주세요.');
-    scheduleAdminFaceLoginTick(800);
-  }
-
-  function adminFaceLoginSuccess(dist, face, index) {
-    stopAdminFaceLoginCamera();
-    app.adminAuthed = true;
-    renderAdminAccountState();
-    renderAdminFaceState();
-    setView('admin');
-    setAdminTab('overview');
-    closeActiveModal('face');
-    playSuccess();
-    var name = face ? adminFaceLabel(face, index || 0) : '';
-    toast('📷 얼굴 인식으로 관리자로 들어왔어요' +
-      (name ? ' · ' + name : '') +
-      (typeof dist === 'number' ? ' · 거리 ' + dist.toFixed(2) : ''));
   }
 
   /* =========================================================
@@ -8965,7 +7133,7 @@
      3-C. 재원생 / 휴관생
      학생 상태: status 'active'(재원생, 기본값) | 'paused'(휴관생)
      휴관생은 키오스크·미등원·원비 예상액·승급심사·단체문자에서 빠지고,
-     누적 출석·띠·얼굴 데이터와 출석 이력은 그대로 남아 복귀하면 바로 이어진다.
+     누적 출석·띠 데이터와 출석 이력은 그대로 남아 복귀하면 바로 이어진다.
      ========================================================= */
   function isPaused(s) { return !!(s && s.status === 'paused'); }
   function isActive(s) { return !isPaused(s); }
@@ -9012,7 +7180,7 @@
         '<div class="field"><label>휴관 사유/메모</label><input class="input" id="pz-modal-reason" maxlength="40" placeholder="예: 개인 사정 3개월"></div>' +
         '</div>' +
         '<div class="help" style="margin-top:10px">누적 출석 ' + (Number(s.attendCount) || 0) + '회 · ' + esc(s.belt || '띠 미지정') +
-        ' · 얼굴 등록 정보는 그대로 남습니다. 「🔄 재원 복귀」를 누르면 바로 이어집니다.</div>',
+        ' · 출결·원비 기록은 그대로 남습니다. 「🔄 재원 복귀」를 누르면 바로 이어집니다.</div>',
       actions: [
         { label: '취소', value: null, kind: 'btn-ghost' },
         { label: '휴관 처리', value: true, kind: 'btn-primary' }
@@ -9035,7 +7203,7 @@
       title: s.name + ' 관원을 재원으로 복귀시킬까요?',
       sub: '복귀하면 출석·원비·단체문자 대상에 다시 포함됩니다.',
       body: '<div class="help" style="margin-top:0">누적 출석 <b>' + (Number(s.attendCount) || 0) + '회</b> · 띠 <b>' + esc(s.belt || '미지정') +
-        '</b> · 얼굴 등록 <b>' + (app.faces[s.id] ? '있음' : '없음') + '</b> — 모두 그대로 이어집니다.' +
+        '</b> — 출결·원비 기록은 모두 그대로 이어집니다.' +
         (s.pauseReason ? '<br>휴관 사유: ' + esc(s.pauseReason) : '') + '</div>',
       actions: [
         { label: '취소', value: null, kind: 'btn-ghost' },
@@ -13590,8 +11758,7 @@
       var dayTxt = !isDateKey(s.pausedDate) ? '휴관일 미기록'
         : (days <= 0 ? '오늘부터 휴관' : '휴관 ' + days + '일째');
       return '<tr>' +
-        '<td class="nm"><div class="nm-line">' + esc(s.name) + '<span class="chip pause">휴관</span>' +
-        (app.faces[s.id] ? '<span class="face-badge on">얼굴 보관</span>' : '') + '</div>' +
+        '<td class="nm"><div class="nm-line">' + esc(s.name) + '<span class="chip pause">휴관</span></div>' +
         '<div class="pz-days' + (ready ? ' ready' : '') + '">' + esc(dayTxt) + '</div></td>' +
         '<td class="sub">' + esc(studentLabel(s)) + siblingBadge(s) + '</td>' +
         '<td>' + beltSwatchHtml(s.belt) + ' <span class="sub" style="font-size:12px;color:#344054;font-weight:800">' + esc(s.belt || '미지정') + '</span>' +
@@ -13659,7 +11826,7 @@
         else if (!isDateKey(target.pausedDate)) { target.pausedDate = todayKey(); }
         var reason = String(r.pauseReason || '').trim().slice(0, 60);
         if (reason) { target.pauseReason = reason; }
-        // 빈 칸만 채우고, 누적 출석·띠·얼굴·원비는 건드리지 않는다
+        // 빈 칸만 채우고, 누적 출석·띠·원비는 건드리지 않는다
         if (r.division && !normalizeDivision(target.division)) { target.division = normalizeDivision(r.division); }
         if (r.course && !courseOf(target)) { target.course = normalizeCourse(r.course); }
         if (r.className && !divisionFromText(target.className)) { target.className = String(r.className).trim(); }
@@ -13710,7 +11877,6 @@
       app.students.forEach(function (s) {
         if (isPaused(s) && !seen[s.id]) {
           out.removed++;
-          if (app.faces[s.id]) { delete app.faces[s.id]; }
           return;
         }
         keep.push(s);
@@ -13718,7 +11884,6 @@
       app.students = keep;
     }
     saveStudents();
-    saveFaces();
     return out;
   }
 
@@ -13740,8 +11905,8 @@
       sub: fileName + ' · ' + names + more,
       body: '<div class="help" style="margin-top:0">' +
         (mode2 === 'replace'
-          ? '파일에 <b>없는 휴관생 ' + pausedNow + '명은 명단에서 빠집니다</b>(재원생·얼굴·출석 자료는 그대로). 파일에 있는 관원이 이미 <b>재원생</b>이면 휴관생으로 바뀌고, 새 관원이면 휴관생으로 추가됩니다.'
-          : '기존 명단에 <b>합칩니다</b>. 이름+보호자 연락처가 같은 관원은 <b>휴관생으로 상태만 바뀌고</b>(누적 출석·띠·얼굴 유지), 새 관원이면 휴관생으로 추가됩니다.') +
+          ? '파일에 <b>없는 휴관생 ' + pausedNow + '명은 명단에서 빠집니다</b>(재원생·출석 자료는 그대로). 파일에 있는 관원이 이미 <b>재원생</b>이면 휴관생으로 바뀌고, 새 관원이면 휴관생으로 추가됩니다.'
+          : '기존 명단에 <b>합칩니다</b>. 이름+보호자 연락처가 같은 관원은 <b>휴관생으로 상태만 바뀌고</b>(누적 출석·띠 유지), 새 관원이면 휴관생으로 추가됩니다.') +
         (mode2 === 'sync'
           ? '<br><span class="muted">연락처가 비어 있으면 이름이 같은 관원 한 명을 찾아 바뀝니다. 가져온 뒤 「🛌 휴관생 관리」에서 한 번만 확인해 주세요.</span>'
           : '') +
@@ -16528,8 +14693,8 @@
        · 이름은 정규화(앞뒤·중복 공백 제거)한 값이 같은 사람끼리만 비교
        · 같은 이름 + 모·부·대표 번호가 하나라도 겹치면 같은 사람
        · 번호를 서로 다르게 적어 둔 동명이인은 건드리지 않는다
-       · 한쪽이라도 얼굴·출결·원비·상담 기록이 전혀 없으면 새로 들어온 중복으로 본다
-       · 남길 원본: 얼굴 > 출결 > 원비 > 상담 > 설정(띠·수업·원비날짜 등) > 먼저 들어온 순서
+       · 한쪽이라도 출결·원비·상담 기록이 전혀 없으면 새로 들어온 중복으로 본다
+       · 남길 원본: 출결 > 원비 > 상담 > 설정(띠·수업·원비날짜 등) > 먼저 들어온 순서
      ========================================================= */
   /* 관원이 가진 번호 전부(모·부·대표)를 숫자만으로 */
   function studentNumbersOf(s) {
@@ -16537,10 +14702,9 @@
   }
   /* 관원이 남긴 흔적 — 지울지 결정하는 기준이자 안전장치 */
   function studentTraceOf(s) {
-    var t = { face: false, attendance: false, tuition: false, counsel: false, settings: false };
+    var t = { attendance: false, tuition: false, counsel: false, settings: false };
     var id = s && s.id ? String(s.id) : '';
     if (!id) { return t; }
-    if (app.faces && app.faces[id]) { t.face = true; }
     Object.keys(app.attendance || {}).forEach(function (d) {
       var day = app.attendance[d];
       if (day && day[id] && (day[id].inTime || day[id].outTime || day[id].manual)) { t.attendance = true; }
@@ -16566,7 +14730,6 @@
   /* 원본으로 남길 우선순위 점수 — 높을수록 원본 */
   function studentKeepScore(s, t) {
     var n = 0;
-    if (t.face) { n += 64; }
     if (t.attendance) { n += 32; }
     if (t.tuition) { n += 16; }
     if (t.counsel) { n += 8; }
@@ -16579,8 +14742,8 @@
     var na = studentNumbersOf(a), nb = studentNumbersOf(b);
     if (nb.some(function (d) { return na.indexOf(d) !== -1; })) { return true; }  /* 번호가 하나라도 겹친다 */
     if (na.length && nb.length) { return false; }        /* 서로 다른 번호를 적었으면 동명이인 */
-    var recA = !!(ta.face || ta.attendance || ta.tuition || ta.counsel);
-    var recB = !!(tb.face || tb.attendance || tb.tuition || tb.counsel);
+    var recA = !!(ta.attendance || ta.tuition || ta.counsel);
+    var recB = !!(tb.attendance || tb.tuition || tb.counsel);
     return !recA || !recB;                                /* 기록이 전혀 없는 쪽은 새로 들어온 중복 */
   }
   /* 중복 관원에서 원본으로 옮길 빈 칸만 골라낸다 */
@@ -16636,7 +14799,6 @@
       for (var j = 1; j < g.length; j++) {
         var other = g[j].s;
         var oTrace = traceOf(other);
-        if (vTrace.face && oTrace.face) { skipped++; continue; }   /* 둘 다 얼굴이 있으면 다른 사람일 수 있어 남긴다 */
         if (!studentIsDuplicateOf(virtual, other, vTrace, oTrace)) { skipped++; continue; }
         var fill = studentMergeFill(virtual, other);
         pairs.push({ keep: keep, drop: other, keepId: keep.id, dropId: other.id, fill: fill });
@@ -16678,7 +14840,7 @@
   /* 실제로 정리한다 — saveStudents() 가 Firebase 동기화에 삭제(툼스톤)까지 넘긴다 */
   function runStudentDedupe() {
     var plan = studentDedupePlan();
-    var dropIds = {}, faceMoved = false;
+    var dropIds = {};
     var filled = 0, moved = 0;
     plan.pairs.forEach(function (p) {
       var keep = byId(p.keepId);
@@ -16686,11 +14848,6 @@
       if (!keep || !drop || keep.id === drop.id || dropIds[drop.id]) { return; }
       filled += studentApplyFill(keep, p.fill);
       moved += moveStudentRecords(drop.id, keep.id);
-      if (app.faces && app.faces[drop.id] && !app.faces[keep.id]) {
-        app.faces[keep.id] = app.faces[drop.id];
-        delete app.faces[drop.id];
-        faceMoved = true;
-      }
       dropIds[drop.id] = true;
     });
     var removed = Object.keys(dropIds).length;
@@ -16699,7 +14856,6 @@
       .map(function (s) { return String(s.name || '').trim(); });
     app.students = app.students.filter(function (s) { return !s || !dropIds[s.id]; });
     saveStudents();
-    if (faceMoved) { saveFaces(); }
     if (moved) { saveAttendance(); saveTuition(); saveCounselFile(); }
     return { removed: removed, filled: filled, moved: moved, names: names };
   }
@@ -16727,10 +14883,10 @@
     if (plan.skipped) {
       body += '<div class="tiny-note" style="margin-top:6px">번호가 서로 다른 동명이인 ' + plan.skipped + '명은 그대로 두었어요.</div>';
     }
-    body += '<div class="help" style="margin-top:8px">얼굴·띠·수업·출결·원비 기록이 있는 기존 관원을 남기고, 중복 관원에만 있던 모·부 번호·성함·주소는 원본의 빈 칸으로 옮깁니다. 정리 전에 「🔐 관리자 계정」의 백업을 한 번 받아 두면 되돌리기 쉬워요.</div>';
+    body += '<div class="help" style="margin-top:8px">띠·수업·출결·원비 기록이 있는 기존 관원을 남기고, 중복 관원에만 있던 모·부 번호·성함·주소는 원본의 빈 칸으로 옮깁니다. 정리 전에 「🔐 관리자 계정」의 백업을 한 번 받아 두면 되돌리기 쉬워요.</div>';
     return openModal({
       title: '🧹 중복 관원 ' + n + '명을 찾았어요',
-      sub: '기존 관원(얼굴·띠·수업·출결 유지)에 빈 모·부 번호·성함·주소만 채우고 중복 ' + n + '명을 정리할까요?',
+      sub: '기존 관원(띠·수업·출결 유지)에 빈 모·부 번호·성함·주소만 채우고 중복 ' + n + '명을 정리할까요?',
       body: body,
       actions: [
         { label: '취소', value: null, kind: 'btn-ghost' },
@@ -16874,7 +15030,6 @@
       exportedAt: new Date().toISOString(),
       dojoName: app.settings.dojoName,
       students: app.students,
-      faces: app.faces,
       records: app.records,
       attendance: app.attendance,
       tuition: app.tuition,
@@ -16892,15 +15047,6 @@
         autoLock: app.admin.autoLock !== false,
         updatedAt: app.admin.updatedAt || ''
       } : null,
-      adminFace: adminFaceList().map(function (f) {
-        return {
-          id: f.id,
-          label: f.label || '',
-          descriptor: f.descriptor.slice(0, 128),
-          thumb: f.thumb || '',
-          at: f.at || ''
-        };
-      }),
       logs: app.logs,
       settings: app.settings,
       messages: (app.settings && app.settings.messages) || {},
@@ -16928,7 +15074,7 @@
     var now = new Date();
     var name = '도장백업_' + todayKey(now) + '_' + pad2(now.getHours()) + pad2(now.getMinutes()) + '.json';
     downloadText(JSON.stringify(data, null, 2), 'application/json', name);
-    toast('전체 백업을 내려받았어요 · 관원 ' + data.students.length + '명 · 얼굴 ' + faceCount() + '명');
+    toast('전체 백업을 내려받았어요 · 관원 ' + data.students.length + '명');
   }
 
   function validateBackup(data) {
@@ -16944,9 +15090,6 @@
     var named = data.students.filter(function (s) { return s && String(s.name || '').trim(); });
     if (!named.length) {
       return { ok: false, reason: '이름이 있는 관원이 없어 복원할 수 없어요.' };
-    }
-    if (data.faces != null && (typeof data.faces !== 'object' || Array.isArray(data.faces))) {
-      return { ok: false, reason: '얼굴 데이터 형식이 올바르지 않아요.' };
     }
     var bad = '';
     ['records', 'attendance', 'settings', 'tuition'].forEach(function (k) {
@@ -16974,20 +15117,6 @@
     if (data.admin != null && (typeof data.admin !== 'object' || Array.isArray(data.admin))) {
       return { ok: false, reason: '관리자 계정 설정 형식이 올바르지 않아요.' };
     }
-    if (data.adminFace != null) {
-      if (typeof data.adminFace !== 'object') {
-        return { ok: false, reason: '관리자 얼굴 데이터 형식이 올바르지 않아요.' };
-      }
-      var afSrc = Array.isArray(data.adminFace) ? data.adminFace : [data.adminFace];
-      if (afSrc.length > ADMIN_FACE_MAX) {
-        return { ok: false, reason: '관리자 얼굴은 최대 ' + ADMIN_FACE_MAX + '개까지만 복원할 수 있어요.' };
-      }
-      for (var afi = 0; afi < afSrc.length; afi++) {
-        if (!sanitizeAdminFaceItem(afSrc[afi])) {
-          return { ok: false, reason: '관리자 얼굴 데이터가 손상되어 복원할 수 없어요.' };
-        }
-      }
-    }
     if (data.feeTable != null && (typeof data.feeTable !== 'object' || Array.isArray(data.feeTable))) {
       return { ok: false, reason: '원비 단가표 형식이 올바르지 않아요.' };
     }
@@ -17013,15 +15142,8 @@
   }
 
   function applyBackupData(data) {
-    var faces = {};
-    if (data.faces && typeof data.faces === 'object') {
-      Object.keys(data.faces).forEach(function (sid) {
-        var f = sanitizeFace(data.faces[sid]);
-        if (f) { faces[sid] = f; }
-      });
-    }
+    /* v44 — 예전 백업 파일의 faces(얼굴 특징값)·adminFace 는 이제 쓰지 않으므로 그냥 지나간다 */
     writeJSON(LS.students, data.students);
-    writeJSON(LS.faces, faces);
     if (data.records) { writeJSON(LS.records, data.records); }
     if (data.attendance) { writeJSON(LS.attendance, data.attendance); }
     writeJSON(LS.tuition, (data.tuition && typeof data.tuition === 'object' && !Array.isArray(data.tuition)) ? data.tuition : {});
@@ -17050,12 +15172,6 @@
         autoLock: data.admin.autoLock !== false,
         updatedAt: String(data.admin.updatedAt || '')
       });
-    }
-    // 관리자 얼굴: 백업에 항목이 있을 때만 손대고(없는 예전 백업은 이 기기 등록을 유지), null/[]이면 지운다
-    if (Object.prototype.hasOwnProperty.call(data, 'adminFace')) {
-      app.adminFaces = sanitizeAdminFaces(data.adminFace);
-      syncAdminFaceAlias();
-      saveAdminFaceData();
     }
     if (data.logs) { writeJSON(LS.logs, data.logs); }
     if (data.feeTable && typeof data.feeTable === 'object' && !Array.isArray(data.feeTable)) {
@@ -17097,11 +15213,10 @@
     resetStudentForm();
     fillSmsForm();
     el('dojo-name').value = app.settings.dojoName;
-    document.title = app.settings.dojoName + ' · AI 출석 알림';
+    document.title = app.settings.dojoName + ' · 출석 알림';
     el('mode-in').classList.toggle('active', app.settings.mode !== 'out');
     el('mode-out').classList.toggle('active', app.settings.mode === 'out');
     renderAll();
-    renderFaceAdmin();
     renderBeltEditor(true);
     renderPromotion();
     renderGukgiwon();
@@ -17114,15 +15229,13 @@
     renderShuttle();
     renderCoupons();
     renderAdminAccountState();
-    renderAdminFaceState();
     fillDriveForm();
     renderPin();
     refreshAiHint();
-    toast('백업을 복원했어요 · 관원 ' + app.students.length + '명 · 얼굴 ' + faceCount() + '명');
+    toast('백업을 복원했어요 · 관원 ' + app.students.length + '명');
   }
 
   function backupSummaryHtml(data) {
-    var faces = (data.faces && typeof data.faces === 'object') ? Object.keys(data.faces).length : 0;
     var days = (data.attendance && typeof data.attendance === 'object') ? Object.keys(data.attendance).length : 0;
     var tMonths = (data.tuition && typeof data.tuition === 'object') ? Object.keys(data.tuition).length : 0;
     var tplCount = Array.isArray(data.smsTemplates) ? data.smsTemplates.length : 0;
@@ -17130,16 +15243,9 @@
     var shCount = Array.isArray(data.shuttle) ? data.shuttle.length : 0;
     var cpCount = Array.isArray(data.coupons) ? data.coupons.length : 0;
     var hasAdmin = !!(data.admin && data.admin.hash);
-    var afCount = 0;
-    if (Array.isArray(data.adminFace)) {
-      data.adminFace.forEach(function (f) { if (sanitizeAdminFaceItem(f)) { afCount++; } });
-    } else if (sanitizeAdminFaceItem(data.adminFace)) {
-      afCount = 1;
-    }
     return '<div class="help" style="margin-top:0">' +
-      '관원 <b>' + data.students.length + '명</b> · 얼굴 <b>' + faces + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 상담 기록 <b>' + csCount + '건</b> · 차량 운행 <b>' + shCount + '건</b> · 쿠폰 <b>' + cpCount + '장</b>' +
+      '관원 <b>' + data.students.length + '명</b> · 출석 이력 <b>' + days + '일</b> · 원비 이력 <b>' + tMonths + '개월</b> · 문자 템플릿 <b>' + tplCount + '개</b> · 상담 기록 <b>' + csCount + '건</b> · 차량 운행 <b>' + shCount + '건</b> · 쿠폰 <b>' + cpCount + '장</b>' +
       (hasAdmin ? ' · 관리자 계정 <b>포함</b>' : '') +
-      (afCount ? ' · 관리자 얼굴 <b>' + afCount + '/' + ADMIN_FACE_MAX + '개 등록됨</b>' : ' · 관리자 얼굴 미등록') +
       ' · 띠 체계·문자·원비·수업별 단가표 설정 포함<br>' +
       (data.exportedAt ? '백업 시각: ' + esc(String(data.exportedAt).slice(0, 16).replace('T', ' ')) : '백업 시각 정보 없음') +
       '</div>';
@@ -17730,7 +15836,6 @@
     renderAdminLog();
     renderGradeList();
     updateMuteBtn();
-    renderFaceSummary();
     renderKioskModeUI();
     el('dojo-name').value = app.settings.dojoName;
     renderPin();
@@ -17779,7 +15884,6 @@
 
     // 카메라
     el('btn-camera').addEventListener('click', toggleCamera);
-    el('btn-pick-sim').addEventListener('click', openSimPicker);
     // v42 — 🔌 COM 포트(시리얼) 리더기: 출석 화면·관리자 설정 두 곳에서 같은 동작
     ['btn-com-reader', 'btn-com-reader-admin'].forEach(function (id) {
       var b = el(id);
@@ -17800,13 +15904,6 @@
         }
       });
     }
-    el('btn-random-sim').addEventListener('click', function () {
-      if (!app.students.length) { toast('명단이 비어 있어요.'); return; }
-      if (app.busy) { return; }
-      var s = app.students[Math.floor(Math.random() * app.students.length)];
-      runRecognition(s);
-    });
-
     // 키패드
     el('keypad').addEventListener('click', function (e) {
       var b = e.target.closest('[data-key]');
@@ -17885,10 +15982,6 @@
       });
     });
     el('stu-table').addEventListener('click', function (e) {
-      var fr = e.target.closest('[data-face-reg]');
-      if (fr) { openFaceRegister(fr.getAttribute('data-face-reg')); return; }
-      var fd = e.target.closest('[data-face-del]');
-      if (fd) { confirmRemoveFace(fd.getAttribute('data-face-del')); return; }
       var ed = e.target.closest('[data-edit]');
       if (ed) { startEdit(ed.getAttribute('data-edit')); return; }
       var ps = e.target.closest('[data-pause]');
@@ -18821,39 +16914,6 @@
       el('btn-sms-retry-admin').addEventListener('click', function () { retryVisibleSms('admin'); });
     }
 
-    // AI 얼굴인식 설정
-    if (el('face-threshold')) {
-      el('face-threshold').addEventListener('input', function () {
-        var lab = el('face-threshold-val');
-        var v = parseFloat(el('face-threshold').value);
-        if (lab) { lab.textContent = (isNaN(v) ? 0.48 : v).toFixed(2); }
-      });
-    }
-    if (el('btn-face-save')) {
-      el('btn-face-save').addEventListener('click', function () {
-        var f = app.settings.face;
-        var th = parseFloat(el('face-threshold').value);
-        var cd = parseInt(el('face-cooldown').value, 10);
-        if (isNaN(th) || th < 0.30 || th > 0.65) { toast('일치 판정 거리는 0.30 ~ 0.65 사이로 정해 주세요.'); return; }
-        if (isNaN(cd) || cd < 5 || cd > 300) { toast('재인식 쿨다운은 5 ~ 300초 사이로 정해 주세요.'); return; }
-        f.threshold = Math.round(th * 100) / 100;
-        f.cooldown = cd;
-        f.auto = el('face-auto').value !== 'off';
-        saveSettings();
-        renderFaceAdmin();
-        toast('AI 얼굴인식 설정을 저장했어요 · 거리 ' + f.threshold.toFixed(2) + ' · 쿨다운 ' + f.cooldown + '초');
-      });
-    }
-    // v40 — 출석 인식 방식 (얼굴 / 바코드)
-    if (el('km-face')) {
-      el('km-face').addEventListener('click', function () { setKioskMode(KIOSK_MODE_FACE); });
-    }
-    if (el('km-barcode')) {
-      el('km-barcode').addEventListener('click', function () { setKioskMode(KIOSK_MODE_BARCODE); });
-    }
-    if (el('kiosk-mode')) {
-      el('kiosk-mode').addEventListener('change', function () { setKioskMode(el('kiosk-mode').value); });
-    }
     if (el('tt-code')) {
       el('tt-code').addEventListener('click', function () { switchTouch('code'); });
     }
@@ -18886,16 +16946,7 @@
         }
       });
     }
-    if (el('btn-face-retry')) {
-      el('btn-face-retry').addEventListener('click', function () {
-        if (ai.state === 'loading') { toast('이미 AI 모델을 불러오는 중이에요.'); return; }
-        if (ai.ready) { toast('AI 모델이 이미 준비되어 있어요.'); return; }
-        initFaceAI();
-        toast('AI 모델을 다시 불러옵니다…');
-      });
-    }
-
-    // 전체 백업 / 복원
+    // 전체 백업 / 복원    // 전체 백업 / 복원
     el('btn-backup-all').addEventListener('click', downloadBackup);
     el('btn-restore-all').addEventListener('click', function () {
       var inp = el('restore-input');
@@ -19010,9 +17061,6 @@
     el('adm-autolock').addEventListener('change', function () {
       saveAdminAutoLock(el('adm-autolock').value);
     });
-    el('btn-admin-face-open').addEventListener('click', openAdminFaceRegister);
-    el('btn-admin-face-del').addEventListener('click', confirmRemoveAdminFace);
-    el('admin-face-list').addEventListener('click', onAdminFaceListClick);
     el('btn-goto-account').addEventListener('click', function () {
       setAdminTab('settings');
       var p = el('admin-account-panel');
@@ -19048,11 +17096,13 @@
   }
 
   function init() {
+    /* v44 — 예전 기기에 남아 있던 얼굴 데이터(약 4MB)를 먼저 비워 localStorage 여유 공간을 되찾는다 */
+    purgeLegacyFaceData();
     loadState();
     app._renderedDay = todayKey();
 
     el('dojo-name').value = app.settings.dojoName;
-    document.title = app.settings.dojoName + ' · AI 출석 알림';
+    document.title = app.settings.dojoName + ' · 출석 알림';
     el('mode-in').classList.toggle('active', app.settings.mode !== 'out');
     el('mode-out').classList.toggle('active', app.settings.mode === 'out');
 
@@ -19091,17 +17141,13 @@
       renderAdminAccountState();
     }, function () {});
     renderAdminAccountState();
-    renderAdminFaceState();
-
-    renderFaceAdmin();
     refreshAiHint();
-    initFaceAI();
     driveAutoBoot();
 
     var xlsxOk = (typeof XLSX !== 'undefined') && !window.__xlsxLoadFailed;
     el('xlsx-state').textContent = xlsxOk ? '엑셀 엔진 준비됨 (SheetJS)' : 'CSV 모드 (오프라인)';
     el('xlsx-state').style.color = xlsxOk ? '#0b7a55' : '#a35b00';
-    el('stage-tip').textContent = 'AI ENGINE · READY';
+    el('stage-tip').textContent = 'BARCODE · READY';
     renderKioskModeUI();
     if (isBarcodeMode()) { startBarcodeLoop(); }
     comReaderBindEvents();
@@ -19153,7 +17199,6 @@
         run(renderAdminLog);
         run(renderLog);
         run(renderAdminAccountState);
-        run(renderAdminFaceState);
         run(function () { setAdminTab(tab); });
         window.__tdk.sync.count = (window.__tdk.sync.count || 0) + 1;
         return { students: (app.students || []).length, count: window.__tdk.sync.count };
@@ -19187,11 +17232,8 @@
       adminLog: renderAdminLog
     },
     checkIn: checkIn,
-    /* v40 — 출석 인식 방식 · 카메라 바코드 */
-    kioskMode: kioskMode,
-    setKioskMode: setKioskMode,
+    /* v44 — 출석 인식 방식(바코드 전용) · 카메라 바코드 */
     isBarcodeMode: isBarcodeMode,
-    kioskModes: [KIOSK_MODE_FACE, KIOSK_MODE_BARCODE],
     barcode: {
       normalize: normalizeBarcode,
       of: barcodeOf,
@@ -19261,44 +17303,14 @@
       unsupportedMsg: COM_UNSUPPORTED_MSG,
       busyMsg: COM_BUSY_MSG
     },
-    face: {
-      euclideanDistance: euclideanDistance,
-      bestFaceMatch: bestFaceMatch,
-      cooldownActive: cooldownActive,
-      faceThreshold: faceThreshold,
-      faceCooldownMs: faceCooldownMs,
-      saveFace: saveFace,
-      removeFace: removeFace,
-      sanitizeFace: sanitizeFace,
-      registerFaceFromCanvas: registerFaceFromCanvas,
-      handleKioskFaces: handleKioskFaces,
-      faceLoopTick: faceLoopTick,
-      faceCount: faceCount,
-      samplesOf: faceSamplesOf,
-      addSample: addFaceSample,
-      extraSamples: faceExtraSampleCount,
-      streak: faceStreakInfo,
-      streakOf: faceStreakCount,
-      ageStreak: function (ms) {
-        var d = Number(ms) || 0;
-        Object.keys(ai.streak || {}).forEach(function (k) { ai.streak[k].at -= d; });
-      },
-      ageLastFrame: function (ms) { if (ai.lastFrame) { ai.lastFrame.at -= (Number(ms) || 0); } },
-      ambiguous: ambiguousFaceMatch,
-      boxUsable: faceBoxUsable,
-      facingFront: faceFacingFront,
-      touchAugment: tryTouchAugment,
-      lastFrame: function () { return ai.lastFrame; },
-      detectorOptions: detectorOptions,
-      markModelReady: function () { ai.ready = true; ai.state = 'ready'; },
-      reload: initFaceAI,
-      resetSeen: function () { ai.lastSeen = {}; resetFaceStreak(); ai.lastFrame = null; }
-    },
     data: {
       buildBackup: buildBackup,
       validateBackup: validateBackup,
       applyBackup: applyBackup,
-      summary: backupSummaryHtml
+      summary: backupSummaryHtml,
+      /* v44 — 예전 얼굴 데이터 정리(점검용) */
+      purgeLegacyFaces: purgeLegacyFaceData,
+      legacyFaceKeys: LEGACY_FACE_KEYS.slice()
     },
     drive: {
       folderId: DRIVE_FOLDER_ID,
@@ -19779,31 +17791,6 @@
       runFbReset: runFbReset,
       state: function () { return { authed: app.adminAuthed, account: adminAccount() }; },
       render: renderAdminAccountState,
-      face: {
-        registered: adminFaceRegistered,
-        threshold: adminFaceThreshold,
-        max: adminFaceMax,
-        list: adminFaceList,
-        count: adminFaceCount,
-        labelOf: adminFaceLabel,
-        sanitize: sanitizeAdminFaces,
-        load: function () { app.adminFaces = loadAdminFace(); syncAdminFaceAlias(); renderAdminFaceState(); return adminFaceCount(); },
-        save: saveAdminFace,
-        remove: removeAdminFace,
-        removeById: removeAdminFaceById,
-        confirmRemove: confirmRemoveAdminFace,
-        confirmRemoveOne: confirmRemoveAdminFaceOne,
-        registerFromCanvas: registerAdminFaceFromCanvas,
-        openRegister: openAdminFaceRegister,
-        render: renderAdminFaceState,
-        startLogin: startAdminFaceLogin,
-        stopLogin: stopAdminFaceLoginCamera,
-        tick: adminFaceLoginTick,
-        handle: handleAdminFaceLoginResults,
-        atText: adminFaceAtText,
-        loginState: function () { return { running: adminFaceLogin.running, stream: !!adminFaceLogin.stream, timer: !!adminFaceLogin.timer }; },
-        registerState: function () { return { stream: !!adminFaceRegister.stream }; }
-      },
       defaults: function () { return { id: DEFAULT_ADMIN_ID, pw: DEFAULT_ADMIN_PW }; }
     }
   };
