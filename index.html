@@ -7491,21 +7491,31 @@ setTimeout(function () {
     var acc = adminAccount();
     var info = adminFbInfo();
     var okAdmin = info.role === 'admin';
+    var mock = (info.mode === 'mock');
     if (el('adm-state')) {
-      el('adm-state').textContent = okAdmin ? 'Firebase 관리자 확인됨' : (info.locked ? '로그인 필요' : '권한 확인 중…');
+      el('adm-state').textContent = mock ? '연습(모의) 모드'
+        : (okAdmin ? 'Firebase 관리자 확인됨' : (info.locked ? '로그인 필요' : '권한 확인 중…'));
     }
-    if (el('adm-fb-email')) { el('adm-fb-email').textContent = info.email || '로그인 안 됨'; }
-    if (el('adm-fb-uid')) { el('adm-fb-uid').textContent = info.uid || '-'; }
+    if (el('adm-fb-email')) {
+      el('adm-fb-email').textContent = mock ? '연습 계정 없음(로그인하지 않음)' : (info.email || '로그인 안 됨');
+    }
+    if (el('adm-fb-uid')) { el('adm-fb-uid').textContent = mock ? '-' : (info.uid || '-'); }
     if (el('adm-fb-role')) {
-      el('adm-fb-role').textContent = okAdmin ? '✅ 관리자' : (info.role && info.role !== 'none' ? info.role : '미확인');
-      el('adm-fb-role').className = 'chip ' + (okAdmin ? 'ok' : 'wait');
+      if (mock) {
+        el('adm-fb-role').textContent = '🧪 연습';
+        el('adm-fb-role').className = 'chip wait';
+      } else {
+        el('adm-fb-role').textContent = okAdmin ? '✅ 관리자' : (info.role && info.role !== 'none' ? info.role : '미확인');
+        el('adm-fb-role').className = 'chip ' + (okAdmin ? 'ok' : 'wait');
+      }
     }
     if (el('adm-fb-sync')) {
-      el('adm-fb-sync').textContent = info.mode === 'firestore'
-        ? (okAdmin ? '🟢 연결됨' : '⚪ 로그인 전')
-        : (info.mode === 'mock' ? '🧪 연습 모드' : '⚪ 로컬');
+      el('adm-fb-sync').textContent = mock ? '🧪 연습 모드'
+        : (info.mode === 'firestore' ? (okAdmin ? '🟢 연결됨' : '⚪ 로그인 전') : '⚪ 로컬');
     }
-    if (el('admin-lock-id')) { el('admin-lock-id').textContent = info.email || (acc ? acc.id : '-'); }
+    if (el('admin-lock-id')) {
+      el('admin-lock-id').textContent = mock ? '연습 모드' : (info.email || (acc ? acc.id : '-'));
+    }
     if (el('admin-lockbar')) { el('admin-lockbar').style.display = (app.adminAuthed && !info.locked) ? 'flex' : 'none'; }
     if (el('btn-adm-logout')) { el('btn-adm-logout').disabled = !!info.locked; }
     if (el('btn-admin-logout')) { el('btn-admin-logout').disabled = !!info.locked; }
