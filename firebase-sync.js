@@ -304,6 +304,18 @@
       return '인터넷 연결이 없습니다 — 연결되면 자동으로 다시 보냅니다';
     }
     if (e.code === 'unauthenticated') { return '로그인이 필요합니다'; }
+    /* v48 — 첫 화면 로그인의 흔한 실패는 짧고 알아보기 쉽게 */
+    if (/api-key-not-valid|invalid-api-key/i.test(e.code + ' ' + e.message)) {
+      return '이 기기에 저장된 firebaseConfig 가 올바르지 않습니다(API 키·프로젝트 ID 확인)';
+    }
+    if (/auth\/invalid-credential|auth\/wrong-password|auth\/user-not-found|invalid_login_credentials/i.test(e.code + ' ' + e.message)) {
+      return '이메일 또는 비밀번호가 맞지 않습니다';
+    }
+    if (/auth\/invalid-email/i.test(e.code + ' ' + e.message)) { return '이메일 형식을 확인해 주세요'; }
+    if (/auth\/too-many-requests/i.test(e.code + ' ' + e.message)) {
+      return '로그인 시도가 너무 많습니다 — 잠시 뒤 다시 시도해 주세요';
+    }
+    if (/auth\/user-disabled/i.test(e.code + ' ' + e.message)) { return '이 계정은 사용 중지되었습니다'; }
     return (e.code ? ('[' + e.code + '] ') : '') + (e.message || '오류');
   }
   function isQuotaError(err) {
