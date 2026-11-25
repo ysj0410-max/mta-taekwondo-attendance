@@ -1907,6 +1907,7 @@
                     기본 <b>9600 bps · 8N1</b>은 Symbol DS9208 기본값이라 그대로 연결하면 됩니다.
                     기존 학원 프로그램이 같은 포트를 열고 있으면 연결되지 않으니, 그 프로그램을 잠시 닫고 다시 눌러 주세요.
                     <b>리더기 설정(호스트 모드)은 바꾸지 않습니다.</b>
+                    한 번 연결해 두면 <b>앱을 열 때 마지막 리더기를 자동으로 연결</b>해 보고, 다른 프로그램이 쓰고 있으면 조용히 안내만 남깁니다.
                   </div>
                 </div>
               </div>
@@ -5885,6 +5886,10 @@
   var COM_IDLE_MS = 120;                             /* v43 — 구분자 없이 끝나는 스캐너: 마지막 글자 뒤 120ms 조용하면 한 건으로 제출 */
   var COM_UNSUPPORTED_MSG = 'PC 크롬 또는 엣지 브라우저에서 COM 포트 리더기를 연결할 수 있어요';
   var COM_BUSY_MSG = '다른 프로그램(기존 학원 프로그램)이 포트를 쓰고 있어요. 잠시 닫고 다시 눌러 주세요';
+  /* v45 — 앱을 열 때 이전에 허용해 둔 COM 리더기를 자동으로 연결한다 */
+  var COM_PORT_KEY = 'tdk.comPort.v1';               /* 마지막으로 연결한 포트의 usbVendorId/usbProductId */
+  var COM_AUTO_DELAY_MS = 900;                       /* 화면이 뜬 뒤 조용히 시도 */
+  var COM_AUTO_BUSY_MSG = 'COM 포트를 자동으로 열지 못했어요 · 다른 프로그램 사용 중 또는 미연결 — 「🔌 COM 리더기」로 직접 연결해 보세요';
 
   var comReader = {
     port: null,          /* 열어 둔 SerialPort */
@@ -5907,7 +5912,9 @@
     lastError: '',
     closePending: null,  /* 끊는 중 — 읽기 잠금을 놓으면 닫을 포트 */
     loopPort: null,      /* 지금 읽고 있는 포트 */
-    eventsBound: false
+    eventsBound: false,
+    autoNote: '',        /* 자동 연결 안내(포트 없음·여러 개 등) */
+    autoConnecting: false
   };
 
   /* 이 브라우저가 시리얼 포트를 다룰 수 있는지(휴대폰·파이어폭스·사파리는 없음) */
@@ -5943,6 +5950,7 @@
         ' · 수신 ' + comReader.rxCount + '회';
     }
     if (comReader.lastError)              { return comReader.lastError; }
+    if (comReader.autoNote)               { return comReader.autoNote; }
     return '연결 안 됨 · 기본 ' + COM_DEFAULT_BAUD + ' bps';
   }
 
@@ -5973,7 +5981,9 @@
           ? '<b>COM 포트를 여는 중…</b> 브라우저 위에 뜨는 ports 목록에서 리더기를 골라 주세요.'
           : (comReader.lastError
             ? '<b style="color:#c0392b">' + esc(comReader.lastError) + '</b>'
-            : '<b>연결 안 됨</b> — 「🔌 COM 리더기」를 누르면 기본 ' + COM_DEFAULT_BAUD + ' bps 로 바로 연결합니다.'));
+            : (comReader.autoNote
+              ? '<b>' + esc(comReader.autoNote) + '</b>'
+              : '<b>연결 안 됨</b> — 「🔌 COM 리더기」를 누르면 기본 ' + COM_DEFAULT_BAUD + ' bps 로 바로 연결합니다.')));
       note.innerHTML = head +
         (comReader.connected ? '<br><span id="com-rx">' + esc(comRxLine()) + '</span>' : '') +
         '<br>PC <b>크롬·엣지</b>에서 시리얼(COM 포트)로 쓰는 리더기를 읽습니다. ' +
@@ -6129,7 +6139,79 @@
     return comReaderConnect();
   }
 
-  function comReaderConnect() {
+  /* ---------- v45 — 마지막으로 연결한 포트 기억 ---------- */
+  function comPortInfo(port) {
+    try {
+      var info = (port && typeof port.getInfo === 'function') ? port.getInfo() : null;
+      return info || {};
+    } catch (e) { return {}; }
+  }
+  function comRememberPort(port) {
+    var info = comPortInfo(port);
+    writeJSON(COM_PORT_KEY, {
+      usbVendorId: Number(info.usbVendorId) || 0,
+      usbProductId: Number(info.usbProductId) || 0,
+      at: new Date().toISOString()
+    });
+  }
+  function comStoredPortInfo() { return readJSON(COM_PORT_KEY, null); }
+  function comPortMatches(port, saved) {
+    if (!port || !saved) { return false; }
+    var info = comPortInfo(port);
+    var v = Number(info.usbVendorId) || 0, p = Number(info.usbProductId) || 0;
+    if (!v && !p) { return false; }
+    return v === (Number(saved.usbVendorId) || 0) && p === (Number(saved.usbProductId) || 0);
+  }
+  /* 허용된 포트 중에서 열 하나를 고른다 — 저장한 포트가 있으면 그 포트, 하나뿐이면 그것 */
+  function comPickAutoPort(ports) {
+    ports = Array.isArray(ports) ? ports : [];
+    if (!ports.length) { return { port: null, reason: 'no-port' }; }
+    var saved = comStoredPortInfo();
+    if (saved && (Number(saved.usbVendorId) || Number(saved.usbProductId))) {
+      for (var i = 0; i < ports.length; i++) {
+        if (comPortMatches(ports[i], saved)) { return { port: ports[i], reason: 'saved' }; }
+      }
+    }
+    if (ports.length === 1) { return { port: ports[0], reason: 'only' }; }
+    return { port: null, reason: 'many' };
+  }
+
+  /* 앱을 열 때 조용히 자동 연결 — 실패해도 화면·기록은 그대로 쓸 수 있다 */
+  function comReaderAutoConnect() {
+    if (!comSupported()) { return Promise.resolve({ ok: false, reason: 'unsupported' }); }
+    if (comReader.connected || comReader.connecting || comReader.port || comReader.autoConnecting) {
+      return Promise.resolve({ ok: false, reason: 'already' });
+    }
+    if (typeof navigator.serial.getPorts !== 'function') {
+      return Promise.resolve({ ok: false, reason: 'no-getports' });
+    }
+    comReader.autoConnecting = true;
+    comReader.autoNote = '';
+    var got;
+    try { got = navigator.serial.getPorts(); }
+    catch (e) { got = Promise.reject(e); }
+    return Promise.resolve(got).then(function (ports) {
+      var pick = comPickAutoPort(ports);
+      if (!pick.port) {
+        comReader.autoConnecting = false;
+        comReader.autoNote = pick.reason === 'many'
+          ? '허용된 COM 포트가 ' + (ports || []).length + '개예요 — 「🔌 COM 리더기」로 리더기를 한 번 고르면 다음부터 자동으로 연결됩니다'
+          : '허용된 COM 포트가 없어요 — 「🔌 COM 리더기」로 한 번 연결하면 다음부터 앱을 열 때 자동으로 연결됩니다';
+        renderComReaderUI();
+        return { ok: false, reason: pick.reason };
+      }
+      return Promise.resolve(comReaderConnect({ port: pick.port, auto: true })).then(function (r) {
+        comReader.autoConnecting = false;
+        return r;
+      });
+    }, function () {
+      comReader.autoConnecting = false;
+      return { ok: false, reason: 'getports-failed' };
+    });
+  }
+
+  function comReaderConnect(opts) {
+    opts = opts || {};
     if (!comSupported()) {
       comReader.lastError = '';
       toast(COM_UNSUPPORTED_MSG);
@@ -6145,8 +6227,12 @@
     comSaveBaud(baud);
     renderComReaderUI();
     var req;
-    try { req = navigator.serial.requestPort(); }
-    catch (e) { req = Promise.reject(e); }
+    if (opts.port) {
+      req = Promise.resolve(opts.port);
+    } else {
+      try { req = navigator.serial.requestPort(); }
+      catch (e) { req = Promise.reject(e); }
+    }
     return Promise.resolve(req).then(function (port) {
       if (!port) {
         var noPort = new Error('no port selected');
@@ -6188,9 +6274,11 @@
       comReader.lastRxAt = 0;
       comReader.lastRxRaw = '';
       comReader.lastError = '';
+      comReader.autoNote = '';
       comIdleClear();
+      comRememberPort(comReader.port);   /* v45 — 다음에 앱을 열면 이 포트로 자동 연결 */
       renderComReaderUI();
-      toast('🔌 COM 리더기 연결됨 · ' + baud + ' bps');
+      toast(opts.auto ? '🔌 COM 리더기 자동 연결됨 · ' + baud + ' bps' : '🔌 COM 리더기 연결됨 · ' + baud + ' bps');
       setCamStatus('COM 리더기 연결됨 · 카드를 찍으면 바로 출석 처리해요');
       comReaderLoop(comReader.port).then(function () {}, function () {});
       return { ok: true, baud: baud };
@@ -6198,7 +6286,7 @@
       comReader.connecting = false;
       comReader.connected = false;
       comReader.errCount = (comReader.errCount || 0) + 1;
-      comReader.lastError = comReaderErrorText(err);
+      comReader.lastError = opts.auto ? COM_AUTO_BUSY_MSG : comReaderErrorText(err);
       var port = comReader.port;
       comReader.port = null;
       /* 열다 만 포트가 남아 잠기지 않게 닫아 둔다 */
@@ -6209,8 +6297,9 @@
         } catch (e) {}
       }
       renderComReaderUI();
-      toast(comReader.lastError);
-      setCamStatus(COM_BUSY_MSG);
+      /* 자동 연결은 조용히 — 팝업 없이 상태 문구만 남긴다 */
+      if (!opts.auto) { toast(comReader.lastError); }
+      setCamStatus(opts.auto ? COM_AUTO_BUSY_MSG : COM_BUSY_MSG);
       return { ok: false, reason: 'open-failed', error: String((err && (err.name || err.message)) || err), text: comReader.lastError };
     });
   }
@@ -17572,6 +17661,8 @@
     if (isBarcodeMode()) { startBarcodeLoop(); }
     comReaderBindEvents();
     renderComReaderUI();
+    /* v45 — 이전에 허용해 둔 COM 리더기를 앱을 열 때 조용히 자동 연결 */
+    setTimeout(function () { comReaderAutoConnect(); }, COM_AUTO_DELAY_MS);
 
     tickClock();
     clockTimer = setInterval(tickClock, 1000);
@@ -17723,6 +17814,12 @@
     com: {
       supported: comSupported,
       connect: comReaderConnect,
+      auto: comReaderAutoConnect,
+      pickAuto: comPickAutoPort,
+      remember: comRememberPort,
+      storedPort: comStoredPortInfo,
+      portInfo: comPortInfo,
+      autoKey: COM_PORT_KEY,
       disconnect: comReaderDisconnect,
       toggle: toggleComReader,
       feed: comReaderFeed,
