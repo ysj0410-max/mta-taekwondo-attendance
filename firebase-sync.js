@@ -2298,8 +2298,10 @@
     /* ---------- 앱 화면 갱신 ---------- */
     function reloadApp() {
       var hook = opts.reload;
-      if (typeof hook !== 'function' && root.__tdk && root.__tdk.sync && typeof root.__tdk.sync.reload === 'function') {
-        hook = root.__tdk.sync.reload;
+      if (typeof hook !== 'function' && root.__tdk && root.__tdk.sync) {
+        /* v46 — 원격 변경은 화면에 보이는 부분만 다시 그린다 (없으면 예전 전체 렌더) */
+        if (typeof root.__tdk.sync.refresh === 'function') { hook = root.__tdk.sync.refresh; }
+        else if (typeof root.__tdk.sync.reload === 'function') { hook = root.__tdk.sync.reload; }
       }
       if (typeof hook === 'function') {
         try { hook(); } catch (e) { lastError = errorText(e); }

@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=45"></script>
-<script src="firebase-sync-ui.js?v=45"></script>
+<script src="firebase-sync.js?v=46"></script>
+<script src="firebase-sync-ui.js?v=46"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -27,9 +27,31 @@
     if (src.indexOf('xlsx') !== -1) { window.__xlsxLoadFailed = true; }
   }, true);
 </script>
-<!-- 엑셀 읽기/쓰기 (SheetJS). 1차 CDN 이 막히면 jsDelivr 판으로 한 번 더 시도한다 -->
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
-        onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';document.head.appendChild(s);})()"></script>
+<!-- 엑셀 읽기/쓰기 (SheetJS) — v46: 첫 화면을 막지 않도록 엑셀 파일을 다룰 때만 내려받는다.
+     1차 CDN(sheetjs)이 막히면 jsDelivr 판으로 한 번 더 시도한다. -->
+<script>
+  window.__xlsxLoading = null;
+  /* v46 — SheetJS 지연 로드. 이미 준비됐으면 그대로 돌려주고, 실패하면 __xlsxLoadFailed */
+  window.__xlsxEnsure = function () {
+    if (typeof XLSX !== 'undefined' && !window.__xlsxLoadFailed) { return Promise.resolve(XLSX); }
+    if (window.__xlsxLoading) { return window.__xlsxLoading; }
+    var load = function (src) {
+      return new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.onload = function () { (typeof XLSX !== 'undefined') ? resolve(XLSX) : reject(new Error('no-xlsx')); };
+        s.onerror = function () { reject(new Error('load-failed')); };
+        document.head.appendChild(s);
+      });
+    };
+    window.__xlsxLoading = load('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js')
+      .catch(function () { return load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'); })
+      .then(function (x) { window.__xlsxLoadFailed = false; window.__xlsxLoading = null; return x; })
+      .catch(function (e) { window.__xlsxLoadFailed = true; window.__xlsxLoading = null; throw e; });
+    return window.__xlsxLoading;
+  };
+</script>
 <style>
   :root{
     --navy:#0d1b3e; --navy-2:#16294f; --navy-3:#22386a;
@@ -4025,12 +4047,13 @@
 
     app.muted = readJSON(LS.muted, false) === true;
   }
-  function saveStudents() { writeJSON(LS.students, app.students); driveTouchData(); }
-  function saveSettings() { writeJSON(LS.settings, app.settings); }
-  function saveRecords() { writeJSON(LS.records, app.records); driveTouchData(); }
-  function saveLogs() { writeJSON(LS.logs, app.logs.slice(0, 200)); }
-  function saveAttendance() { writeJSON(LS.attendance, app.attendance); driveTouchData(); }
-  function saveTuition() { writeJSON(LS.tuition, app.tuition); driveTouchData(); }
+  /* v46 — 저장할 때 숨은 관리자 탭은 dirty 로 표시해 두고, 그 탭을 열 때 한 번만 다시 그린다 */
+  function saveStudents() { writeJSON(LS.students, app.students); driveTouchData(); markAdminDirty(); }
+  function saveSettings() { writeJSON(LS.settings, app.settings); markAdminDirty(); }
+  function saveRecords() { writeJSON(LS.records, app.records); driveTouchData(); markAdminDirty(); }
+  function saveLogs() { writeJSON(LS.logs, app.logs.slice(0, 200)); markAdminDirty(); }
+  function saveAttendance() { writeJSON(LS.attendance, app.attendance); driveTouchData(); markAdminDirty(); }
+  function saveTuition() { writeJSON(LS.tuition, app.tuition); driveTouchData(); markAdminDirty(); }
   function saveBulkTemplates() { writeJSON(LS.smsTemplates, app.smsTemplates || []); driveTouchData(); }
 
   /* ---------------------------------------------------------
@@ -4361,7 +4384,8 @@
     el('clock-date').textContent = todayKey(now) + ' ' + days[now.getDay()];
     if (todayKey() !== app._renderedDay) {
       app._renderedDay = todayKey();
-      renderAll();
+      /* v46 — 날짜가 바뀌면 보이는 화면만 새로 그린다 (자정 넘김) */
+      renderVisible();
     }
   }
 
@@ -5214,11 +5238,12 @@
     playSuccess();
     showBanner(student, mode, timeStr, logEntry);
     rememberLastAttend(student, mode, timeStr);
-    renderAll();
+    /* v46 — 지금 보이는 화면만 다시 그린다 (숨은 관리자 탭은 dirty 표시만) */
+    renderVisible();
     return { ok: true, mode: mode, time: timeStr };
   }
 
-  function flushToday() { saveRecords(); renderAll(); }
+  function flushToday() { saveRecords(); renderVisible(); }
 
   /* =========================================================
      10. 카메라 연결 (바코드 인식용)
@@ -6418,26 +6443,12 @@
      11. 관리자 렌더
      ========================================================= */
   function renderAdmin() {
-    var c = counts();
-    el('st-in').innerHTML = c.in + '<small>명</small>';
-    el('st-out').innerHTML = c.out + '<small>명</small>';
-    el('st-absent').innerHTML = c.absent + '<small>명</small>';
-    el('st-total').innerHTML = c.total + '<small>명</small>' +
-      (c.paused ? ' <small style="color:#6b4fa8">+휴관' + c.paused + '</small>' : '');
-    if (el('admin-today')) { el('admin-today').textContent = fmtDateKorean(new Date()); }
-    el('pill-in').textContent = c.in;
-    el('pill-out').textContent = c.out;
-    renderStudentsTable();
+    /* v46 — 관리자 화면에 들어올 때 12개 탭을 모두 그리지 않고, 보고 있던 탭 하나만 그린다 */
+    renderHeaderSummary();
     renderFeeLabels();
     renderSmsState();
-    renderPromotion();
-    renderGukgiwon();
-    renderMonthly();
-    renderTuition();
-    renderBulkSms();
-    renderPaused();
     renderAdminAccountState();
-    renderAdminLog();
+    renderAdminTabNow(normalizeAdminTab(app.adminTab || 'students'));
   }
 
   function renderAdminLog() {
@@ -6665,6 +6676,7 @@
     });
 
     var tbody = el('stu-table');
+    cancelLazyRows('stu-table');
     if (!list.length) {
       var emptyMsg = '이 상태의 관원이 없어요.';
       if (q) {
@@ -6678,7 +6690,8 @@
         (app.students.length ? emptyMsg : '관원이 없습니다') + '</td></tr>';
       return;
     }
-    tbody.innerHTML = list.map(function (s) {
+    /* v46 — 명단이 많으면 첫 80줄만 즉시, 나머지는 다음 프레임에 이어 붙인다 (검색은 전체 대상) */
+    lazyTableRender(tbody, list, function (s) {
       var paused = isPaused(s);
       return '<tr' + (paused ? ' class="paused-row"' : '') + '>' +
         '<td class="nm">' + esc(s.name) +
@@ -6707,7 +6720,7 @@
           : '<button class="btn btn-sm" data-pause="' + esc(s.id) + '" title="휴관 처리">휴관</button> ') +
         '<button class="btn btn-sm btn-danger" data-del="' + esc(s.id) + '">삭제</button>' +
         '</td></tr>';
-    }).join('');
+    }, { key: 'stu-table' });
     syncStuTableHint();
   }
 
@@ -8096,6 +8109,7 @@
     });
 
     var tbody = el('promo-table');
+    cancelLazyRows('promo-table');
     if (!rows.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="6">' +
         (filter === 'target' ? '지금은 모두 최고 띠예요. 아래 띠를 차고 있는 재원생이 생기면 여기에 올라옵니다.' : '등록된 관원이 없습니다') +
@@ -8103,7 +8117,7 @@
       renderBulkBar();
       return;
     }
-    tbody.innerHTML = rows.map(function (s) {
+    lazyTableRender(tbody, rows, function (s) {
       var st = promoState(s);
       var grade = studentGrade(s);
       var statusChip = st.top ? '<span class="chip ok">최고 띠</span>' : '<span class="chip wait">심사 대상</span>';
@@ -8119,7 +8133,7 @@
         (st.target ? '<button class="btn btn-sm" data-exam="' + esc(s.id) + '">안내</button> ' : '') +
         (st.top ? '<span class="sub">최고 띠</span>' : '<button class="btn btn-sm btn-primary" data-promote="' + esc(s.id) + '">합격·승급</button>') +
         '</td></tr>';
-    }).join('');
+    }, { key: 'promo-table' });
     var all = el('promo-check-all');
     if (all) {
       all.checked = rows.length > 0 && rows.every(function (s) { return !!sel[s.id]; });
@@ -8278,6 +8292,7 @@
     Object.keys(sel).forEach(function (id) { if (!byId(id)) { delete sel[id]; } });
 
     var tbody = el('gk-table');
+    cancelLazyRows('gk-table');
     if (!rows.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="11">' +
         (q ? '검색 결과가 없어요. 다른 이름·초성·띠로 찾아보세요.' : '등록된 관원이 없습니다') + '</td></tr>';
@@ -8285,7 +8300,7 @@
       renderGukBulk();
       return;
     }
-    tbody.innerHTML = rows.map(function (s) {
+    lazyTableRender(tbody, rows, function (s) {
       var grade = studentGrade(s);
       var inList = gukMonthlyHas(s.id);
       return '<tr' + (inList ? ' class="gk-inlist"' : '') + '>' +
@@ -8308,7 +8323,7 @@
           ? '<button class="btn btn-sm btn-primary" data-gkpass="' + esc(s.id) + '">합격</button>'
           : '') +
         '</td></tr>';
-    }).join('');
+    }, { key: 'gk-table' });
     var all = el('guk-check-all');
     if (all) {
       all.checked = rows.length > 0 && rows.every(function (s) { return !!sel[s.id]; });
@@ -8537,50 +8552,250 @@
     bar.classList.toggle('hidden', !parts.length);
   }
 
-  function setAdminTab(tab) {
+  /* =========================================================
+     v46 — 화면 렌더링 최적화
+     ---------------------------------------------------------
+     · 첫 화면(출결 모니터 · 시계 · 헤더 요약 · 방금 출석 · 오늘 표)만 즉시 그리고,
+       숨은 관리자 12개 탭은 그 탭을 열 때 한 번만 그린다(dirty 플래그).
+     · 행이 많은 표는 첫 덩어리(80줄)만 즉시 그리고, 나머지는 다음 프레임부터
+       덩어리(240줄)씩 이어 붙인다. 검색·집계는 언제나 전체 데이터로 한다.
+     ========================================================= */
+  var ADMIN_TABS = ['students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'shuttle', 'coupons', 'counsel', 'report', 'settings'];
+  var adminClean = {};            /* 이미 그려 둔 탭 — 여기에 없으면 dirty */
+  var adminRenderCount = 0;       /* 진단용: 탭 렌더 횟수 */
+  var adminRenderLog = [];        /* 진단용: 최근에 그린 탭 */
+
+  function normalizeAdminTab(tab) {
+    if (ADMIN_TABS.indexOf(tab) === -1) { return 'students'; }
+    return tab;
+  }
+  /* 데이터가 바뀌면 숨은 탭을 dirty 로 표시만 해 둔다 — 그 탭을 열 때 한 번 그린다 */
+  function markAdminDirty(tab) {
+    if (tab) { delete adminClean[normalizeAdminTab(tab)]; return; }
+    adminClean = {};
+  }
+  function markAdminClean(tab) { adminClean[normalizeAdminTab(tab)] = true; }
+  function isAdminDirty(tab) { return !adminClean[normalizeAdminTab(tab)]; }
+
+  var ADMIN_TAB_RENDERERS = {
+    students: function () {
+      renderStudentsTable();
+      renderGradeList();
+      renderBeltOptions(el('f-belt') ? el('f-belt').value : '');
+      syncStuTableHint();
+    },
+    paused: function () { renderPaused(true); },
+    promotion: function () { renderPromotion(); },
+    gukgiwon: function () { renderGukgiwon(); },
+    monthly: function () { renderMonthly(); },
+    tuition: function () { renderTuition(true); },
+    sms: function () { renderBulkSms(true); },
+    shuttle: function () { renderShuttle(); },
+    coupons: function () { renderCoupons(); },
+    counsel: function () { renderCounsel(); },
+    report: function () { renderReport(true); renderAdminLog(); },
+    settings: function () { renderAdminAccountState(); renderDriveState(); renderVisibility(); }
+  };
+
+  /* 지금 필요한 탭 하나만 그린다 — 이미 그려 둔 탭은 force 전까지 건너뛴다 */
+  function renderAdminTabNow(tab, force) {
+    tab = normalizeAdminTab(tab);
+    var fn = ADMIN_TAB_RENDERERS[tab];
+    if (!fn) { return false; }
+    if (!force && !isAdminDirty(tab)) { return false; }
+    fn();
+    markAdminClean(tab);
+    adminRenderCount++;
+    adminRenderLog.push(tab);
+    if (adminRenderLog.length > 60) { adminRenderLog.shift(); }
+    return true;
+  }
+
+  function currentViewIsAdmin() {
+    var v = el('view-admin');
+    return !!(v && v.classList && v.classList.contains('active'));
+  }
+
+  /* 상단 요약(등원 · 하원 · 미등원 · 전체) — 관리자 화면과 출결 화면이 함께 쓴다 */
+  function renderHeaderSummary() {
+    var c = counts();
+    if (el('st-in')) { el('st-in').innerHTML = c.in + '<small>명</small>'; }
+    if (el('st-out')) { el('st-out').innerHTML = c.out + '<small>명</small>'; }
+    if (el('st-absent')) { el('st-absent').innerHTML = c.absent + '<small>명</small>'; }
+    if (el('st-total')) {
+      el('st-total').innerHTML = c.total + '<small>명</small>' +
+        (c.paused ? ' <small style="color:#6b4fa8">+휴관' + c.paused + '</small>' : '');
+    }
+    if (el('admin-today')) { el('admin-today').textContent = fmtDateKorean(new Date()); }
+    if (el('pill-in')) { el('pill-in').textContent = c.in; }
+    if (el('pill-out')) { el('pill-out').textContent = c.out; }
+  }
+
+  /* 화면에 보이는 것만 다시 그린다 — 출석 1건 처리 · 원격 반영 · 날짜가 바뀔 때 */
+  function renderVisible() {
+    renderHeaderSummary();
+    renderAttendanceMonitor();
+    renderLastAttend();
+    renderLog();
+    renderKioskInfo();
+    renderStudentsList();
+    /* 데이터가 바뀌었으니 숨은 탭은 dirty 로 표시만 하고, 지금 보이는 탭 하나만 다시 그린다 */
+    markAdminDirty();
+    if (currentViewIsAdmin()) { renderAdminTabNow(normalizeAdminTab(app.adminTab || 'students')); }
+    return true;
+  }
+
+  /* ---------- 긴 표 나눠 그리기 ---------- */
+  var LAZY_HEAD_ROWS = 80;        /* 탭을 열 때 바로 그리는 줄 수 */
+  var LAZY_CHUNK_ROWS = 240;      /* 다음 프레임부터 이어 붙이는 단위 */
+  var __lazyJobs = {};
+
+  function appendRowsHtml(box, html) {
+    if (!box || !html) { return; }
+    if (typeof box.insertAdjacentHTML === 'function') { box.insertAdjacentHTML('beforeend', html); }
+    else { box.innerHTML = String(box.innerHTML || '') + html; }
+  }
+
+  function cancelLazyRows(key) {
+    var job = __lazyJobs[key];
+    if (!job) { return; }
+    job.done = true;
+    if (job.timer) {
+      if (job.raf && typeof cancelAnimationFrame === 'function') { try { cancelAnimationFrame(job.timer); } catch (e) {} }
+      else { clearTimeout(job.timer); }
+    }
+    delete __lazyJobs[key];
+  }
+
+  function scheduleLazyChunk(job) {
+    var run = function () { appendLazyChunk(job); };
+    if (typeof requestAnimationFrame === 'function') {
+      job.raf = true;
+      job.timer = requestAnimationFrame(run);
+    } else {
+      job.raf = false;
+      job.timer = setTimeout(run, 0);
+    }
+  }
+
+  function appendLazyChunk(job) {
+    if (!job || job.done || __lazyJobs[job.key] !== job) { return; }
+    var end = Math.min(job.rows.length, job.shown + job.step);
+    var html = '';
+    for (var k = job.shown; k < end; k++) { html += job.fn(job.rows[k], k); }
+    job.shown = end;
+    appendRowsHtml(job.box, html);
+    if (job.shown >= job.rows.length) {
+      job.done = true;
+      delete __lazyJobs[job.key];
+      if (job.doneCb) { try { job.doneCb(); } catch (e) {} }
+      return;
+    }
+    scheduleLazyChunk(job);
+  }
+
+  /* box(표 본문)에 rows 를 그린다 — 첫 덩어리만 즉시, 나머지는 프레임마다 이어 붙인다 */
+  function lazyTableRender(box, rows, rowHtml, opts) {
+    opts = opts || {};
+    if (!box) { return; }
+    var key = opts.key || box.id || 'tbody';
+    cancelLazyRows(key);
+    var total = rows.length;
+    var head = opts.head || LAZY_HEAD_ROWS;
+    var n = Math.min(head, total);
+    var html = '';
+    for (var i = 0; i < n; i++) { html += rowHtml(rows[i], i); }
+    box.innerHTML = html;
+    if (n >= total) {
+      if (opts.done) { try { opts.done(); } catch (e) {} }
+      return;
+    }
+    var job = { key: key, rows: rows, fn: rowHtml, shown: n, box: box, step: opts.step || LAZY_CHUNK_ROWS,
+                doneCb: opts.done, done: false, timer: 0, raf: false };
+    __lazyJobs[key] = job;
+    scheduleLazyChunk(job);
+  }
+
+  /* 대기 중인 나머지 줄을 지금 모두 붙인다 (테스트 · 화면을 닫기 전) */
+  function flushLazyRows(key) {
+    if (key) {
+      var job = __lazyJobs[key];
+      if (!job) { return false; }
+      var guard = 0;
+      while (__lazyJobs[key] && guard < 200) {
+        if (job.timer) { try { clearTimeout(job.timer); } catch (e) {} job.timer = 0; }
+        appendLazyChunk(job);
+        guard++;
+      }
+      return true;
+    }
+    Object.keys(__lazyJobs).forEach(function (k) { flushLazyRows(k); });
+    return true;
+  }
+
+  function lazyPending() {
+    return Object.keys(__lazyJobs).map(function (k) {
+      var j = __lazyJobs[k];
+      return { key: k, shown: j.shown, total: j.rows.length };
+    });
+  }
+
+  /* SheetJS 는 필요할 때만 — 준비되면 onReady, 실패하면 onFail */
+  function ensureXlsxThen(onReady, onFail) {
+    if (typeof XLSX !== 'undefined' && !window.__xlsxLoadFailed) { onReady(); return; }
+    var p = (typeof window.__xlsxEnsure === 'function') ? window.__xlsxEnsure() : null;
+    if (!p || typeof p.then !== 'function') { if (onFail) { onFail(); } return; }
+    p.then(function () { renderXlsxState(); try { onReady(); } catch (e) {} },
+           function () { renderXlsxState(); if (onFail) { onFail(); } });
+  }
+
+  function renderXlsxState() {
+    var box = el('xlsx-state');
+    if (!box) { return; }
+    var ok = (typeof XLSX !== 'undefined') && !window.__xlsxLoadFailed;
+    box.textContent = ok ? '엑셀 엔진 준비됨 (SheetJS)'
+      : (window.__xlsxLoading ? '엑셀 엔진 불러오는 중…' : 'CSV 모드 · 엑셀은 파일을 올릴 때 준비');
+    box.style.color = ok ? '#0b7a55' : '#a35b00';
+  }
+
+  function setAdminTab(tab, force) {
     /* v45 — 「오늘 출석」 탭은 초기화면(출결 모니터)으로 옮겨 없앴다. 예전 값은 원생 관리로 보낸다. */
-    var tabs = ['students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'shuttle', 'coupons', 'counsel', 'report', 'settings'];
-    if (tab === 'overview' || tabs.indexOf(tab) === -1) { tab = 'students'; }
+    /* v46 — 탭을 바꾸면 그 탭 하나만(필요할 때만) 그린다. 나머지 탭은 건드리지 않는다. */
+    tab = normalizeAdminTab(tab);
     app.adminTab = tab;
-    tabs.forEach(function (t) {
+    applyAdminTabStyles(tab);
+    return renderAdminTabNow(tab, force === true);
+  }
+
+  /* 관리자 탭의 표시(display · 모드 클래스 · 버튼 상태)만 맞춘다 — 내용은 그리지 않는다 */
+  function applyAdminTabStyles(tab) {
+    tab = normalizeAdminTab(tab);
+    ADMIN_TABS.forEach(function (t) {
       var btn = el('atab-' + t);
       if (btn) { btn.classList.toggle('active', t === tab); }
     });
-    el('admin-students').style.display = tab === 'students' ? 'block' : 'none';
-    el('view-admin').classList.toggle('promo-mode', tab === 'promotion');
-    el('view-admin').classList.toggle('guk-mode', tab === 'gukgiwon');
-    el('view-admin').classList.toggle('monthly-mode', tab === 'monthly');
-    el('view-admin').classList.toggle('tuition-mode', tab === 'tuition');
-    el('view-admin').classList.toggle('sms-mode', tab === 'sms');
-    el('view-admin').classList.toggle('paused-mode', tab === 'paused');
-    el('view-admin').classList.toggle('cs-mode', tab === 'counsel');
-    el('view-admin').classList.toggle('report-mode', tab === 'report');
-    el('view-admin').classList.toggle('cp-mode', tab === 'coupons');
-    el('admin-promotion').style.display = tab === 'promotion' ? 'block' : 'none';
-    el('admin-gukgiwon').style.display = tab === 'gukgiwon' ? 'block' : 'none';
-    el('admin-monthly').style.display = tab === 'monthly' ? 'block' : 'none';
-    el('admin-tuition').style.display = tab === 'tuition' ? 'block' : 'none';
-    el('admin-bulk-sms').style.display = tab === 'sms' ? 'block' : 'none';
-    el('admin-paused').style.display = tab === 'paused' ? 'block' : 'none';
-    el('admin-shuttle').style.display = tab === 'shuttle' ? 'block' : 'none';
-    el('admin-coupons').style.display = tab === 'coupons' ? 'block' : 'none';
-    el('admin-counsel').style.display = tab === 'counsel' ? 'block' : 'none';
-    el('admin-report').style.display = tab === 'report' ? 'block' : 'none';
-    el('admin-settings').style.display = tab === 'settings' ? 'block' : 'none';
+    ['students', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'paused', 'shuttle', 'coupons', 'counsel', 'report', 'settings'].forEach(function (t) {
+      var panel = el('admin-' + t);
+      if (panel) { panel.style.display = t === tab ? 'block' : 'none'; }
+    });
+    var bulk = el('admin-bulk-sms');
+    if (bulk) { bulk.style.display = tab === 'sms' ? 'block' : 'none'; }
+    var view = el('view-admin');
+    if (view) {
+      view.classList.toggle('promo-mode', tab === 'promotion');
+      view.classList.toggle('guk-mode', tab === 'gukgiwon');
+      view.classList.toggle('monthly-mode', tab === 'monthly');
+      view.classList.toggle('tuition-mode', tab === 'tuition');
+      view.classList.toggle('sms-mode', tab === 'sms');
+      view.classList.toggle('paused-mode', tab === 'paused');
+      view.classList.toggle('cs-mode', tab === 'counsel');
+      view.classList.toggle('report-mode', tab === 'report');
+      view.classList.toggle('cp-mode', tab === 'coupons');
+    }
     if (tab === 'students') { syncStuTableHint(); }
     if (tab === 'settings') { renderAdminAccountState(); renderDriveState(); renderVisibility(); }
     /* [Firebase] 동기화 패널 갱신 */
     if (window.TDKFB && typeof window.TDKFB.onAdminTab === 'function') { try { window.TDKFB.onAdminTab(tab); } catch (e) {} }
-    if (tab === 'promotion') { renderPromotion(); }
-    if (tab === 'gukgiwon') { renderGukgiwon(); }
-    if (tab === 'monthly') { renderMonthly(); }
-    if (tab === 'tuition') { renderTuition(true); }
-    if (tab === 'sms') { renderBulkSms(true); }
-    if (tab === 'paused') { renderPaused(true); }
-    if (tab === 'counsel') { renderCounsel(); }
-    if (tab === 'shuttle') { renderShuttle(); }
-    if (tab === 'coupons') { renderCoupons(); }
-    if (tab === 'report') { renderReport(true); }
   }
 
   /* =========================================================
@@ -8729,10 +8944,20 @@
       return;
     }
 
+    /* v46 — 요약(총 출석일·인원)은 전체 데이터로 먼저 세고, 표는 첫 80줄만 즉시 그린다 */
     var totalDays = 0, people = 0, pausedRows = 0;
-    var html = rows.map(function (s) {
+    rows.forEach(function (s) {
+      if (isPaused(s)) { pausedRows++; }
+      var c = 0;
+      for (var d0 = 1; d0 <= days; d0++) {
+        var e0 = attendanceEntry(s.id, ym + '-' + pad2(d0));
+        if (e0 && (e0.inTime || e0.outTime || e0.manual)) { c++; }
+      }
+      totalDays += c;
+      if (c > 0) { people++; }
+    });
+    lazyTableRender(tbody, rows, function (s) {
       var paused = isPaused(s);
-      if (paused) { pausedRows++; }
       var cells = '';
       var cnt = 0;
       for (var i = 1; i <= days; i++) {
@@ -8751,8 +8976,6 @@
           esc(monthCellTitle(key, e, future)) + '">' +
           (present ? '<span class="mk">●</span>' : '<span class="mk-empty">·</span>') + '</td>';
       }
-      totalDays += cnt;
-      if (cnt > 0) { people++; }
       var grade = studentGrade(s);
       return '<tr' + (paused ? ' class="paused-row"' : '') + '>' +
         '<td class="c-name" title="' + esc(s.name + ' · ' + studentLabel(s) + (grade ? ' · ' + grade : '') + (paused ? ' · 휴관생 (그 달 출석 기록 보존)' : '')) + '">' +
@@ -8764,8 +8987,7 @@
         cells +
         '<td class="c-sum mtb-sum">' + cnt + '<small>일</small></td>' +
         '</tr>';
-    }).join('');
-    tbody.innerHTML = html;
+    }, { key: 'mon-tbody' });
 
     renderMonthStats(totalDays, people);
     setMonthNote(ym, rows.length, filtered, pausedRows);
@@ -8797,7 +9019,8 @@
       setAttendance(sid, dateKey, { inTime: '', outTime: '', manual: true, src: 'manual' });
       syncRecordFromHistory(sid, dateKey);
       saveAttendance(); saveRecords();
-      renderAll();
+      /* v46 — 지금 보고 있는 달력(월간 탭)만 다시 그린다 */
+      renderVisible();
       toast(s.name + ' · ' + shortDate(dateKey) + ' 출석을 표시했어요 (시각 없음 · 누적 출석은 그대로)');
       return;
     }
@@ -8807,7 +9030,7 @@
       clearAttendance(sid, dateKey);
       clearRecordFor(sid, dateKey);
       saveAttendance(); saveRecords();
-      renderAll();
+      renderVisible();
       toast(s.name + ' · ' + shortDate(dateKey) + ' 출석 표시를 지웠어요');
     };
     if (!timed) { erase(); return; }
@@ -9381,10 +9604,13 @@
     var ext = name.split('.').pop().toLowerCase();
     if (ext === 'xlsx' || ext === 'xls') {
       if (typeof XLSX === 'undefined') {
-        openModal({
-          title: '엑셀 파일을 읽지 못했어요',
-          sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다. 인터넷 연결을 확인하거나 엑셀에서 [CSV UTF-8]로 저장한 파일을 올려 주세요.',
-          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        /* v46 — 첫 엑셀 파일이면 SheetJS 를 그때 내려받아 한 번 더 시도한다 */
+        ensureXlsxThen(function () { attReadFile(file, cb); }, function () {
+          openModal({
+            title: '엑셀 파일을 읽지 못했어요',
+            sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다. 인터넷 연결을 확인하거나 엑셀에서 [CSV UTF-8]로 저장한 파일을 올려 주세요.',
+            actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+          });
         });
         return;
       }
@@ -9820,6 +10046,7 @@
   function renderTuition(force) {
     var tbody = el('tu-table');
     if (!tbody) { return; }
+    cancelLazyRows('tu-table');
     var u = ensureTuition();
     var mk = u.month;
     var act = document.activeElement;
@@ -9923,7 +10150,8 @@
           : (app.students.length ? '조건에 맞는 관원이 없어요. 부서·상태 필터나 이름 검색을 지워 보세요.' : '등록된 관원이 없습니다')) +
         '</td></tr>';
     } else {
-      tbody.innerHTML = rows.map(function (s) {
+      /* v46 — 원비 표도 첫 80줄만 즉시 그리고 나머지는 이어 붙인다 */
+      lazyTableRender(tbody, rows, function (s) {
         var st = tuitionStatusOf(mk, s.id);
         var base = tuitionBaseAmount(mk, s.id);
         var ded = tuitionDeduction(mk, s.id);
@@ -9975,7 +10203,7 @@
           ' data-tpaid="' + esc(s.id) + '" title="미납↔완납 전환">' + (st === 'paid' ? '↩ 미납' : '✅ 완납') + '</button>' +
           '<button type="button" class="btn btn-sm btn-mint" data-tsms="' + esc(s.id) + '" title="보호자께 원비 문자">💬 문자</button></td>' +
           '</tr>';
-      }).join('');
+      }, { key: 'tu-table' });
     }
 
     var all = el('tu-check-all');
@@ -11883,6 +12111,7 @@
   function renderBulkSmsList() {
     var wrap = el('bs-list');
     if (!wrap) { return; }
+    cancelLazyRows('bs-list');
     var u = ensureBulkSms();
     Object.keys(u.selected).forEach(function (id) { if (!byId(id)) { delete u.selected[id]; } });
     var rows = bulkRows();
@@ -11894,7 +12123,7 @@
       wrap.innerHTML = '<div class="bs-empty">' +
         (total ? '검색 결과가 없어요. 다른 이름이나 초성으로 찾아보세요.' : '등록된 관원이 없습니다') + '</div>';
     } else {
-      wrap.innerHTML = rows.map(function (s) {
+      lazyTableRender(wrap, rows, function (s) {
         var on = !!u.selected[s.id];
         var phones = smsPhonesOf(s);
         var phoneHtml = phones.length
@@ -11908,7 +12137,7 @@
           '<span class="bs-sub">' + esc(studentLabel(s)) + ' · ' + esc(s.belt || '띠 미지정') + '</span></span>' +
           '<span class="bs-phone">' + phoneHtml + '</span>' +
           '</label>';
-      }).join('');
+      }, { key: 'bs-list' });
     }
     var cnt = bulkCounts();
     if (el('bs-count')) {
@@ -12231,6 +12460,7 @@
   function renderPaused(force) {
     var tbody = el('pz-table');
     if (!tbody) { return; }
+    cancelLazyRows('pz-table');
     var u = ensurePausedUI();
     var search = el('pz-search');
     if (search && document.activeElement !== search && search.value !== (u.q || '')) { search.value = u.q || ''; }
@@ -12255,7 +12485,8 @@
         (sum.total ? '검색 결과가 없어요.' : '휴관생이 없습니다. 「📋 출석 · 명단」에서 관원을 휴관 처리하면 여기에 모입니다.') + '</td></tr>';
       return;
     }
-    tbody.innerHTML = rows.map(function (s) {
+    /* v46 — 휴관생이 수백 명이어도 첫 80줄만 즉시 그리고 나머지는 이어 붙인다 */
+    lazyTableRender(tbody, rows, function (s) {
       var days = pausedDays(s);
       var grade = studentGrade(s);
       var ready = days >= PAUSED_READY_DAYS;
@@ -12276,7 +12507,7 @@
         '<button class="btn btn-sm btn-mint" data-pzsms="' + esc(s.id) + '">💬 복귀 안내</button>' +
         '<button class="btn btn-sm btn-danger" data-pzdel="' + esc(s.id) + '" title="명단에서 삭제">🗑</button>' +
         '</td></tr>';
-    }).join('');
+    }, { key: 'pz-table' });
   }
 
   /* 앞의 몇 명만 이름으로 보여 주는 도우미 — '(김민준, 이서준 외 2명)' */
@@ -12443,10 +12674,12 @@
 
     if (ext === 'xlsx' || ext === 'xls') {
       if (typeof XLSX === 'undefined') {
-        openModal({
-          title: '엑셀 파일을 읽지 못했어요',
-          sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다. 인터넷 연결을 확인하거나, 엑셀에서 [CSV UTF-8]로 저장한 파일을 올려 주세요.',
-          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        ensureXlsxThen(function () { handlePausedFile(file); }, function () {
+          openModal({
+            title: '엑셀 파일을 읽지 못했어요',
+            sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다. 인터넷 연결을 확인하거나, 엑셀에서 [CSV UTF-8]로 저장한 파일을 올려 주세요.',
+            actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+          });
         });
         return;
       }
@@ -12537,6 +12770,7 @@
 
   function saveCounselFile() {
     writeJSON(LS.counsel, app.counsel);
+    markAdminDirty('counsel');
     if (typeof driveTouchData === 'function') { driveTouchData(); }
   }
 
@@ -13078,6 +13312,7 @@
   }
 
   function saveShuttle() {
+    markAdminDirty('shuttle');
     writeJSON(LS.shuttle, app.shuttle || []);
     if (typeof driveTouchData === 'function') { driveTouchData(); }
   }
@@ -13793,12 +14028,14 @@
     setShuttleFileNote('📄 ' + name);
     if (ext === 'xlsx' || ext === 'xls') {
       if (typeof XLSX === 'undefined') {
-        setShuttleFileNote('');
-        openModal({
-          title: '엑셀 파일을 읽지 못했어요',
-          sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다.',
-          body: '<div class="help" style="margin-top:0">인터넷 연결을 확인하거나, 엑셀에서 <b>[CSV UTF-8]</b>로 저장한 파일을 올려 주세요.</div>',
-          actions: [{ label: '확인', value: null, kind: 'btn-primary' }]
+        ensureXlsxThen(function () { handleShuttleFile(file); }, function () {
+          setShuttleFileNote('');
+          openModal({
+            title: '엑셀 파일을 읽지 못했어요',
+            sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다.',
+            body: '<div class="help" style="margin-top:0">인터넷 연결을 확인하거나, 엑셀에서 <b>[CSV UTF-8]</b>로 저장한 파일을 올려 주세요.</div>',
+            actions: [{ label: '확인', value: null, kind: 'btn-primary' }]
+          });
         });
         return;
       }
@@ -14148,6 +14385,7 @@
   }
 
   function saveCoupons() {
+    markAdminDirty('coupons');
     writeJSON(LS.coupons, coupons());
     if (typeof driveTouchData === 'function') { driveTouchData(); }
   }
@@ -15039,10 +15277,12 @@
 
     if (ext === 'xlsx' || ext === 'xls') {
       if (typeof XLSX === 'undefined') {
-        openModal({
-          title: '엑셀 파일을 읽지 못했어요',
-          sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다. 인터넷 연결을 확인하거나, 엑셀에서 [CSV UTF-8]로 저장한 파일을 올려 주세요.',
-          actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+        ensureXlsxThen(function () { handleFile(file); }, function () {
+          openModal({
+            title: '엑셀 파일을 읽지 못했어요',
+            sub: '엑셀 라이브러리(CDN)를 불러오지 못했습니다. 인터넷 연결을 확인하거나, 엑셀에서 [CSV UTF-8]로 저장한 파일을 올려 주세요.',
+            actions: [{ label: '확인', value: true, kind: 'btn-primary' }]
+          });
         });
         return;
       }
@@ -16331,20 +16571,24 @@
      13. 초기화 / 이벤트 연결
      ========================================================= */
   function renderAll() {
+    /* v46 — 전체 렌더(관리자 동작·테스트 훅). 화면에 안 보이는 탭까지 모두 최신으로 맞춘다.
+       부팅·출석 처리에는 쓰지 않는다(그때는 renderVisible). */
     renderStudentsList();
     renderLog();
     renderAttendanceMonitor();
     renderLastAttend();
-    renderAdmin();
+    renderHeaderSummary();
     renderBeltOptions(el('f-belt') ? el('f-belt').value : '');
     renderKioskInfo();
     renderVisibility();
-    renderAdminLog();
-    renderGradeList();
+    renderFeeLabels();
+    renderSmsState();
+    renderAdminAccountState();
     updateMuteBtn();
     renderKioskModeUI();
-    el('dojo-name').value = app.settings.dojoName;
+    if (el('dojo-name')) { el('dojo-name').value = app.settings.dojoName; }
     renderPin();
+    ADMIN_TABS.forEach(function (t) { renderAdminTabNow(t, true); });
   }
 
   function bindEvents() {
@@ -17617,7 +17861,8 @@
 
     bindEvents();
     updateMuteBtn();
-    renderAll();
+    /* v46 — 첫 화면은 눈에 보이는 것만 그린다. 관리자 12개 탭은 [관리자]로 들어갈 때 그린다. */
+    renderVisible();
     renderPin();
     fillSmsForm();
     fillDriveForm();
@@ -17629,21 +17874,11 @@
     el('gk-date').value = app.settings.gukDate || defaultExamDate();
     el('gk-time').value = app.settings.gukTime || '10:00';
     el('gk-place').value = app.settings.gukPlace || (app.settings.dojoName + ' 도장');
-    renderBeltEditor(true);
-    renderGradeList();
-    setAdminTab(app.adminTab || 'students');
-    renderPromotion();
-    renderGukgiwon();
-    renderMonthly();
-    renderTuition(true);
+    /* v46 — 탭 위치만 잡아 두고 내용은 나중에(그 탭을 열 때) 그린다 */
+    applyAdminTabStyles(app.adminTab || 'students');
     fillTuitionSettings();
-    renderBulkSms(true);
-    renderPaused(true);
-    renderCounsel();
-    renderShuttle();
     renderKioskInfo();
     renderVisibility();
-    renderAdminLog();
 
     // 관리자 계정: 첫 실행이면 기본 계정(admin/0000)의 SHA-256 해시를 만들어 저장
     ensureAdminAccount().then(function () {
@@ -17653,9 +17888,8 @@
     refreshAiHint();
     driveAutoBoot();
 
-    var xlsxOk = (typeof XLSX !== 'undefined') && !window.__xlsxLoadFailed;
-    el('xlsx-state').textContent = xlsxOk ? '엑셀 엔진 준비됨 (SheetJS)' : 'CSV 모드 (오프라인)';
-    el('xlsx-state').style.color = xlsxOk ? '#0b7a55' : '#a35b00';
+    /* v46 — SheetJS 는 엑셀 파일을 올릴 때만 내려받는다 (첫 화면을 막지 않는다) */
+    renderXlsxState();
     el('stage-tip').textContent = 'BARCODE · READY';
     renderKioskModeUI();
     if (isBarcodeMode()) { startBarcodeLoop(); }
@@ -17714,6 +17948,23 @@
         window.__tdk.sync.count = (window.__tdk.sync.count || 0) + 1;
         return { students: (app.students || []).length, count: window.__tdk.sync.count };
       },
+      /* v46 — 다른 기기에서 온 변경(출결 등)은 보이는 화면만 다시 그린다.
+         숨은 관리자 탭은 dirty 로 표시만 해 두고, 그 탭을 열 때 한 번만 그린다. */
+      refresh: function () {
+        var wasAuthed = app.adminAuthed;
+        var tab = app.adminTab || 'students';
+        var q = app.stuQuery;
+        var run = function (fn) { try { fn(); } catch (e) {} };
+        run(loadState);
+        app.adminTab = tab;
+        app.adminAuthed = wasAuthed;
+        if (q !== undefined) { app.stuQuery = q; }
+        run(renderVisible);
+        run(renderAdminAccountState);
+        window.__tdk.sync.lightCount = (window.__tdk.sync.lightCount || 0) + 1;
+        return { students: (app.students || []).length, count: window.__tdk.sync.lightCount };
+      },
+      lightCount: 0,
       count: 0,
       read: readJSON,
       write: writeJSON
@@ -17743,6 +17994,30 @@
       adminLog: renderAdminLog
     },
     checkIn: checkIn,
+    /* v46 — 렌더 최적화 점검용 훅 (같은 페이지 안에서만 접근) */
+    perf: {
+      tabs: function () { return ADMIN_TABS.slice(); },
+      normalize: normalizeAdminTab,
+      dirty: isAdminDirty,
+      markDirty: function (tab) { markAdminDirty(tab); return true; },
+      markAllDirty: function () { markAdminDirty(); return true; },
+      markClean: function (tab) { markAdminClean(tab); return true; },
+      renderTab: renderAdminTabNow,
+      view: function (v) { setView(v); return v; },
+      renderVisible: renderVisible,
+      renderAll: renderAll,
+      header: renderHeaderSummary,
+      count: function () { return adminRenderCount; },
+      log: function () { return adminRenderLog.slice(); },
+      reset: function () { adminRenderCount = 0; adminRenderLog = []; return true; },
+      headRows: function () { return LAZY_HEAD_ROWS; },
+      chunkRows: function () { return LAZY_CHUNK_ROWS; },
+      pending: lazyPending,
+      flushLazy: function (key) { return flushLazyRows(key); },
+      cancelLazy: function (key) { cancelLazyRows(key); return true; },
+      xlsxReady: function () { return (typeof XLSX !== 'undefined') && !window.__xlsxLoadFailed; },
+      isAdminView: currentViewIsAdmin
+    },
     /* v45 — 출결 모니터(초기화면) */
     monitor: {
       rows: attMonitorRows,

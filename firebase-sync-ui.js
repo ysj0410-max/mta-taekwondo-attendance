@@ -131,9 +131,11 @@
       requireServerRole: S.cfg.mode === 'firestore',
       reload: function () {
         try {
-          if (window.__tdk && window.__tdk.sync && typeof window.__tdk.sync.reload === 'function') {
-            window.__tdk.sync.reload();
-          }
+          /* v46 — 원격 변경(다른 기기 출결 등)은 화면에 보이는 부분만 다시 그린다 */
+          var sync = window.__tdk && window.__tdk.sync;
+          if (!sync) { return; }
+          if (typeof sync.refresh === 'function') { sync.refresh(); }
+          else if (typeof sync.reload === 'function') { sync.reload(); }
         } catch (e) {}
       },
       onEvent: function (type, payload) {
