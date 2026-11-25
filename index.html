@@ -6844,6 +6844,7 @@ setTimeout(function () {
       }
       tbody.innerHTML = '<tr class="empty-row"><td colspan="11">' +
         (app.students.length ? emptyMsg : '관원이 없습니다') + '</td></tr>';
+      scheduleStuTableHint();
       return;
     }
     /* v46 — 명단이 많으면 첫 80줄만 즉시, 나머지는 다음 프레임에 이어 붙인다 (검색은 전체 대상) */
