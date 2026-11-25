@@ -4,9 +4,8 @@
    · 이 파일은 정식 앱(index.html)이 불러 씁니다.
      운영 버전(index.html v28)은 이 파일을 읽지 않으며, 이 파일이 운영 데이터에
      영향을 주는 경로는 전혀 없습니다.
-   · 저장 구조
+   · 저장 구조 (v43 — 관리자 계정 단일 구조 · 모든 기기가 같은 관리자 계정으로 연결)
        dojangs/{dojangId}/students/{studentId}          원생 1명 = 문서 1개 (개인정보 포함 · 관리자 전용)
-       dojangs/{dojangId}/kioskStudents/{studentId}     출석 화면용 최소 정보 사본 (개인정보 없음 · 태블릿 읽기)
        dojangs/{dojangId}/attendanceEvents/{eventId}     출결 1건 = 문서 1개
                                                          eventId = {날짜}_{원생ID}_{in|out}
                                                          칸: date·studentId·kind·time·eventId·source·manual·deviceId
@@ -16,13 +15,13 @@
        dojangs/{dojangId}/counsel|shuttle|coupons/{id}   기록 1건 = 문서 1개
        dojangs/{dojangId}/meta/{설정문서}                설정·단가표·문구·로그·계정
        dojangs/{dojangId}/meta/usage                     기기별 무료 한도 추정 사용량 합산(관리자 전용 · 60초 간격)
-       dojangs/{dojangId}/roles/{uid}                    권한(관리자/출석 태블릿)
+       dojangs/{dojangId}/roles/{uid}                    권한(관리자) — 'admin' 이 아니면 서버로 아무것도 보내지 않는다
      · 기기 로컬 전용(절대 업로드하지 않음) — tdk.fbLastSync.v1(컬렉션별 마지막 동기화 시각) 포함
        tdk.faces.v1(원생 얼굴 128차원), tdk.adminFace.v1(관리자 얼굴),
        그리고 이 엔진의 상태 키(tdk.fb*.v1)
    · 문서마다 `_ver`(문서 버전) · `_updatedAt` · `_updatedBy`(기기 ID) ·
      `_fieldMeta`(필드별 버전/수정시각/수정기기)를 붙여,
-     PC와 태블릿이 같은 관원의 서로 다른 칸을 동시에 고쳐도 두 변경이 모두 살아남습니다.
+     PC·태블릿·폰이 같은 관원의 서로 다른 칸을 동시에 고쳐도 두 변경이 모두 살아남습니다.
    · 무료(Spark) 한도: 읽기 5만/일, 쓰기 2만/일, 삭제 2만/일 — 80% 경고, 100%에서
      자동 유료 전환 없이 동기화만 멈추고 로컬 큐에 보관합니다.
    ============================================================================= */
@@ -32,7 +31,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.4.0';
+  var VERSION = '1.5.0';   /* v43 — 태블릿 역할·kioskStudents 이중 쓰기 제거, 관리자 단일 구조 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -699,117 +698,10 @@
     { name: 'logs', key: 'tdk.logs.v1', label: '문자 발송 로그(최근 200)', icon: '📨', kind: 'value', meta: 'logs', union: true, desc: 'meta/logs · 항목 합집합' },
     { name: 'muted', key: 'tdk.muted.v1', label: '효과음 끔', icon: '🔇', kind: 'value', meta: 'muted', desc: 'meta/muted' },
     { name: 'faces', key: 'tdk.faces.v1', label: '원생 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' },
-    { name: 'adminFace', key: 'tdk.adminFace.v1', label: '관리자 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' },
-    /* ↓ 자동으로 만들어지는 파생 문서 — 키는 위 항목과 같은 것을 읽는다(저장 키가 늘어나는 것은 아님) */
-    { name: 'kioskStudents', key: 'tdk.students.v1', label: '출석 화면용 최소 정보', icon: '📱', kind: 'kiosk', coll: 'kioskStudents', derivedFrom: 'students', desc: 'students 에서 개인정보를 뺀 사본 · 태블릿이 읽는 곳' },
-    { name: 'kioskConfig', key: 'tdk.settings.v1', label: '출석 화면 최소 설정', icon: '🎛', kind: 'object', meta: 'kioskConfig', derivedFrom: 'settings', transform: 'kioskConfig', desc: 'meta/kioskConfig · 태블릿이 읽는 최소 설정' }
+    { name: 'adminFace', key: 'tdk.adminFace.v1', label: '관리자 얼굴 특징값', icon: '🙂', kind: 'local', desc: '기기 로컬 전용 · 업로드 안 함' }
+    /* v43 — kioskStudents·kioskConfig(태블릿용 사본)는 더 만들지도 구독하지도 않는다.
+       모든 기기가 관리자 계정으로 students 원본을 그대로 받는다 */
   ];
-
-  /* =========================================================================
-     3-1. kioskStudents — 태블릿에 보여 줄 최소 정보만 남긴 사본
-     -------------------------------------------------------------------------
-     · 담는 칸: id · name · division · course · belt · status (+ 엔진 메타 _ver 등)
-     · 절대 담지 않는 칸: phone · motherPhone · fatherPhone · smsTargets · motherName ·
-       fatherName · address · birthDate · tconId · note · tuitionDay ·
-       siblingDiscount · firstRegDate · monthlyFee · attendCount 등
-       (firestore.rules 의 noPrivateFields() 가 서버에서도 한 번 더 막는다)
-     ========================================================================= */
-  var KIOSK_FIELDS = ['id', 'name', 'division', 'course', 'belt', 'status'];
-  /* 절대 태블릿 사본(kioskStudents)에 넣지 않는 칸
-     · 모·부 전화번호·성함·발송 대상, 주소까지 모두 개인정보로 본다 */
-  var PRIVATE_STUDENT_FIELDS = ['phone', 'birthDate', 'tconId', 'note', 'tuitionDay', 'siblingDiscount', 'firstRegDate',
-    'motherPhone', 'fatherPhone', 'smsTargets', 'motherName', 'fatherName', 'address'];
-
-  function kioskStudentBody(s) {
-    if (!isPlain(s)) { return null; }
-    var id = String(s.id == null ? '' : s.id).trim();
-    var name = String(s.name == null ? '' : s.name).trim();
-    if (!id && !name) { return null; }
-    return {
-      id: id || name,
-      name: name,
-      division: String(s.division == null ? '' : s.division),
-      course: String(s.course == null ? '' : s.course),
-      belt: String(s.belt == null ? '' : s.belt),
-      status: (s.status === 'paused') ? 'paused' : 'active'
-    };
-  }
-  function kioskDocsOf(list, base) {
-    var out = [];
-    (Array.isArray(list) ? list : []).forEach(function (s) {
-      var body = kioskStudentBody(s);
-      if (!body) { return; }
-      var id = safeId(body.id);
-      out.push({ id: id, path: base + '/kioskStudents/' + id, body: body });
-    });
-    return out;
-  }
-  /* 태블릿이 읽는 최소 설정 — 도장 이름과 "문자는 관리자 PC가 보낸다" 정도만 */
-  function kioskConfigBody(settings) {
-    var s = isPlain(settings) ? settings : {};
-    return {
-      dojoName: String(s.dojoName == null ? '' : s.dojoName),
-      kioskEnabled: true,
-      smsByAdmin: true
-    };
-  }
-  /* =========================================================================
-     3-2. 🧹 태블릿 개인정보 비우기(얼굴 유지) — 대상 칸과 남길 칸
-     -------------------------------------------------------------------------
-     · 원생 객체에서 남기는 칸: id · name · division · course · belt · status
-       (+ 동기화 메타 _ver 등 _ 로 시작하는 칸)
-     · 이 기기에서 비우는 저장 키: 원비·상담·차량·쿠폰·문자로그·단가표·
-       문자문구·효과음·관리자 얼굴 — 태블릿 화면에 필요 없는 것들
-     · 절대 건드리지 않는 키: tdk.faces.v1(원생 얼굴) · tdk.fbConfig.v1 ·
-       tdk.fbDevice.v1 · tdk.fbState.v1 · tdk.fbOutbox.v1 · tdk.fbShadow.v1 · tdk.fbUsage.v1
-     ========================================================================= */
-  var SCRUB_KEEP_FIELDS = ['id', 'name', 'division', 'course', 'belt', 'status'];
-  var SCRUB_CLEAR_NAMES = ['tuition', 'counsel', 'shuttle', 'coupons', 'couponTypes', 'logs', 'feeTable', 'smsTemplates', 'muted', 'adminFace'];
-  var SCRUB_EMPTY = {
-    tuition: {}, counsel: [], shuttle: [], coupons: [], couponTypes: [], logs: [],
-    feeTable: {}, smsTemplates: [], muted: false, adminFace: []
-  };
-  /* 얼굴 특징값 보관함은 객체({id:{…}}) 또는 배열([{…}]) 둘 다 쓴다 */
-  function countFaces(value) {
-    if (Array.isArray(value)) {
-      return value.filter(function (f) { return !!f && typeof f === 'object'; }).length;
-    }
-    if (!isPlain(value)) { return 0; }
-    return Object.keys(value).filter(function (k) {
-      var f = value[k];
-      return !!f && typeof f === 'object';
-    }).length;
-  }
-
-  /* 이 도장 데이터에 개인정보가 들어 있는 원생이 몇 명인지 (태블릿 안내용)
-     · 빈 칸('')·기본값(false·0)은 개인정보로 세지 않는다 — 앱은 원생을 불러올 때
-       phone·note 를 '' 로, siblingDiscount 를 false 로, tuitionDay 를 0 으로 채워 두기 때문이다. */
-  function hasPrivateValue(v) {
-    if (v === undefined || v === null) { return false; }
-    if (typeof v === 'boolean') { return v; }
-    if (typeof v === 'number') { return isFinite(v) && v !== 0; }
-    if (typeof v === 'object') {
-      /* 문자 발송 대상(smsTargets)은 {mother, father} 두 칸뿐인 선택값이다.
-         기본값(모만 받음)은 개인정보로 세지 않고, 부까지 받거나 모를 끈 경우만 센다. */
-      var keys = Object.keys(v);
-      if (keys.length === 2 && keys.indexOf('mother') !== -1 && keys.indexOf('father') !== -1) {
-        return v.mother !== true || v.father === true;
-      }
-      return keys.some(function (k) { return hasPrivateValue(v[k]); });
-    }
-    var s = String(v).trim();
-    return s !== '' && s !== '0' && s !== 'false' && s !== 'null' && s !== 'undefined';
-  }
-  function countPrivateStudents(list) {
-    var n = 0;
-    (Array.isArray(list) ? list : []).forEach(function (s) {
-      if (!isPlain(s)) { return; }
-      for (var i = 0; i < PRIVATE_STUDENT_FIELDS.length; i++) {
-        if (hasPrivateValue(s[PRIVATE_STUDENT_FIELDS[i]])) { n++; return; }
-      }
-    });
-    return n;
-  }
 
   /* 엔진이 스스로 저장하는 기기 로컬 키 (동기화 대상 아님) */
   var LOCAL_KEYS = {
@@ -927,18 +819,8 @@
 
     if (entry.kind === 'object') {
       var body = isPlain(value) ? value : {};
-      if (entry.transform === 'kioskConfig') {
-        /* 설정 원본이 없는 기기에서는 만들지 않는다(빈 문서 방지) */
-        if (!isPlain(value)) { return docs; }
-        body = kioskConfigBody(value);
-      }
       docs.push({ id: entry.meta, path: base + '/meta/' + safeId(entry.meta), body: body });
       return docs;
-    }
-
-    /* 출석 화면용 최소 정보 사본 — 원생 1명 = kioskStudents 문서 1개 */
-    if (entry.kind === 'kiosk') {
-      return kioskDocsOf(value, base);
     }
 
     if (entry.kind === 'value') {
@@ -1267,11 +1149,11 @@
     };
     var deviceId = opts.deviceId || 'dev_local';
     var dojangId = safeId(opts.dojangId || 'mta-tkd');
-    /* 화면(드롭다운)에서 고른 역할 — 이 값만으로는 권한을 주지 않는다 */
-    var deviceRole = opts.role === 'tablet' ? 'tablet' : 'admin';
     /* 서버(dojangs/{도장}/roles/{uid})에서 확인한 역할
-         null = 아직 확인 전 · '' = 로그인은 됐는데 roles 문서가 없음 · 'admin' | 'tablet' */
-    var verifiedRole = (opts.verifiedRole === 'admin' || opts.verifiedRole === 'tablet') ? opts.verifiedRole : null;
+         null = 아직 확인 전 · '' = 로그인은 됐는데 roles 문서가 없거나 관리자가 아님 · 'admin'
+       v43 — 태블릿 역할은 없어졌다. 모든 기기가 같은 관리자 계정으로 연결되고,
+              서버 roles 가 'admin' 일 때만 동기화한다. */
+    var verifiedRole = (opts.verifiedRole === 'admin') ? 'admin' : null;
     /* 시작할 때 서버 roles 를 자동으로 확인할지 (테스트에서 순서를 직접 잡을 때만 false) */
     var verifyOnStart = opts.verifyOnStart !== false;
     var adapter = opts.adapter || null;
@@ -1298,7 +1180,6 @@
     function usageMetaPath() { return basePath() + '/meta/usage'; }
     function usageSyncReason() {
       if (!adapter) { return 'no-adapter'; }
-      if (effectiveRole() === 'tablet') { return 'tablet-role'; }
       if (!isEffectiveAdmin()) { return 'role-unverified'; }
       return '';
     }
@@ -1528,147 +1409,52 @@
       lastSyncTimer = setTimeout(function () { lastSyncTimer = null; saveLastSync(); }, 600);
     }
 
-    /* ---------- 유효 권한 (서버 roles 기준) ----------
-       ⚠️ 화면에서 「관리자 PC」를 골라도 그것만으로 관리자 권한이 생기지 않는다.
+    /* ---------- 유효 권한 (서버 roles 기준 · 관리자 단일) ----------
+       v43 — 태블릿 역할은 없다. 모든 기기가 같은 관리자 계정으로 로그인하고,
           실제 Firebase 모드(requireServerRole)에서는 로그인한 uid 의 roles/{uid} 가
-          'admin' 일 때만, 그리고 화면 역할이 'admin' 일 때만 관리자로 동작한다.
-          (둘 중 하나라도 tablet/미확인이면 더 제한적인 쪽으로 잠긴다) */
+          'admin' 일 때만 관리자로 동작한다. 문서가 없거나 다른 역할이면 'none' 으로
+          잠가 서버로 아무것도 보내지 않는다(firestore.rules 가 서버에서 한 번 더 막는다). */
     function requireServerRole() {
       return opts.requireServerRole === true || !!(adapter && adapter.mode === 'firestore');
     }
     function effectiveRole() {
-      var serverKnown = (verifiedRole === 'admin' || verifiedRole === 'tablet');
-      if (serverKnown) {
-        return (verifiedRole === 'tablet' || deviceRole === 'tablet') ? 'tablet' : 'admin';
-      }
+      if (verifiedRole === 'admin') { return 'admin'; }
       /* 서버 역할을 확인하지 못했다 → 실제 Firebase 에서는 아무 권한도 주지 않는다 */
       if (requireServerRole()) { return 'none'; }
-      /* 모의(연습) 모드: 서버가 없으니 화면에서 고른 역할로 연습한다 */
-      return deviceRole;
+      /* 모의(연습) 모드: 서버 계정이 없으니 관리자로 연습한다 */
+      return 'admin';
     }
     function isEffectiveAdmin() { return effectiveRole() === 'admin'; }
-    function isEffectiveTablet() { return effectiveRole() === 'tablet'; }
-
-    /* ---------- 태블릿이 올릴 수 있는 곳은 출결(attendanceEvents) 하나뿐 ----------
-       firestore.rules 상 태블릿 계정은 attendanceEvents 만 새로 만들 수 있고,
-       students · kioskStudents · tuition · counsel · shuttle · coupons · meta 는
-       permission-denied 다. 보내 봐야 실패할 항목은 처음부터 큐에 넣지 않는다
-       (예전에 쌓여 「대기 N건 · 실패 N」으로 남아 있는 것도 아래에서 정리한다). */
-    var TABLET_WRITE_COLL = 'attendanceEvents';
     function pathColl(path) {
       var seg = String(path || '').split('/');
       return seg.length >= 4 ? seg[2] : '';
     }
-    function isTabletBlockedPath(path) {
-      return effectiveRole() === 'tablet' && pathColl(path) !== TABLET_WRITE_COLL;
-    }
     /* 실패 항목 비우기 — 「서버 규칙 거부 등으로 실패한 항목」만 지운다.
-       · scope 를 주지 않으면(또는 'blocked') 태블릿이 보낼 수 없는 경로의 failed 만 지운다
-         (출결은 나중에 성공할 수 있으므로 남긴다 — 자동 정리용)
-       · scope 'all' 이면 화면의 「🗑️ 실패 비우기」 버튼이 부른 것으로, failed 전부를 지운다
-       · state 가 'pending' 인 항목(아직 보내지 않은 출결)은 절대 건드리지 않는다 */
-    function clearFailed(scope) {
-      var eventsOnly = scope !== 'all';
-      var removed = outbox.dropWhere(function (it) {
-        if (it.state !== 'failed') { return false; }
-        if (eventsOnly && pathColl(it.path) === TABLET_WRITE_COLL) { return false; }
-        return true;
-      });
+       · state 가 'failed' 인 항목만 지운다
+       · state 가 'pending' 인 항목(아직 보내지 않은 기록)은 절대 건드리지 않는다
+       · 실패가 하나도 남지 않으면 경고등을 꺼 배지가 🟢 로 돌아온다 */
+    function clearFailed() {
+      var removed = outbox.dropWhere(function (it) { return it.state === 'failed'; });
       var sum = outbox.summary();
-      /* 실패가 하나도 남지 않았으면 그 실패 때문에 켜져 있던 경고등도 끈다 → 배지가 🟢 로 돌아온다 */
       if (!sum.failed) { lastError = ''; lastErrorKind = ''; }
       emit('queue-cleared', { removed: removed, failed: sum.failed, queued: outbox.count(), role: effectiveRole() });
       return { ok: true, removed: removed, failed: sum.failed, queued: outbox.count(), role: effectiveRole() };
     }
 
-    /* 화면 역할 변경 — 그래도 유효 권한은 서버 roles 기준 그대로다 */
-    function setDeviceRole(r) {
-      var next = r === 'tablet' ? 'tablet' : 'admin';
-      var before = effectiveRole();
-      deviceRole = next;
-      var after = effectiveRole();
-      if (after !== before) {
-        if (adapter && typeof adapter.setRole === 'function') { try { adapter.setRole(after); } catch (e) {} }
-        resubscribe();
-        emit('role', { role: after, deviceRole: deviceRole, verified: verifiedRole });
-        if (after === 'admin') { scheduleUsagePush(1500); }
-        if (after === 'tablet') { try { clearFailed(); } catch (e) {} }
-      }
-      return after;
-    }
-
-    /* 서버 roles/{uid} 확인 결과 반영 */
+    /* 서버 roles/{uid} 확인 결과 반영 — 'admin' 만 관리자, 그 밖은 잠금('') */
     function applyVerifiedRole(v) {
-      var next = (v === 'admin' || v === 'tablet') ? v : '';
+      var next = (v === 'admin') ? 'admin' : '';
       var before = effectiveRole();
       verifiedRole = next;
       var after = effectiveRole();
       if (after !== before) {
         if (adapter && typeof adapter.setRole === 'function') { try { adapter.setRole(after); } catch (e) {} }
         resubscribe();
-        emit('role', { role: after, deviceRole: deviceRole, verified: verifiedRole });
+        emit('role', { role: after, verified: verifiedRole });
         /* 잠겨 있는 동안(역할 미확인)에 기기에서 고친 내용을 역할이 풀리는 순간 한 번 훑는다 */
         if (after === 'admin') { rescanLocal(); scheduleUsagePush(1500); }
-        /* 태블릿으로 확인되는 순간, 보낼 수 없는 경로의 실패 항목을 한 번 정리한다 */
-        if (after === 'tablet') { try { clearFailed(); } catch (e) {} }
       }
       return after;
-    }
-
-    /* ---------- 🧹 태블릿 개인정보 비우기 (등록된 얼굴은 그대로) ----------
-       태블릿 화면에 필요한 것은 이름·부서·수업·띠·상태뿐이다.
-       · 「출석 태블릿」으로 확인된 기기에서만 실행한다 — 관리자 PC 의 원본을 지우지 않게.
-       · tdk.faces.v1(원생 얼굴 특징값)과 Firebase 연결 설정은 절대 건드리지 않는다.
-       · 서버(Firestore)에는 아무것도 쓰거나 지우지 않는다 — 이 기기 저장소만 비운다.
-         writeValue 를 써서 로컬 변경 감지·전송 큐를 타지 않게 한다(태블릿은 어차피 올릴 수 없다). */
-    function scrubTabletPII() {
-      var role = effectiveRole();
-      if (role !== 'tablet') {
-        /* 관리자 PC·역할 미확인 기기에서는 실행하지 않는다 */
-        return { ok: false, reason: role === 'admin' ? 'admin-role' : 'role-unverified', role: role };
-      }
-      var faces = readValue('faces');
-      var faceCount = countFaces(faces);
-      var students = readValue('students');
-      var list = Array.isArray(students) ? students : [];
-      var scrubbed = 0;
-      var next = list.map(function (s) {
-        if (!isPlain(s)) { return s; }
-        var had = Object.keys(s).some(function (k) {
-          return k.charAt(0) !== '_' && SCRUB_KEEP_FIELDS.indexOf(k) === -1;
-        });
-        if (had) { scrubbed++; }
-        var out = {};
-        /* 동기화 메타(_ver·_updatedAt·_fieldMeta …)는 그대로 두고 나머지는 허용 목록만 남긴다 */
-        Object.keys(s).forEach(function (k) { if (k.charAt(0) === '_') { out[k] = s[k]; } });
-        SCRUB_KEEP_FIELDS.forEach(function (f) { if (hasOwn(s, f)) { out[f] = s[f]; } });
-        return out;
-      });
-      writeValue('students', next);
-      var cleared = [];
-      SCRUB_CLEAR_NAMES.forEach(function (name) {
-        var e = entryByName(name);
-        if (!e) { return; }
-        writeValue(name, clone(SCRUB_EMPTY[name]));
-        cleared.push(e.key);
-      });
-      /* 개인정보를 비운 김에, 규칙이 거부해 쌓인 「보낼 수 없는」 실패 항목도 함께 정리한다 */
-      var queue = { removed: 0, failed: 0, queued: outbox.count() };
-      try { queue = clearFailed(); } catch (e) {}
-      /* 지운 뒤 남은 얼굴은 100% 그대로 — 한 번 더 세어 돌려준다 */
-      var facesAfter = countFaces(readValue('faces'));
-      return {
-        ok: true,
-        role: role,
-        students: scrubbed,
-        studentsLeft: next.length,
-        faces: facesAfter,
-        facesBefore: faceCount,
-        cleared: cleared,
-        failedCleared: queue.removed,
-        failedLeft: queue.failed,
-        kept: ['tdk.faces.v1', 'tdk.fbConfig.v1', 'tdk.fbDevice.v1', 'tdk.fbState.v1', 'tdk.fbOutbox.v1', 'tdk.fbShadow.v1', 'tdk.fbUsage.v1']
-      };
     }
 
     /* 역할이 풀린 뒤: 지금 기기의 값을 다시 훑어 서버와 다른 문서만 큐에 올린다 */
@@ -2144,11 +1930,10 @@
       if (LOCAL_KEYS[key]) { return; }
       var entry = entryByKey(key);
       if (!entry || entry.kind === 'local') { return; }
-      /* 관리자로 확인된 기기만 원생·원비·상담·설정을 올린다.
-         태블릿(또는 서버 역할 미확인)은 출결 이벤트만 올린다. */
-      var er = effectiveRole();
-      if (er !== 'admin' && entry.kind !== 'events') {
-        emit('blocked-local', { key: entry.name, reason: er === 'tablet' ? 'tablet-role' : 'role-unverified' });
+      /* 관리자로 확인된 기기만 올린다 — 역할 미확인(로그인 전·roles 문서 없음·비관리자)이면
+         출결까지 포함해 아무것도 보내지 않는다 */
+      if (effectiveRole() !== 'admin') {
+        emit('blocked-local', { key: entry.name, reason: 'role-unverified' });
         return;
       }
       var value = null;
@@ -2163,37 +1948,24 @@
       scheduleFlush();
     }
 
-    /* 이 키에서 자동으로 따라 만들어지는 문서(파생 사본)의 목록 */
-    function derivedEntriesOf(name) {
-      return registry.filter(function (e) { return e.derivedFrom === name; });
-    }
     function liveDocsOf(entry, base) {
       if (entry.kind === 'events') {
         var map = unionEventDocs(readValue('attendance'), readValue('records'), base, { deviceId: deviceId });
         return Object.keys(map).map(function (p) { return map[p]; });
       }
-      /* 파생 항목은 원본 키를 그대로 쓴다 — 방금 저장된 값이 있으면 그것으로 만든다 */
-      var value;
-      if (entry.derivedFrom) {
-        value = (prevValues[entry.derivedFrom] !== undefined) ? prevValues[entry.derivedFrom] : readValue(entry.name);
-      } else {
-        value = prevValues[entry.name];
-      }
-      return docsForEntry(entry, value, base, { deviceId: deviceId });
+      return docsForEntry(entry, prevValues[entry.name], base, { deviceId: deviceId });
     }
 
     function capture(entry) {
-      /* 태블릿은 출결(attendanceEvents)만 올린다 — 그 밖의 원생·원비·상담·차량·설정은
-         규칙이 거부하므로 큐에 넣지도, 그림자를 앞지르지도 않는다 */
-      if (effectiveRole() === 'tablet' && entry.kind !== 'events') {
-        emit('blocked-local', { key: entry.name, reason: 'tablet-role' });
+      /* 역할 미확인 기기는 아무것도 올리지 않는다 (그림자를 앞지르지도 않는다) */
+      if (effectiveRole() !== 'admin') {
+        emit('blocked-local', { key: entry.name, reason: 'role-unverified' });
         return;
       }
       var base = basePath();
       var changes = [];
       var live = {};
-      /* 원본(students/settings) + 파생 사본(kioskStudents/kioskConfig)을 함께 만든다 */
-      var sources = [entry].concat(derivedEntriesOf(entry.name));
+      var sources = [entry];
 
       sources.forEach(function (src) {
         liveDocsOf(src, base).forEach(function (d) { live[d.path] = { doc: d, entry: src }; });
@@ -2255,11 +2027,6 @@
       if (changes.length) {
         saveShadow();
         changes.forEach(function (c) {
-          /* 보낼 수 없는 경로는 큐에 넣지 않는다 (태블릿 = 출결만) */
-          if (isTabletBlockedPath(c.path)) {
-            emit('blocked-local', { key: entry.name, reason: 'tablet-role' });
-            return;
-          }
           outbox.enqueue({ path: c.path, body: c.body });
         });
         emit('captured', { key: entry.name, count: changes.length });
@@ -2346,8 +2113,6 @@
       if (merged.deleted) { needLocal = !(localSh && localSh.d); }
       else if (kind === 'events') { needLocal = eventHash(mergedBody) !== String((localSh && localSh.h) || ''); }
       else { needLocal = stableStringify(mergedBody) !== stableStringify(localBody); }
-      /* kioskStudents/kioskConfig 사본은 태블릿 화면용이다 — 관리자 PC는 원본을 그대로 쓴다 */
-      if (kind === 'kiosk' && !isEffectiveTablet()) { needLocal = false; }
       var needRemote = merged.deleted ? !remoteDoc._deleted : stableStringify(mergedBody) !== stableStringify(remoteBody);
 
       if (needLocal) {
@@ -2356,9 +2121,9 @@
         emit('remote', { path: path, key: entry.name });
       }
       if (needRemote) {
-        /* 태블릿은 출결 외 경로를 보낼 수 없다 — 큐에 쌓아 두면 영원히 실패로 남는다 */
-        if (isTabletBlockedPath(path)) {
-          emit('blocked-local', { key: entry.name, reason: 'tablet-role' });
+        /* 역할 미확인 기기는 서버로 되돌려 보내지 않는다 — 큐에 쌓아 두면 영원히 실패로 남는다 */
+        if (!isEffectiveAdmin()) {
+          emit('blocked-local', { key: entry.name, reason: 'role-unverified' });
           updateShadowFromMerged(path, merged, kind, null);
         } else {
           /* 내 쪽이 더 최신인 필드가 있어 합친 결과를 되돌려 보낸다 → 양쪽이 같은 값으로 수렴 */
@@ -2429,28 +2194,6 @@
       var body = merged.body || {};
       var seg = String(path).split('/');
       var docKey = seg[seg.length - 1];
-
-      /* kioskStudents 사본 — 태블릿 화면이 읽는 최소 정보만 이 기기의 원생 명단에 반영한다 */
-      if (entry.kind === 'kiosk') {
-        if (!isEffectiveTablet()) { return; }          /* 관리자 PC 는 원본 students 를 그대로 쓴다 */
-        var list = readValue('students');
-        if (!Array.isArray(list)) { list = []; }
-        var at = -1;
-        for (var q = 0; q < list.length; q++) {
-          if (list[q] && safeId(list[q].id) === docKey) { at = q; break; }
-        }
-        if (deleted) {
-          if (at >= 0) { list.splice(at, 1); writeValue('students', list); }
-          return;
-        }
-        var min = kioskStudentBody(body) || {};
-        var nextItem = {};
-        if (at >= 0) { nextItem = clone(list[at]) || {}; }   /* 원래 있던 칸은 지우지 않는다 */
-        KIOSK_FIELDS.forEach(function (f) { if (hasOwn(min, f)) { nextItem[f] = min[f]; } });
-        if (at >= 0) { list[at] = nextItem; } else { list.push(nextItem); }
-        writeValue('students', list);
-        return;
-      }
 
       if (entry.kind === 'docs') {
         var arr = readValue(entry.name);
@@ -2597,7 +2340,7 @@
       if (!adapter) { return Promise.resolve({ ok: false, reason: 'no-adapter', queued: outbox.count() }); }
       /* 서버 roles 로 역할이 확인되지 않은 상태(로그인 전·roles 문서 없음)에서는 서버로 아무것도 보내지 않는다 */
       if (effectiveRole() === 'none') {
-        emit('role-blocked', { role: 'none', deviceRole: deviceRole, verified: verifiedRole, queued: outbox.count() });
+        emit('role-blocked', { role: 'none', verified: verifiedRole, queued: outbox.count() });
         return Promise.resolve({ ok: false, reason: 'role-unverified', queued: outbox.count() });
       }
       if (!online()) {
@@ -2694,12 +2437,12 @@
 
     /* ---------- 상태 ---------- */
     function status() {
-      var s = { state: 'local', text: '⚪ 미연결(로컬 모드)', queued: outbox.count(), lastSyncAt: lastSyncAt, lastError: lastError, mode: adapter ? adapter.mode : 'local', role: effectiveRole(), deviceRole: deviceRole, verifiedRole: verifiedRole };
+      var s = { state: 'local', text: '⚪ 미연결(로컬 모드)', queued: outbox.count(), lastSyncAt: lastSyncAt, lastError: lastError, mode: adapter ? adapter.mode : 'local', role: effectiveRole(), verifiedRole: verifiedRole };
       if (usage.blocked()) { s.state = 'blocked'; s.text = '🔴 한도 초과 · 동기화 멈춤'; return s; }
       if (!adapter) { return s; }
       if (effectiveRole() === 'none') {
         s.state = 'role';
-        s.text = (verifiedRole === '') ? '🔑 역할 미확인 · 로그인 필요' : '🔑 역할 확인 중';
+        s.text = (verifiedRole === '') ? '🔑 관리자 계정 아님 · 로그인 필요' : '🔑 관리자 확인 중';
         return s;
       }
       if (!online() || lastErrorKind === 'offline' || outbox.summary().failed > 0) { s.state = 'offline'; s.text = '🟡 오프라인 대기'; return s; }
@@ -2788,14 +2531,12 @@
 
     function runMigration(opts2) {
       opts2 = opts2 || {};
-      /* 이전은 관리자로 확인된 기기에서만 — 태블릿은 원생 개인정보를 올릴 수도, 읽을 수도 없다 */
+      /* 이전은 관리자로 확인된 기기에서만 */
       if (!isEffectiveAdmin()) {
         return Promise.resolve({
           ok: false,
-          reason: (effectiveRole() === 'tablet') ? 'tablet-role' : 'role-unverified',
-          message: (effectiveRole() === 'tablet')
-            ? '출석 태블릿 역할에서는 이전하지 않습니다 — 관리자 PC에서 해 주세요.'
-            : '서버 roles 문서로 관리자 역할이 확인되지 않았습니다 — 관리자 계정으로 로그인한 뒤 다시 시도해 주세요.'
+          reason: 'role-unverified',
+          message: '서버 roles 문서로 관리자 역할이 확인되지 않았습니다 — 관리자 계정으로 로그인한 뒤 다시 시도해 주세요.'
         });
       }
       if (!adapter) { return Promise.resolve({ ok: false, reason: 'no-adapter' }); }
@@ -2938,13 +2679,6 @@
           }, USAGE_SYNC.tickMs);
         }
       }
-      /* 태블릿 역할인데 예전에 쌓인 「보낼 수 없는」 실패 항목이 있으면 한 번 정리한다 */
-      if (isEffectiveTablet()) { try { clearFailed(); } catch (e) {} }
-      /* 태블릿 역할인데 이 기기에 아직 개인정보가 남아 있으면 한 번 알린다 */
-      if (isEffectiveTablet()) {
-        var privateCount = countPrivateStudents(readValue('students'));
-        if (privateCount > 0) { emit('tablet-private-data', { count: privateCount }); }
-      }
       emit('status', status());
       return api;
     }
@@ -2991,17 +2725,10 @@
       registry: function () { return registry.map(function (e) { return clone(e); }); },
       basePath: basePath,
       setDevice: function (d) { deviceId = String(d || deviceId); },
-      /* 화면에서 고른 값은 "어떤 계정으로 로그인할지" 안내용 — 유효 권한은 서버 roles 로 잠기므로
-         이 값만으로는 관리자 권한이 생기지 않는다 */
-      setRole: function (r) { return setDeviceRole(r); },
-      setDeviceRole: setDeviceRole,
-      scrubTabletPII: scrubTabletPII,
-      /* 「🗑️ 실패 비우기」 — failed 항목만 지운다 (인자 없으면 태블릿이 보낼 수 없는 경로만) */
+      /* 「🗑️ 실패 비우기」 — failed 항목만 지운다 */
       clearFailed: clearFailed,
-      countPrivateStudents: function () { return countPrivateStudents(readValue('students')); },
       role: function () { return effectiveRole(); },
       effectiveRole: effectiveRole,
-      deviceRole: function () { return deviceRole; },
       verifiedRole: function () { return verifiedRole; },
       setVerifiedRole: applyVerifiedRole,
       verifyRole: verifyRole,
@@ -3192,7 +2919,7 @@
     return {
       mode: 'mock',
       label: opts.label || '모의 Firestore',
-      setRole: function (r) { return r === 'admin' ? 'admin' : 'tablet'; },
+      setRole: function (r) { return r === 'admin' ? 'admin' : 'none'; },
       signInEmail: function (email, pw) {
         current = { uid: 'mock_' + hashStr(String(email || '')), email: String(email || ''), anonymous: false };
         return Promise.resolve({ uid: current.uid, email: current.email });
@@ -3252,8 +2979,10 @@
     var authReadyTimeoutMs = Number(opts.authReadyTimeoutMs) > 0 ? Number(opts.authReadyTimeoutMs) : 4000;
     /* 저장된 로그인 세션이(이미 있거나 복원되어) 확인됐는지 — 화면 표시용 */
     var authRestored = false;
-    /* 역할을 확인하기 전에는 가장 제한적인 쪽(태블릿 구독)으로 시작한다 */
-    var role = opts.role === 'admin' ? 'admin' : 'tablet';
+    /* 역할을 확인하기 전에는 아무것도 구독하지 않는다('none') —
+       roles/{uid} 가 admin 으로 확인되는 순간 엔진이 resubscribe() 로 구독을 연다.
+       (v43: 태블릿 구독은 없어졌다 — 모든 기기가 관리자 계정 하나를 쓴다) */
+    var role = (opts.role === 'admin') ? 'admin' : 'none';
     var unsubs = [];
     /* 엔진이 넣어 주는 묶음 훅 — 한 스냅샷에 여러 문서가 올 때
        메모리에서 모아 수정하고 저장은 키당 1회만 하게 한다 */
@@ -3352,7 +3081,7 @@
       label: 'Firebase Firestore',
       connect: connect,
       /* 서버 roles 로 확인된 유효 권한을 반영한다 (관리자 구독은 'admin' 일 때만) */
-      setRole: function (r) { role = r === 'admin' ? 'admin' : 'tablet'; return role; },
+      setRole: function (r) { role = (r === 'admin') ? 'admin' : 'none'; return role; },
       getRole: function () { return role; },
       raw: function () { return { mods: mods, app: app, db: db, auth: auth }; },
       /* Firebase v11 은 모듈 함수에 auth 인스턴스를 넘기는 방식이다.
@@ -3441,25 +3170,22 @@
         var basePath = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
         var since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
         var sinceIso = since.toISOString().slice(0, 10);
+        /* roles/{uid} 가 admin 으로 확인되기 전에는 아무 컬렉션도 구독하지 않는다
+           → 로그인 전·비관리자 계정으로는 읽기 자체를 쓰지 않는다 */
+        if (role !== 'admin') { return function () {}; }
         /* 출결은 첫 전체 구독에서 최근 7일만 — 오래된 기록까지 매번 읽지 않아 무료 한도를 아낀다 */
         var eventSpec = { path: basePath + '/attendanceEvents', coll: 'attendanceEvents', where: { field: 'date', op: '>=', value: sinceIso } };
-        /* 태블릿은 원생 개인정보(students)·원비·상담·설정을 아예 구독하지 않는다.
-           이 역할이 읽을 수 있는 것은 kioskStudents(최소 정보)와 attendanceEvents 둘뿐이다. */
-        var specs = (role === 'admin')
-          ? [
-            { path: basePath + '/students', coll: 'students' },
-            { path: basePath + '/counsel', coll: 'counsel' },
-            { path: basePath + '/shuttle', coll: 'shuttle' },
-            { path: basePath + '/coupons', coll: 'coupons' },
-            /* meta 는 문서가 몇 개 안 되니 전체 구독 그대로(델타 대상 아님) */
-            { path: basePath + '/meta', coll: 'meta', delta: false },
-            { path: basePath + '/tuition', coll: 'tuition' },
-            eventSpec
-          ]
-          : [
-            { path: basePath + '/kioskStudents', coll: 'kioskStudents' },
-            eventSpec
-          ];
+        /* 관리자 계정 하나로 전체 컬렉션을 구독한다 (v43 — kioskStudents 사본은 쓰지 않는다) */
+        var specs = [
+          { path: basePath + '/students', coll: 'students' },
+          { path: basePath + '/counsel', coll: 'counsel' },
+          { path: basePath + '/shuttle', coll: 'shuttle' },
+          { path: basePath + '/coupons', coll: 'coupons' },
+          /* meta 는 문서가 몇 개 안 되니 전체 구독 그대로(델타 대상 아님) */
+          { path: basePath + '/meta', coll: 'meta', delta: false },
+          { path: basePath + '/tuition', coll: 'tuition' },
+          eventSpec
+        ];
         var store = lastSyncStore(opts.lastSyncStorage);
         var lastMap = opts.fullSync === true ? {} : readLastSync(store);
         var nowMs = Date.now();
@@ -3520,9 +3246,9 @@
       },
       test: function () {
         if (!db) { return Promise.resolve({ ok: false, message: '아직 연결되지 않았습니다' }); }
-        /* 규칙상 읽기가 막혀 있어도 "연결 자체"는 확인된다 — 이 역할이 읽어도 되는 문서 1건 */
+        /* 관리자 계정이 읽을 수 있는 문서 1건으로 연결을 확인한다 — 로그인 전이면 규칙이 거부한다 */
         var probe = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
-        probe += (role === 'admin') ? '/meta/settings' : '/meta/kioskConfig';
+        probe += '/meta/settings';
         var docCall;
         try {
           docCall = api.getDoc(probe);
@@ -3596,15 +3322,6 @@
     SPARK: SPARK,
     QUOTA_MESSAGE: QUOTA_MESSAGE,
     KEY_TABLE: KEY_TABLE,
-    KIOSK_FIELDS: KIOSK_FIELDS,
-    PRIVATE_STUDENT_FIELDS: PRIVATE_STUDENT_FIELDS,
-    kioskStudentBody: kioskStudentBody,
-    kioskDocsOf: kioskDocsOf,
-    kioskConfigBody: kioskConfigBody,
-    countPrivateStudents: countPrivateStudents,
-    countFaces: countFaces,
-    SCRUB_KEEP_FIELDS: SCRUB_KEEP_FIELDS,
-    SCRUB_CLEAR_NAMES: SCRUB_CLEAR_NAMES,
     LOCAL_KEYS: LOCAL_KEYS,
     buildRegistry: buildRegistry,
     createEngine: createEngine,
