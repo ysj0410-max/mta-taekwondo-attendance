@@ -11,7 +11,7 @@
    배포할 때마다 아래 VERSION 값을 올리면 옛 캐시가 정리됩니다.
    ============================================================= */
 
-var VERSION = 'v39-2026-11-24';
+var VERSION = 'v40-2026-11-25';
 var CACHE_NAME = 'mta-taekwondo-' + VERSION;
 var HTML_TIMEOUT_MS = 6000;
 
@@ -26,6 +26,8 @@ var APP_SHELL = [
   './firebase-sync-ui.js',
   './firebase-sync.css',
   './firestore.rules',
+  /* v40 — 카메라 바코드 폴백 디코더(ZXing). 외부 CDN 없이 오프라인에서도 바코드를 읽는다 */
+  './vendor/zxing.min.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-192.png',

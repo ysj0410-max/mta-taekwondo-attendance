@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=39"></script>
-<script src="firebase-sync-ui.js?v=39"></script>
+<script src="firebase-sync.js?v=40"></script>
+<script src="firebase-sync-ui.js?v=40"></script>
 <title>경희대MTA태권도 · AI 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -230,6 +230,51 @@
   .cam-bar{flex:0 0 auto; display:flex; align-items:center; gap:9px; padding:0 14px 13px}
   .cam-status{font-size:11.5px; color:var(--muted); font-weight:600; line-height:1.45}
   .cam-status b{color:var(--navy)}
+
+  /* ---------- v40 출석 인식 방식 (얼굴 / 바코드) ---------- */
+  .mode-bar{flex:0 0 auto; display:flex; align-items:center; gap:9px; padding:11px 14px 0}
+  .mode-switch{display:flex; gap:3px; padding:3px; background:#eef3fb; border:1px solid var(--line); border-radius:12px; flex:0 0 auto}
+  .ms-btn{
+    border:0; background:transparent; color:var(--muted); font-weight:800; font-size:12px;
+    padding:7px 12px; border-radius:9px; cursor:pointer; white-space:nowrap; letter-spacing:-.3px;
+    font-family:inherit; transition:background .13s, box-shadow .13s;
+  }
+  .ms-btn.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.12)}
+  .ms-btn:active{transform:translateY(1px)}
+  .mode-note{font-size:11.5px; color:var(--muted); font-weight:600; line-height:1.35; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  /* 바코드 모드에서는 AI 얼굴 박스·시뮬레이션 버튼을 쓰지 않는다 */
+  body.barcode-mode #face-overlay{display:none}
+  body.barcode-mode #btn-pick-sim, body.barcode-mode #btn-random-sim{display:none}
+
+  /* 카메라 위 바코드 조준 가이드 */
+  .barcode-guide{
+    position:absolute; inset:0; z-index:3; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:11px; padding:18px; text-align:center; pointer-events:none;
+  }
+  body.barcode-mode .barcode-guide{display:flex}
+  .bg-frame{
+    position:relative; width:min(80%,430px); height:clamp(74px,13vh,110px);
+    border:2px dashed rgba(142,245,213,.7); border-radius:14px; background:rgba(8,20,40,.16);
+  }
+  .bg-line{
+    position:absolute; left:6%; right:6%; top:50%; height:3px; border-radius:2px; transform:translateY(-50%);
+    background:linear-gradient(90deg,transparent,#8ef5d5,transparent); box-shadow:0 0 14px #8ef5d5;
+    animation:barcodeAim 2.4s ease-in-out infinite;
+  }
+  @keyframes barcodeAim{0%,100%{opacity:.35}50%{opacity:1}}
+  .bg-text{font-size:13px; font-weight:800; color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.55)}
+  .bg-sub{font-size:11px; font-weight:600; color:rgba(255,255,255,.62)}
+  .barcode-last{
+    position:absolute; left:12px; top:12px; z-index:4; display:none; align-items:center; gap:7px;
+    max-width:calc(100% - 24px); padding:7px 12px; border-radius:999px; font-size:12px; font-weight:800;
+    color:#04251a; background:#8ef5d5; box-shadow:0 6px 18px rgba(0,0,0,.28); white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+  .barcode-last.show{display:flex}
+  .barcode-last.bad{background:#f6c343; color:#3a2a00}
+  .barcode-last code{font-size:11px; font-weight:700; opacity:.72}
+  .code-input-row{display:flex; gap:7px; margin-top:2px}
+  .code-input-row .search-input{flex:1 1 auto; min-width:0}
 
   .btn{
     border:1px solid var(--line); background:#fff; color:var(--navy); font-weight:800; font-size:12.5px;
@@ -1236,6 +1281,14 @@
     .cam-bar{flex-wrap:wrap; gap:6px; padding:7px 9px 9px}
     .cam-status{flex:1 1 100%; font-size:10px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
     .cam-bar .btn{flex:1 1 auto; min-width:0; padding:8px 6px; font-size:11px; border-radius:10px; min-height:38px; letter-spacing:-.3px}
+    /* v40 인식 방식 전환 — 폰에서는 카메라 바로 위 한 줄 */
+    .mode-bar{padding:6px 9px 0; gap:6px}
+    .ms-btn{font-size:10.5px; padding:6px 9px; border-radius:8px}
+    .mode-note{display:none}
+    .bg-frame{height:clamp(62px,9dvh,86px)}
+    .bg-text{font-size:11.5px}
+    .bg-sub{display:none}
+    .barcode-last{left:7px; top:7px; font-size:10.5px; padding:5px 9px}
 
     /* 터치 출석 카드: 키패드가 한 손에 닿는 크기로 */
     .touch-card{flex:0 0 auto; min-height:0}
@@ -1397,15 +1450,29 @@
           <span class="ai-chip loading" id="ai-state">AI 모델 준비 중…</span>
         </div>
 
+        <div class="mode-bar" id="mode-bar">
+          <div class="mode-switch" role="group" aria-label="출석 인식 방식">
+            <button type="button" class="ms-btn active" id="km-face" data-kmode="face" aria-pressed="true" title="카메라에 얼굴을 비추면 자동 출석">🙂 얼굴인식</button>
+            <button type="button" class="ms-btn" id="km-barcode" data-kmode="barcode" aria-pressed="false" title="출석 카드의 바코드를 비추면 자동 출석 (얼굴인식 꺼짐)">📷 바코드</button>
+          </div>
+          <span class="mode-note" id="mode-note">얼굴을 비추면 등원 처리</span>
+        </div>
+
         <div class="stage" id="camera-stage">
           <video id="camera-video" autoplay muted playsinline></video>
           <div class="stage-ph" id="stage-ph">
             <div class="ph-icon">📷</div>
-            <p>카메라를 연결하거나 <b>관원 선택 인식</b>으로<br>AI 얼굴인식을 체험해 보세요</p>
-            <div class="ph-sub">웹캠이 없어도 시뮬레이션으로 그대로 테스트할 수 있어요</div>
+            <p id="stage-ph-text">카메라를 연결하거나 <b>관원 선택 인식</b>으로<br>AI 얼굴인식을 체험해 보세요</p>
+            <div class="ph-sub" id="stage-ph-sub">웹캠이 없어도 시뮬레이션으로 그대로 테스트할 수 있어요</div>
           </div>
           <div class="scanline"></div>
           <canvas id="face-overlay" aria-hidden="true"></canvas>
+          <div class="barcode-guide" id="barcode-guide" aria-hidden="true">
+            <div class="bg-frame"><div class="bg-line"></div></div>
+            <div class="bg-text">📷 바코드를 카메라에 비춰주세요</div>
+            <div class="bg-sub">출석 카드의 바코드를 가이드 안에 맞춰 주세요</div>
+          </div>
+          <div class="barcode-last" id="barcode-last"></div>
           <div class="bbox" id="bbox">
             <span class="corner c1"></span><span class="corner c2"></span>
             <span class="corner c3"></span><span class="corner c4"></span>
@@ -1435,6 +1502,7 @@
           <div class="touch-tabs">
             <button class="touch-tab active" data-touch="pin" id="tt-pin">🔢 뒷번호 4자리</button>
             <button class="touch-tab" data-touch="name" id="tt-name">🔍 이름·초성 검색</button>
+            <button class="touch-tab" data-touch="code" id="tt-code">📷 바코드 번호</button>
           </div>
 
           <div class="touch-body">
@@ -1463,6 +1531,18 @@
             <div id="touch-name" style="display:none">
               <input class="search-input" id="name-search" placeholder="이름 또는 초성으로 검색 (예: ㄱㅁㅈ)" autocomplete="off">
               <div class="stu-list" id="stu-list"></div>
+            </div>
+
+            <div id="touch-code" style="display:none">
+              <div class="code-input-row">
+                <input class="search-input" id="code-input" placeholder="바코드 번호 (예: 9879201808)" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="바코드 번호 직접입력">
+              </div>
+              <div class="form-actions" style="margin-top:8px">
+                <button class="btn btn-primary" id="btn-code-submit">출석 처리</button>
+                <button class="btn btn-sm" id="btn-code-clear">지우기</button>
+              </div>
+              <div class="cand-list" id="code-result"></div>
+              <div class="tiny-note" id="code-hint" style="margin-top:8px; line-height:1.5">카메라 인식이 안 될 때 출석 카드의 번호를 그대로 넣어도 됩니다.</div>
             </div>
           </div>
         </div>
@@ -1590,8 +1670,16 @@
               </div>
 
               <div class="panel">
-                <div class="panel-head"><h3>🧠 AI 얼굴인식 설정</h3><div class="spacer"></div><span class="chip" id="ai-admin-state">확인 중…</span></div>
+                <div class="panel-head"><h3>🧠 출석 인식 설정 (얼굴 · 바코드)</h3><div class="spacer"></div><span class="chip" id="ai-admin-state">확인 중…</span></div>
                 <div class="panel-body">
+                  <div class="field">
+                    <label>출석 인식 방식</label>
+                    <select class="input" id="kiosk-mode" aria-label="출석 인식 방식">
+                      <option value="face">🙂 얼굴인식 — 카메라에 얼굴을 비추면 자동 등원/하원</option>
+                      <option value="barcode">📷 바코드 인식 — 출석 카드 바코드를 비추면 자동 등원/하원</option>
+                    </select>
+                  </div>
+                  <div class="tiny-note" style="margin:-2px 0 11px; line-height:1.55">바코드 인식 모드에서는 <b>AI 얼굴인식이 완전히 꺼집니다</b>(카메라에 얼굴이 비쳐도 얼굴로 출석되지 않습니다). 출석 화면 위쪽 <b>🙂 얼굴인식 / 📷 바코드</b> 버튼으로도 바로 바꿀 수 있어요. 원생관리 파일의 <b>번호</b> 열이 그대로 바코드 번호로 들어옵니다.</div>
                   <div class="field">
                     <label>일치 판정 거리 (낮을수록 엄격 · 기본 0.48)</label>
                     <div class="range-row">
@@ -1642,7 +1730,7 @@
                 <button class="pchip active" data-sfilter="active" id="sf-active">재원생</button>
                 <button class="pchip" data-sfilter="paused" id="sf-paused">휴관생</button>
                 <button class="pchip" data-sfilter="all" id="sf-all">전체</button>
-                <input class="input" id="stu-q" type="search" placeholder="🔍 이름·초성·전화·부모 성함" autocomplete="off" spellcheck="false" aria-label="재원생 명단 이름·초성·전화·부모 성함 검색">
+                <input class="input" id="stu-q" type="search" placeholder="🔍 이름·초성·전화·부모 성함·바코드" autocomplete="off" spellcheck="false" aria-label="재원생 명단 이름·초성·전화·부모 성함·바코드 번호 검색">
                 <div class="spacer"></div>
                 <select class="input mon-select" id="stu-sort" aria-label="원생 명단 정렬 방식" title="명단 정렬 — 띠는 「띠 체계 설정」 순서대로">
                   <option value="name">이름순 (가나다)</option>
@@ -1721,6 +1809,12 @@
                     <div class="field"><label>티콘 ID <span style="font-weight:600;color:#8a94a6">(국기원 심사접수용)</span></label><input class="input" id="f-tcon" type="text" maxlength="40" placeholder="예: tkd_minjun" autocomplete="off" spellcheck="false" aria-label="티콘 ID"></div>
                   </div>
                   <div class="tiny-note" style="margin:-2px 0 10px; line-height:1.55">생년월일·티콘 ID는 국기원 심사접수에 쓰는 정보예요. <b>관리자 화면에만</b> 보이고 출석 키오스크·공개 안내에는 표시되지 않습니다.</div>
+                  <div class="row2">
+                    <div class="field"><label>바코드 번호 <span style="font-weight:600;color:#8a94a6">(출석 카드 · 원생관리 「번호」)</span></label><input class="input" id="f-barcode" type="text" maxlength="40" placeholder="예: 9879201808" autocomplete="off" spellcheck="false" inputmode="numeric" aria-label="바코드 번호"></div>
+                    <div class="field"><label>바코드로 출석 <span style="font-weight:600;color:#8a94a6">(출석 화면 → 📷 바코드)</span></label>
+                      <div class="tiny-note" style="padding:9px 0 0; line-height:1.5">출석 화면 위쪽 <b>📷 바코드</b>를 고르면 카메라가 이 번호를 읽어 등원/하원 처리합니다.</div>
+                    </div>
+                  </div>
                   <div class="row2">
                     <div class="field"><label>월 원비 (원) · 자동 계산</label><input class="input" id="f-fee" type="number" min="0" step="1000" inputmode="numeric" placeholder="수업을 고르면 자동" data-auto="1"></div>
                     <div class="field"><label>형제 할인</label>
@@ -3363,6 +3457,7 @@
   var DEFAULT_SETTINGS = {
     dojoName: '경희대MTA태권도',
     mode: 'in',
+    kioskMode: 'face',
     promotionThreshold: 20,
     examDate: '',
     examTime: '10:00',
@@ -3717,6 +3812,9 @@
     if (tcon && tcon.indexOf(lq) !== -1) { return true; }
     var note = String(noteOf(student) || '').replace(/\s+/g, '').toLowerCase();
     if (note && note.indexOf(lq) !== -1) { return true; }
+    /* v40 — 바코드 번호로도 찾는다 (대소문자 구분 없이) */
+    var bc = barcodeOf(student);
+    if (bc && bc.indexOf(String(q).toUpperCase()) !== -1) { return true; }
     return false;
   }
 
@@ -3845,6 +3943,8 @@
     if (!app.settings.examTime) { app.settings.examTime = '10:00'; }
     if (!app.settings.examPlace) { app.settings.examPlace = DEFAULT_SETTINGS.examPlace; }
     if (app.settings.mode !== 'out') { app.settings.mode = 'in'; }
+    // v40 — 출석 인식 방식 (face 얼굴인식 · barcode 바코드 인식)
+    if (app.settings.kioskMode !== 'barcode') { app.settings.kioskMode = 'face'; }
 
     // 띠 체계(순서·이름·색상·급수·기준) 복원
     var rawBelts = (settings && Array.isArray(settings.belts)) ? settings.belts : null;
@@ -4372,6 +4472,7 @@
     el('mode-in').classList.toggle('active', app.settings.mode === 'in');
     el('mode-out').classList.toggle('active', app.settings.mode === 'out');
     refreshAiHint();
+    renderKioskModeUI();
     tickClock();
     renderStudentsList();
     toast(app.settings.mode === 'in' ? '등원 모드로 전환했어요' : '하원 모드로 전환했어요');
@@ -5078,7 +5179,7 @@
     setAttendance(student.id, todayKey(now), {
       inTime: rec.in || '',
       outTime: rec.out || '',
-      src: source === 'ai' ? 'ai' : 'touch'
+      src: source === 'ai' ? 'ai' : (source === 'barcode' ? 'barcode' : 'touch')
     });
     saveAttendance();
     var logEntry = addLog(student, mode, timeStr, { onStatus: refreshBanner });
@@ -5113,6 +5214,16 @@
       if (p && p.catch) { p.catch(function () {}); }
       document.body.classList.add('cam-live');
       ai.lastStatus = '';
+      if (isBarcodeMode()) {
+        setCamStatus('웹캠 LIVE · 출석 카드 바코드를 비춰 주세요');
+        el('cam-head-note').textContent = '웹캠 연결됨';
+        el('btn-camera').textContent = '📷 카메라 끄기';
+        el('stage-tip').textContent = 'BARCODE · LIVE';
+        refreshAiHint();
+        startBarcodeLoop();
+        toast('카메라가 연결됐어요. 출석 카드의 바코드를 비추면 자동으로 출석 처리됩니다.');
+        return;
+      }
       setCamStatus('웹캠 LIVE · 얼굴을 비춰 주세요');
       el('cam-head-note').textContent = '웹캠 연결됨';
       el('btn-camera').textContent = '📷 카메라 끄기';
@@ -5143,7 +5254,7 @@
     setCamStatus('웹캠 대기');
     el('cam-head-note').textContent = '시뮬레이션 모드';
     el('btn-camera').textContent = '📷 카메라 연결';
-    el('stage-tip').textContent = 'AI ENGINE · READY';
+    el('stage-tip').textContent = isBarcodeMode() ? 'BARCODE · READY' : 'AI ENGINE · READY';
     refreshAiHint();
   }
 
@@ -5248,11 +5359,24 @@
 
   function setAiState(state, text) {
     ai.state = state;
-    var chip = el('ai-state');
-    if (chip) { chip.className = 'ai-chip ' + state; chip.textContent = text; }
-    var admin = el('ai-admin-state');
-    if (admin) { admin.className = 'chip ' + (state === 'ready' ? 'ok' : state === 'offline' ? 'off' : 'wait'); admin.textContent = text; }
+    renderAiChip();
     refreshAiHint();
+  }
+  /* AI 상태 칩 — 바코드 모드에서는 「얼굴인식 꺼짐」으로 표시한다 */
+  function renderAiChip() {
+    var chip = el('ai-state');
+    var admin = el('ai-admin-state');
+    var barcodeOn = isBarcodeMode();
+    var state = barcodeOn ? 'ready' : ai.state;
+    var text = barcodeOn ? '바코드 인식 · 얼굴인식 꺼짐'
+      : ai.state === 'ready' ? 'AI 얼굴인식 준비 완료'
+      : ai.state === 'loading' ? 'AI 모델 준비 중…'
+      : ai.state === 'offline' ? '오프라인 · 터치/시뮬레이션' : 'AI 대기';
+    if (chip) { chip.className = 'ai-chip ' + (state === 'idle' ? 'loading' : state); chip.textContent = text; }
+    if (admin) {
+      admin.className = 'chip ' + (state === 'ready' ? 'ok' : state === 'offline' ? 'off' : 'wait');
+      admin.textContent = text;
+    }
   }
 
   function faceCount() {
@@ -5485,6 +5609,9 @@
   }
 
   function initFaceAI() {
+    /* v40 — 바코드 모드에서는 무거운 얼굴 모델을 내려받지도 않는다 */
+    if (isBarcodeMode()) { ai.state = 'idle'; renderAiChip(); return; }
+    if (ai.state === 'loading') { return; }
     setAiState('loading', 'AI 모델 준비 중…');
     waitFaceLib().then(function (fa) {
       ai.lib = fa;
@@ -5541,7 +5668,9 @@
   }
 
   function startFaceLoop() {
-    if (ai.loopTimer) { clearInterval(ai.loopTimer); }
+    if (ai.loopTimer) { clearInterval(ai.loopTimer); ai.loopTimer = null; }
+    /* v40 — 바코드 인식 모드에서는 얼굴인식 루프를 만들지 않는다 (카메라에 얼굴이 비쳐도 출석 없음) */
+    if (isBarcodeMode()) { return; }
     ai.loopTimer = setInterval(faceLoopTick, FACE_LOOP_MS);
   }
 
@@ -5552,6 +5681,8 @@
   }
 
   function faceLoopTick() {
+    /* v40 — 바코드 모드: AI 얼굴인식(detectAllFaces)을 0회로 만든다 */
+    if (isBarcodeMode()) { return; }
     if (!ai.ready || ai.detecting || app.busy || ai.suppress) { return; }
     if (!app.cameraStream) { return; }
     if (typeof document.hidden !== 'undefined' && document.hidden) { return; }
@@ -5571,6 +5702,8 @@
   }
 
   function handleKioskFaces(results, video) {
+    /* v40 — 바코드 모드에서는 얼굴 결과를 아예 처리하지 않는다(이중 안전장치) */
+    if (isBarcodeMode()) { return; }
     var items = [];
     var matched = null;
     var pendingName = '';
@@ -6008,10 +6141,351 @@
     });
   }
 
+  /* =========================================================
+     10-C. 출석 인식 방식 — 얼굴인식 / 바코드 (v40)
+     ---------------------------------------------------------
+     · app.settings.kioskMode = 'face' | 'barcode' (기본 face)
+     · barcode 모드에서는 AI 얼굴인식 루프를 만들지도, 돌리지도 않는다
+       → 카메라에 얼굴이 비쳐도 detectAllFaces 호출 0회 · 얼굴 출석 절대 없음
+     ========================================================= */
+  var KIOSK_MODE_FACE = 'face';
+  var KIOSK_MODE_BARCODE = 'barcode';
+
+  function kioskMode() {
+    var m = app.settings ? app.settings.kioskMode : '';
+    return m === KIOSK_MODE_BARCODE ? KIOSK_MODE_BARCODE : KIOSK_MODE_FACE;
+  }
+  function isBarcodeMode() { return kioskMode() === KIOSK_MODE_BARCODE; }
+  function kioskModeLabel(m) { return (m === KIOSK_MODE_BARCODE) ? '바코드 인식' : '얼굴인식'; }
+
+  /* 얼굴인식 루프를 완전히 멈춘다 — 타이머까지 지운다 */
+  function stopFaceLoop() {
+    if (ai.loopTimer) { clearInterval(ai.loopTimer); ai.loopTimer = null; }
+  }
+
+  function setKioskMode(mode, opts) {
+    opts = opts || {};
+    var next = (mode === KIOSK_MODE_BARCODE) ? KIOSK_MODE_BARCODE : KIOSK_MODE_FACE;
+    if (!app.settings) { return KIOSK_MODE_FACE; }
+    var prev = kioskMode();
+    app.settings.kioskMode = next;
+    if (!opts.silent) { saveSettings(); }
+    if (next === KIOSK_MODE_BARCODE) {
+      stopFaceLoop();
+      ai.suppress = false;
+      clearFaceOverlay();
+      startBarcodeLoop();
+    } else {
+      stopBarcodeLoop();
+      barcodeClearLast();
+      if (!ai.ready && ai.state !== 'loading') { initFaceAI(); }
+      else if (ai.ready) { ai.state = 'ready'; }
+      startFaceLoop();
+    }
+    renderKioskModeUI();
+    if (!opts.quiet && prev !== next) {
+      toast(next === KIOSK_MODE_BARCODE
+        ? '바코드 인식 모드로 바꿨어요 · 얼굴인식은 꺼집니다'
+        : '얼굴인식 모드로 바꿨어요');
+    }
+    return next;
+  }
+
+  function renderKioskModeUI() {
+    if (!app.settings) { return; }
+    var on = isBarcodeMode();
+    var modeTxt = app.settings.mode === 'out' ? '하원' : '등원';
+    if (document.body && document.body.classList) { document.body.classList.toggle('barcode-mode', on); }
+    var fb = el('km-face'), cb = el('km-barcode');
+    if (fb) { fb.classList.toggle('active', !on); fb.setAttribute('aria-pressed', on ? 'false' : 'true'); }
+    if (cb) { cb.classList.toggle('active', on); cb.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    var note = el('mode-note');
+    if (note) {
+      note.textContent = on
+        ? '출석 카드 바코드를 비추면 ' + modeTxt + ' 처리'
+        : (faceCount() > 0 ? '얼굴을 비추면 ' + modeTxt + ' 처리' : '얼굴 등록 후 자동 인식');
+    }
+    var sel = el('kiosk-mode');
+    if (sel && document.activeElement !== sel) { sel.value = on ? KIOSK_MODE_BARCODE : KIOSK_MODE_FACE; }
+    var ph = el('stage-ph-text'), phSub = el('stage-ph-sub');
+    if (ph) {
+      ph.innerHTML = on
+        ? '카메라를 연결하고 <b>출석 카드의 바코드</b>를<br>가이드 안에 비춰 주세요'
+        : '카메라를 연결하거나 <b>관원 선택 인식</b>으로<br>AI 얼굴인식을 체험해 보세요';
+    }
+    if (phSub) {
+      phSub.textContent = on
+        ? '카메라가 없으면 「📷 바코드 번호」에 직접 넣어도 됩니다'
+        : '웹캠이 없어도 시뮬레이션으로 그대로 테스트할 수 있어요';
+    }
+    var tip = el('stage-tip');
+    if (tip) {
+      var live = !!app.cameraStream;
+      tip.textContent = on ? (live ? 'BARCODE · LIVE' : 'BARCODE · READY') : (live ? 'AI ENGINE · LIVE' : 'AI ENGINE · READY');
+    }
+    renderAiChip();
+    refreshAiHint();
+  }
+
+  /* =========================================================
+     10-D. 카메라 바코드 인식 엔진 (v40)
+     ---------------------------------------------------------
+     · 네이티브 BarcodeDetector (Android Chrome · 삼성 인터넷) 먼저 사용
+     · 없으면 저장소에 함께 넣은 ZXing(vendor/zxing.min.js)으로 폴백
+       → 외부 CDN 없이 오프라인/PWA 에서도 동작
+     ========================================================= */
+  var BARCODE_LOOP_MS = 320;         /* 화면 확인 주기 (약 3초에 10번) */
+  var BARCODE_COOLDOWN_MS = 6000;    /* 같은 바코드 연속 인식 막기 */
+  var BARCODE_VENDOR_URL = 'vendor/zxing.min.js';
+  var BARCODE_LAST_MS = 4000;
+  /* BarcodeDetector 가 읽는 형식 — 출석 카드(Code128/EAN)·QR 모두 포함 */
+  var BARCODE_FORMATS = ['code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'itf',
+    'codabar', 'upc_a', 'upc_e', 'qr_code', 'data_matrix', 'pdf417'];
+
+  var barcode = {
+    engine: '',            /* 'native' | 'zxing' | '' */
+    detector: null,
+    reader: null,
+    formats: [],
+    timer: null,
+    busy: false,
+    trying: false,
+    error: '',
+    vendorPromise: null,
+    lastAt: {},            /* 코드 → 마지막 인식 ms (쿨다운) */
+    lastCode: '',
+    lastStudentId: '',
+    lastHitAt: 0,
+    lastUnknownAt: 0,
+    ticks: 0,
+    lastElTimer: null
+  };
+
+  function barcodeNativeSupported() {
+    return typeof window !== 'undefined' && typeof window.BarcodeDetector === 'function';
+  }
+  function barcodeEngineName() { return barcode.engine || ''; }
+
+  /* 엔진 준비 — 네이티브 → ZXing 순. 실패해도 예외를 밖으로 던지지 않는다 */
+  function initBarcodeEngine() {
+    if (barcode.engine && (barcode.detector || barcode.reader)) { return Promise.resolve(barcode.engine); }
+    var useNative = barcodeNativeSupported() ? tryNativeDetector() : Promise.resolve(false);
+    return useNative.then(function (ok) {
+      if (ok) { return 'native'; }
+      return loadBarcodeVendor().then(function (zx) {
+        barcode.reader = new zx.BrowserMultiFormatReader(null, 500);
+        barcode.engine = 'zxing';
+        barcode.error = '';
+        return 'zxing';
+      }).catch(function (err) {
+        barcode.engine = '';
+        barcode.error = String((err && (err.message || err)) || err);
+        return '';
+      });
+    });
+  }
+
+  function tryNativeDetector() {
+    var BD = window.BarcodeDetector;
+    var make = function (list) {
+      var fmts = (Array.isArray(list) ? list : []).filter(function (f) { return BARCODE_FORMATS.indexOf(f) !== -1; });
+      try {
+        barcode.detector = fmts.length ? new BD({ formats: fmts }) : new BD();
+        barcode.formats = fmts;
+        barcode.engine = 'native';
+        barcode.error = '';
+        return true;
+      } catch (e) {
+        barcode.detector = null;
+        barcode.error = String((e && e.message) || e);
+        return false;
+      }
+    };
+    if (typeof BD.getSupportedFormats === 'function') {
+      return Promise.resolve(BD.getSupportedFormats()).then(function (list) { return make(list); },
+        function () { return make(null); });
+    }
+    return Promise.resolve(make(null));
+  }
+
+  /* ZXing 폴백 — 같은 저장소의 파일을 그때 불러온다(외부 CDN 없음) */
+  function loadBarcodeVendor() {
+    if (window.ZXing && window.ZXing.BrowserMultiFormatReader) { return Promise.resolve(window.ZXing); }
+    if (barcode.vendorPromise) { return barcode.vendorPromise; }
+    barcode.vendorPromise = new Promise(function (resolve, reject) {
+      var doc = (typeof document !== 'undefined') ? document : null;
+      if (!doc || !doc.createElement) { reject(new Error('no-document')); return; }
+      var sc = doc.createElement('script');
+      sc.src = BARCODE_VENDOR_URL;
+      sc.async = true;
+      sc.onload = function () {
+        if (window.ZXing && window.ZXing.BrowserMultiFormatReader) { resolve(window.ZXing); }
+        else { reject(new Error('vendor-broken')); }
+      };
+      sc.onerror = function () { reject(new Error('vendor-load')); };
+      var host = doc.head || doc.body;
+      if (!host || !host.appendChild) { reject(new Error('no-head')); return; }
+      host.appendChild(sc);
+    });
+    barcode.vendorPromise.catch(function () { barcode.vendorPromise = null; });
+    return barcode.vendorPromise;
+  }
+
+  /* 화면 한 장에서 바코드 읽기 → [{ raw: '9879201808' }] */
+  function barcodeDetectFrom(video) {
+    if (!video) { return Promise.resolve([]); }
+    if (barcode.engine === 'native' && barcode.detector) {
+      var p;
+      try { p = barcode.detector.detect(video); } catch (e) { return Promise.resolve([]); }
+      return Promise.resolve(p).then(function (list) {
+        return (list || []).map(function (c) {
+          return { raw: String((c && (c.rawValue != null ? c.rawValue : c.raw)) || '') };
+        }).filter(function (x) { return !!x.raw; });
+      }, function () { return []; });
+    }
+    if (barcode.engine === 'zxing' && barcode.reader) {
+      try {
+        var res = barcode.reader.decode(video);
+        var text = '';
+        if (res) { text = (typeof res.getText === 'function') ? String(res.getText() || '') : String(res.text || ''); }
+        return Promise.resolve(text ? [{ raw: text }] : []);
+      } catch (e) {
+        /* NotFoundException = 이번 화면에 바코드가 없음 → 조용히 넘어간다 */
+        return Promise.resolve([]);
+      }
+    }
+    return Promise.resolve([]);
+  }
+
+  function stopBarcodeLoop() {
+    if (barcode.timer) { clearInterval(barcode.timer); barcode.timer = null; }
+  }
+  function startBarcodeLoop() {
+    stopBarcodeLoop();
+    if (!isBarcodeMode()) { return; }
+    barcode.timer = setInterval(barcodeLoopTick, BARCODE_LOOP_MS);
+    /* 엔진은 뒤에서 준비 — 준비되는 동안에도 화면은 그대로 쓸 수 있다 */
+    initBarcodeEngine().then(function (eng) {
+      if (!isBarcodeMode()) { return; }
+      if (!eng) { setCamStatus('이 브라우저는 카메라 바코드 인식을 지원하지 않아요 · 「📷 바코드 번호」로 출석해 주세요'); }
+    });
+  }
+
+  function barcodeLoopTick() {
+    if (!isBarcodeMode()) { return; }
+    if (barcode.busy) { return; }
+    barcode.ticks++;
+    if (!app.cameraStream) { return; }
+    if (typeof document !== 'undefined' && document.hidden) { return; }
+    if (app.busy) { return; }
+    var video = el('camera-video');
+    if (!video || !video.videoWidth) { return; }
+    var modal = el('modal-root');
+    if (modal && modal.classList.contains('open')) { return; }
+    if (!barcode.engine) {
+      if (!barcode.trying) {
+        barcode.trying = true;
+        initBarcodeEngine().then(function (eng) {
+          barcode.trying = false;
+          if (eng && isBarcodeMode()) { setCamStatus('바코드 인식 준비 완료 · 카드를 비춰 주세요'); }
+        });
+      }
+      return;
+    }
+    barcode.busy = true;
+    barcodeDetectFrom(video).then(function (codes) {
+      barcode.busy = false;
+      if (!isBarcodeMode()) { return; }
+      if (!codes || !codes.length) { return; }
+      handleBarcodeScan(codes[0].raw);
+    }, function () { barcode.busy = false; });
+  }
+
+  /* 인식된 바코드 한 건 처리 — 등원/하원 + 효과음 + 토스트 + 문자 큐(얼굴인식과 동일) */
+  function handleBarcodeScan(raw, opts) {
+    opts = opts || {};
+    var code = normalizeBarcode(raw);
+    if (!code) { return { ok: false, reason: 'empty' }; }
+    var now = Date.now();
+    if (!opts.force && barcode.lastAt[code] && (now - barcode.lastAt[code]) < BARCODE_COOLDOWN_MS) {
+      return { ok: false, reason: 'cooldown', code: code };
+    }
+    var list = findStudentsByBarcode(code);
+    if (!list.length) {
+      barcode.lastAt[code] = now;
+      barcode.lastUnknownAt = now;
+      playError();
+      toast('등록되지 않은 바코드예요 (' + code + ')');
+      showBarcodeLast('', code, false);
+      setCamStatus('등록되지 않은 바코드예요 (' + code + ')');
+      return { ok: false, reason: 'unknown', code: code };
+    }
+    var student = findStudentByBarcode(code) || list[0];
+    barcode.lastAt[code] = now;
+    barcode.lastCode = code;
+    barcode.lastStudentId = student.id;
+    barcode.lastHitAt = now;
+    var modeTxt = app.settings.mode === 'out' ? '하원' : '등원';
+    showBarcodeLast(student.name, code, true);
+    setCamStatus(student.name + ' · 바코드 인식 · ' + modeTxt);
+    checkIn(student, 'barcode');
+    return { ok: true, code: code, studentId: student.id, name: student.name, mode: app.settings.mode };
+  }
+
+  function showBarcodeLast(name, code, ok) {
+    var box = el('barcode-last');
+    if (!box) { return; }
+    box.className = 'barcode-last show' + (ok ? '' : ' bad');
+    box.innerHTML = ok
+      ? '<span>✅ ' + esc(name) + ' · ' + (app.settings.mode === 'out' ? '하원' : '등원') + '</span><code>' + esc(code) + '</code>'
+      : '<span>⚠️ 미등록 바코드</span><code>' + esc(code) + '</code>';
+    if (barcode.lastElTimer) { clearTimeout(barcode.lastElTimer); }
+    barcode.lastElTimer = setTimeout(function () {
+      barcode.lastElTimer = null;
+      var b = el('barcode-last');
+      if (b) { b.className = 'barcode-last'; b.innerHTML = ''; }
+    }, BARCODE_LAST_MS);
+  }
+  function barcodeClearLast() {
+    if (barcode.lastElTimer) { clearTimeout(barcode.lastElTimer); barcode.lastElTimer = null; }
+    var box = el('barcode-last');
+    if (box) { box.className = 'barcode-last'; box.innerHTML = ''; }
+    barcode.lastCode = '';
+    barcode.lastStudentId = '';
+  }
+
+  /* 「📷 바코드 번호」 보조 입력 — 카메라 없이도 출석 */
+  function submitBarcodeInput() {
+    var input = el('code-input');
+    var raw = input ? input.value : '';
+    var code = normalizeBarcode(raw);
+    var out = el('code-result');
+    if (!code) {
+      playError();
+      toast('바코드 번호를 입력해 주세요.');
+      if (out) { out.innerHTML = '<div class="tiny-note" style="color:#c0392b;text-align:center;margin-top:6px">바코드 번호를 입력해 주세요</div>'; }
+      return null;
+    }
+    var res = handleBarcodeScan(code, { force: true });
+    if (input) { input.value = ''; }
+    if (out) {
+      out.innerHTML = (res && res.ok)
+        ? '<div class="tiny-note" style="color:#0b7a55;text-align:center;margin-top:6px">✅ ' + esc(res.name) + ' · ' +
+          (res.mode === 'out' ? '하원' : '등원') + ' 처리했어요</div>'
+        : '<div class="tiny-note" style="color:#c0392b;text-align:center;margin-top:6px">' +
+          (res && res.reason === 'unknown' ? '등록되지 않은 바코드예요 (' + esc(code) + ')' : '출석 처리하지 못했어요') + '</div>';
+    }
+    return res;
+  }
+
   function refreshAiHint() {
     var help = el('cam-help');
     if (!help) { return; }
     var modeTxt = app.settings.mode === 'in' ? '등원' : '하원';
+    if (isBarcodeMode()) {
+      help.innerHTML = '출석 카드의 <b>바코드</b>를 카메라에 비추면 자동으로 <b>' + modeTxt + '</b> 처리합니다. 카메라가 없으면 <b>📷 바코드 번호</b>에 직접 넣어도 됩니다.';
+      return;
+    }
     if (ai.ready && faceCount() > 0) {
       help.innerHTML = '카메라 앞에 서면 등록된 관원을 자동 인식해 <b>' + modeTxt + '</b> 처리합니다. 인식이 안 되면 터치로 출석하세요.';
     } else if (ai.ready) {
@@ -6187,6 +6661,25 @@
     return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
   }
   function noteOf(s) { return (s && s.note) ? String(s.note) : ''; }
+  /* v40 — 바코드 번호(출석 카드).
+     · 앞뒤·중간 공백을 지우고 영문은 대문자로 맞춰 비교한다(대소문자 구분 없이)
+     · 원생관리 파일의 「번호」 열(예: 9879201808)이 그대로 들어온다 */
+  function normalizeBarcode(v) {
+    return String(v == null ? '' : v).replace(/\s+/g, '').toUpperCase().slice(0, 40);
+  }
+  function barcodeOf(s) { return normalizeBarcode(s && s.barcode); }
+  /* 같은 번호를 쓰는 관원 — 재원생이 여럿이면 번호가 중복된 것이므로 첫 재원생을 쓴다 */
+  function findStudentsByBarcode(raw) {
+    var code = normalizeBarcode(raw);
+    if (!code) { return []; }
+    return (app.students || []).filter(function (x) { return barcodeOf(x) === code; });
+  }
+  function findStudentByBarcode(raw) {
+    var list = findStudentsByBarcode(raw);
+    if (!list.length) { return null; }
+    for (var i = 0; i < list.length; i++) { if (!isPaused(list[i])) { return list[i]; } }
+    return list[0];
+  }
   /* 관원의 「원비 날짜」 = 매달 원비 내는 날(1~31). 예전 YYYY-MM-DD 값은 일자만 뽑아 쓴다 */
   function tuitionDayOf(s) {
     if (!s) { return 0; }
@@ -6384,6 +6877,8 @@
   }
 
   function renderFaceAdmin() {
+    var sel = el('kiosk-mode');
+    if (sel && document.activeElement !== sel) { sel.value = isBarcodeMode() ? KIOSK_MODE_BARCODE : KIOSK_MODE_FACE; }
     var f = app.settings.face || DEFAULT_SETTINGS.face;
     var range = el('face-threshold');
     if (range && document.activeElement !== range) { range.value = String(f.threshold); }
@@ -6562,6 +7057,7 @@
     if (el('f-firstreg')) { el('f-firstreg').value = todayKey(); }
     if (el('f-birth')) { el('f-birth').value = ''; }
     if (el('f-tcon')) { el('f-tcon').value = ''; }
+    if (el('f-barcode')) { el('f-barcode').value = ''; }
     renderTuitionDayOptions(0);
     el('f-grade').value = '';
     el('f-fee').value = '';
@@ -6595,6 +7091,7 @@
     if (el('f-firstreg')) { el('f-firstreg').value = firstRegOf(s); }
     if (el('f-birth')) { el('f-birth').value = birthOf(s); }
     if (el('f-tcon')) { el('f-tcon').value = tconOf(s); }
+    if (el('f-barcode')) { el('f-barcode').value = barcodeOf(s); }
     renderTuitionDayOptions(tuitionDayOf(s));
     el('f-grade').value = s.grade || '';
     el('f-fee').value = (s.monthlyFee == null ? '' : String(s.monthlyFee));
@@ -6665,6 +7162,15 @@
       return;
     }
     var tconId = normalizeTconId(el('f-tcon') ? el('f-tcon').value : '');
+    var barcodeNo = normalizeBarcode(el('f-barcode') ? el('f-barcode').value : '');
+    if (barcodeNo) {
+      var codeOwner = app.students.filter(function (x) { return barcodeOf(x) === barcodeNo && x.id !== app.editingId; })[0];
+      if (codeOwner) {
+        toast('이 바코드 번호는 ' + codeOwner.name + ' 관원이 이미 쓰고 있어요. 다른 번호를 넣어 주세요.');
+        if (el('f-barcode')) { el('f-barcode').focus(); }
+        return;
+      }
+    }
     var tuitionDayRaw = String(el('f-tuitiondate') ? el('f-tuitiondate').value : '').trim();
     var tuitionDay = parseInt(tuitionDayRaw, 10);
     if (isNaN(tuitionDay) || tuitionDay < 1 || tuitionDay > 31) { tuitionDay = 0; }
@@ -6694,6 +7200,7 @@
         s.firstRegDate = firstRegDate;
         s.birthDate = birthDate;
         s.tconId = tconId;
+        if (barcodeNo) { s.barcode = barcodeNo; } else { delete s.barcode; }
         if (tuitionDay) { s.tuitionDay = tuitionDay; } else { delete s.tuitionDay; }
         delete s.tuitionDate;
         if (prevTuitionDay !== tuitionDay) { syncTuitionFromStudentDay(s.id, prevTuitionDay, tuitionDay); }
@@ -6711,7 +7218,7 @@
         targetPoomDan: '없음', gukStatus: 'none', gukExamDate: '', monthlyFee: monthlyFee,
         status: status, pausedDate: pausedDate, pauseReason: pauseReason, note: note,
         firstRegDate: firstRegDate || todayKey(), tuitionDay: tuitionDay,
-        birthDate: birthDate, tconId: tconId
+        birthDate: birthDate, tconId: tconId, barcode: barcodeNo
       };
       app.students.push(fresh);
       if (tuitionDay) { syncTuitionFromStudentDay(fresh.id, 0, tuitionDay); }
@@ -14997,7 +15504,9 @@
     note: ['특이사항', '비고', '메모', 'note', 'remark', 'memo'],
     address: ['주소', '주소지', '거주지', '도로명주소', 'address'],
     bunji: ['번지'],
-    status: ['상태', '구분', 'status', 'state']
+    status: ['상태', '구분', 'status', 'state'],
+    /* v40 — 학원 원생관리 파일의 「번호」 열 = 출석 카드 바코드 번호 */
+    barcode: ['바코드', '바코드번호', '바코드 번호', 'barcode', '번호']
   };
 
   /* ---------- 보호자 전화 번호 고르기 ----------
@@ -15122,7 +15631,7 @@
   function matchField(text) {
     var t = String(text || '').toLowerCase().replace(/\s+/g, '');
     if (!t) { return null; }
-    var fields = ['name', 'phone', 'division', 'course', 'siblingDiscount', 'className', 'attendCount', 'firstRegDate', 'birthDate', 'tconId', 'tuitionDate', 'belt', 'pausedDate', 'pauseReason', 'note', 'address', 'bunji', 'status'];
+    var fields = ['name', 'phone', 'division', 'course', 'siblingDiscount', 'className', 'attendCount', 'firstRegDate', 'birthDate', 'tconId', 'tuitionDate', 'belt', 'pausedDate', 'pauseReason', 'note', 'address', 'bunji', 'status', 'barcode'];
     for (var i = 0; i < fields.length; i++) {
       var f = fields[i];
       var keys = HEADER_KEYS[f];
@@ -15273,6 +15782,7 @@
         firstRegDate: normalizeImportDate(cellOf('firstRegDate')),
         birthDate: normalizeBirthDate(cellOf('birthDate')),
         tconId: normalizeTconId(cellOf('tconId')),
+        barcode: normalizeBarcode(cellOf('barcode')),
         tuitionDay: normalizeImportDay(cellOf('tuitionDate'))
       });
     }
@@ -15358,7 +15868,7 @@
      · 이름·띠·수업횟수·발송대상·원비날짜처럼 앱에서 정해 둔 값은 건드리지 않고,
        비어 있는 모·부 번호·성함·주소만 채운다. */
   function mergeImportedStudents(students) {
-    var out = { added: 0, filled: 0, matched: 0 };
+    var out = { added: 0, filled: 0, matched: 0, barcodeFilled: 0, barcodeUpdated: 0 };
     var nameIndex = {};
     var keyOf = function (x) { return normalizeStudentName(x && x.name); };
     var indexOf = function (x) {
@@ -15438,6 +15948,14 @@
       if (!tuitionDayOf(hit) && tuitionDayOf(s)) {
         hit.tuitionDay = tuitionDayOf(s);
         delete hit.tuitionDate;
+      }
+      /* v40 — 바코드 번호: 비어 있으면 채우고, 파일 값이 다르면 학원 프로그램 값을 따른다
+         (카드에 실제로 찍힌 번호가 원본이므로 띠·수업 같은 앱 값과 달리 갱신을 허용) */
+      var impCode = barcodeOf(s);
+      if (impCode && barcodeOf(hit) !== impCode) {
+        if (!barcodeOf(hit)) { out.barcodeFilled = (out.barcodeFilled || 0) + 1; }
+        else { out.barcodeUpdated = (out.barcodeUpdated || 0) + 1; }
+        hit.barcode = impCode;
       }
     });
     return out;
@@ -15711,10 +16229,11 @@
       ]
     }).then(function (choice) {
       if (!choice) { el('file-name').textContent = ''; return; }
+      var mergedInfo = null;
       if (choice === 'replace') {
         app.students = students;
       } else {
-        mergeImportedStudents(students);
+        mergedInfo = mergeImportedStudents(students);
       }
       saveStudents();
       // 파일에 적힌 「원비 날짜」는 원비 관리 납부일로도 넣어 둔다
@@ -15726,19 +16245,27 @@
       });
       renderAll();
       resetStudentForm();
-      toast('관원 ' + app.students.length + '명으로 명단을 저장했어요.');
+      var codeNote = '';
+      if (mergedInfo) {
+        var codeN = (mergedInfo.barcodeFilled || 0) + (mergedInfo.barcodeUpdated || 0);
+        if (codeN) { codeNote = ' · 바코드 번호 ' + codeN + '명 반영'; }
+      } else {
+        var codeAll = students.filter(function (x) { return !!barcodeOf(x); }).length;
+        if (codeAll) { codeNote = ' · 바코드 번호 ' + codeAll + '명'; }
+      }
+      toast('관원 ' + app.students.length + '명으로 명단을 저장했어요.' + codeNote);
       el('file-name').textContent = '✅ ' + fileName + ' 반영 완료';
     });
   }
 
   function downloadSampleCSV() {
-    var lines = ['이름,부서,수업,띠,모 성함,모 전화,부 성함,부 전화,문자 발송,보호자 연락처,주소,누적 출석,첫 등록일,원비 날짜,생년월일,티콘 ID,특이사항,형제할인'];
+    var lines = ['이름,부서,수업,띠,모 성함,모 전화,부 성함,부 전화,문자 발송,보호자 연락처,주소,누적 출석,첫 등록일,원비 날짜,생년월일,티콘 ID,특이사항,형제할인,바코드 번호'];
     SAMPLE_STUDENTS.forEach(function (s) {
       lines.push([s.name, s.division || '', s.course || '', s.belt,
         parentNameOf(s, 'mother'), parentPhoneFrom(s, 'mother'), parentNameOf(s, 'father'), parentPhoneFrom(s, 'father'),
         smsTargetLabel(s), s.phone, addressOf(s), s.attendCount || 0,
         s.firstRegDate || '', tuitionDayOf(s) ? dayLabel(tuitionDayOf(s)) : '',
-        s.birthDate || '', s.tconId || '', noteOf(s), s.siblingDiscount ? 'Y' : ''].map(csvCell).join(','));
+        s.birthDate || '', s.tconId || '', noteOf(s), s.siblingDiscount ? 'Y' : '', barcodeOf(s)].map(csvCell).join(','));
     });
     var csv = '\uFEFF' + lines.join('\r\n');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -15758,7 +16285,7 @@
      ========================================================= */
   function studentsCSVText(list) {
     var head = ['이름', '부서', '수업', '띠', '급수', '모 성함', '모 전화', '부 성함', '부 전화', '문자 발송',
-      '보호자 연락처', '주소', '생년월일', '티콘 ID', '첫 등록일', '원비 날짜', '특이사항 · 비고', '상태'];
+      '보호자 연락처', '주소', '생년월일', '티콘 ID', '첫 등록일', '원비 날짜', '특이사항 · 비고', '상태', '바코드 번호'];
     var lines = [head];
     (list || []).forEach(function (s) {
       lines.push([
@@ -15766,7 +16293,8 @@
         parentNameOf(s, 'mother'), parentPhoneFrom(s, 'mother'), parentNameOf(s, 'father'), parentPhoneFrom(s, 'father'),
         smsTargetLabel(s), s.phone || '', addressOf(s),
         s.birthDate || '', s.tconId || '', firstRegOf(s),
-        tuitionDayOf(s) ? dayLabel(tuitionDayOf(s)) : '', noteOf(s), isPaused(s) ? '휴관' : '재원'
+        tuitionDayOf(s) ? dayLabel(tuitionDayOf(s)) : '', noteOf(s), isPaused(s) ? '휴관' : '재원',
+        barcodeOf(s)
       ]);
     });
     return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
@@ -16658,6 +17186,7 @@
     renderGradeList();
     updateMuteBtn();
     renderFaceSummary();
+    renderKioskModeUI();
     el('dojo-name').value = app.settings.dojoName;
     renderPin();
   }
@@ -17746,6 +18275,33 @@
         toast('AI 얼굴인식 설정을 저장했어요 · 거리 ' + f.threshold.toFixed(2) + ' · 쿨다운 ' + f.cooldown + '초');
       });
     }
+    // v40 — 출석 인식 방식 (얼굴 / 바코드)
+    if (el('km-face')) {
+      el('km-face').addEventListener('click', function () { setKioskMode(KIOSK_MODE_FACE); });
+    }
+    if (el('km-barcode')) {
+      el('km-barcode').addEventListener('click', function () { setKioskMode(KIOSK_MODE_BARCODE); });
+    }
+    if (el('kiosk-mode')) {
+      el('kiosk-mode').addEventListener('change', function () { setKioskMode(el('kiosk-mode').value); });
+    }
+    if (el('tt-code')) {
+      el('tt-code').addEventListener('click', function () { switchTouch('code'); });
+    }
+    if (el('btn-code-submit')) {
+      el('btn-code-submit').addEventListener('click', function () { submitBarcodeInput(); });
+    }
+    if (el('btn-code-clear')) {
+      el('btn-code-clear').addEventListener('click', function () {
+        if (el('code-input')) { el('code-input').value = ''; el('code-input').focus(); }
+        if (el('code-result')) { el('code-result').innerHTML = ''; }
+      });
+    }
+    if (el('code-input')) {
+      el('code-input').addEventListener('keydown', function (e) {
+        if (e && e.key === 'Enter') { submitBarcodeInput(); }
+      });
+    }
     if (el('btn-face-retry')) {
       el('btn-face-retry').addEventListener('click', function () {
         if (ai.state === 'loading') { toast('이미 AI 모델을 불러오는 중이에요.'); return; }
@@ -17899,9 +18455,12 @@
     app.touchTab = tab;
     el('tt-pin').classList.toggle('active', tab === 'pin');
     el('tt-name').classList.toggle('active', tab === 'name');
+    if (el('tt-code')) { el('tt-code').classList.toggle('active', tab === 'code'); }
     el('touch-pin').style.display = tab === 'pin' ? 'block' : 'none';
     el('touch-name').style.display = tab === 'name' ? 'block' : 'none';
+    if (el('touch-code')) { el('touch-code').style.display = tab === 'code' ? 'block' : 'none'; }
     if (tab === 'name') { setTimeout(function () { el('name-search').focus(); }, 60); }
+    if (tab === 'code') { setTimeout(function () { if (el('code-input')) { el('code-input').focus(); } }, 60); }
   }
 
   function init() {
@@ -17959,6 +18518,8 @@
     el('xlsx-state').textContent = xlsxOk ? '엑셀 엔진 준비됨 (SheetJS)' : 'CSV 모드 (오프라인)';
     el('xlsx-state').style.color = xlsxOk ? '#0b7a55' : '#a35b00';
     el('stage-tip').textContent = 'AI ENGINE · READY';
+    renderKioskModeUI();
+    if (isBarcodeMode()) { startBarcodeLoop(); }
 
     tickClock();
     clockTimer = setInterval(tickClock, 1000);
@@ -18061,6 +18622,37 @@
       adminLog: renderAdminLog
     },
     checkIn: checkIn,
+    /* v40 — 출석 인식 방식 · 카메라 바코드 */
+    kioskMode: kioskMode,
+    setKioskMode: setKioskMode,
+    isBarcodeMode: isBarcodeMode,
+    kioskModes: [KIOSK_MODE_FACE, KIOSK_MODE_BARCODE],
+    barcode: {
+      normalize: normalizeBarcode,
+      of: barcodeOf,
+      find: findStudentByBarcode,
+      findAll: findStudentsByBarcode,
+      handle: handleBarcodeScan,
+      submit: submitBarcodeInput,
+      tick: barcodeLoopTick,
+      start: startBarcodeLoop,
+      stop: stopBarcodeLoop,
+      init: initBarcodeEngine,
+      detect: barcodeDetectFrom,
+      engine: barcodeEngineName,
+      nativeSupported: barcodeNativeSupported,
+      formats: function () { return BARCODE_FORMATS.slice(); },
+      cooldownMs: BARCODE_COOLDOWN_MS,
+      loopMs: BARCODE_LOOP_MS,
+      vendorUrl: BARCODE_VENDOR_URL,
+      state: function () { return barcode; },
+      resetCooldown: function () { barcode.lastAt = {}; barcode.lastHitAt = 0; barcode.lastCode = ''; barcode.lastStudentId = ''; },
+      lastHtml: function () { return el('barcode-last') ? el('barcode-last').innerHTML : ''; },
+      clearLast: barcodeClearLast,
+      renderMode: renderKioskModeUI,
+      parseRows: function (rows) { return rowsToStudents(rows); },
+      mergeRoster: mergeImportedStudents
+    },
     face: {
       euclideanDistance: euclideanDistance,
       bestFaceMatch: bestFaceMatch,
