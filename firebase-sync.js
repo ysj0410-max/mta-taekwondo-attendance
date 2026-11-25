@@ -56,6 +56,30 @@
   }
   function clone(v) { try { return JSON.parse(JSON.stringify(v)); } catch (e) { return null; } }
 
+  /* v49 — 시간 제한 장치. 끝나지 않는 네트워크·모듈 내려받기가 화면을 영원히 잡아두지 않게
+     제한 시간이 지나면 reject 한다(이미 늦게 끝난 작업의 결과는 버린다). */
+  function withinTime(promise, ms, makeError) {
+    var limit = Number(ms) > 0 ? Number(ms) : 8000;
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var timer = null;
+      function done(fn, value) {
+        if (settled) { return; }
+        settled = true;
+        if (timer) { try { clearTimeout(timer); } catch (e) {} timer = null; }
+        fn(value);
+      }
+      try {
+        timer = setTimeout(function () {
+          done(reject, (typeof makeError === 'function')
+            ? makeError()
+            : { code: 'timeout', message: limit + 'ms 안에 응답이 없습니다' });
+        }, limit);
+      } catch (e) { timer = null; }
+      Promise.resolve(promise).then(function (v) { done(resolve, v); }, function (err) { done(reject, err); });
+    });
+  }
+
   /* 키 순서에 흔들리지 않는 문자열 — 내용 비교·해시에 쓴다 */
   function stableStringify(v) {
     if (v === null || v === undefined) { return 'null'; }
@@ -3088,10 +3112,24 @@
       } catch (e) { return Promise.resolve(false); }
     }
 
+    /* v49 — 연결 전체(CDN 모듈 내려받기 → Firestore 초기화 → 로그인 세션 복원)에 시간 제한.
+       모바일 네트워크에서 firebase-*.js 요청이 멈추거나 initializeFirestore 가 끝나지 않아도
+       첫 화면이 「로그인 상태를 확인하는 중…」에 갇히지 않게 한다.
+       connect() 가 동기적으로 예외를 던져도 reject 로 바꿔 화면이 원인을 안내하고 빠져나간다. */
+    var connectTimeoutMs = Number(opts.connectTimeoutMs) > 0 ? Number(opts.connectTimeoutMs) : 8000;
+    function connectBounded() {
+      return withinTime(Promise.resolve().then(function () { return connect(); }), connectTimeoutMs, function () {
+        return {
+          code: 'connect-timeout',
+          message: 'Firebase 연결이 ' + Math.round(connectTimeoutMs / 1000) + '초 안에 끝나지 않았습니다 — 모바일 인터넷·방화벽을 확인해 주세요'
+        };
+      });
+    }
+
     var api = {
       mode: 'firestore',
       label: 'Firebase Firestore',
-      connect: connect,
+      connect: connectBounded,
       /* 서버 roles 로 확인된 유효 권한을 반영한다 (관리자 구독은 'admin' 일 때만) */
       setRole: function (r) { role = (r === 'admin') ? 'admin' : 'none'; return role; },
       getRole: function () { return role; },
@@ -3284,7 +3322,7 @@
       },
       disconnect: function () { unsubs.forEach(function (u) { try { u(); } catch (e) {} }); unsubs = []; }
     };
-    return connect();
+    return connectBounded();
   }
 
   /* =========================================================================
@@ -3353,6 +3391,7 @@
     createMockAdapter: createMockAdapter,
     createFirestoreAdapter: createFirestoreAdapter,
     loadFirebaseModules: loadFirebaseModules,
+    withinTime: withinTime,
     createMemoryStorage: createMemoryStorage,
     migrateShadowCache: migrateShadowCache,
     validateConfig: validateConfig,

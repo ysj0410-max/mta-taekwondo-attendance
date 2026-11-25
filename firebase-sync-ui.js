@@ -249,6 +249,8 @@
       }));
     } catch (err) {
       showError('⚠️ 연결하지 못했습니다: ', err);
+      /* v49 — 동기적으로 예외가 나도 「확인 중」에 갇히지 않게 관문을 내린다 */
+      try { gateConnectFailed(err); } catch (e) {}
       return Promise.resolve(false);
     }
     var result = connecting.then(function (adapter) {
@@ -265,6 +267,7 @@
         return gateDecide().then(function (ok) { return !!ok; }, function () { return false; });
       } catch (err) {
         showError('⚠️ 연결하지 못했습니다: ', err);
+        try { gateConnectFailed(err); } catch (e) {}
         return false;
       }
     }, function (err) {
@@ -272,6 +275,8 @@
       S.msg = '⚠️ 연결하지 못했습니다: ' + FB.errorText(err) + ' — 인터넷과 firebaseConfig 를 확인해 주세요.';
       S.msgKind = 'warn';
       renderAll();
+      /* v49 — 연결이 실패·시간초과하면 반드시 로그인(또는 설정) 화면으로 내려온다 */
+      try { gateConnectFailed(err); } catch (e) {}
       return false;
     });
     S.connecting = result;
@@ -1006,6 +1011,8 @@
   /* 관문 문구·단계 — 지금 보여 줄 한 단계만 남기고 나머지는 숨긴다 */
   function gateShowStep(step) {
     G.step = step;
+    /* v49 — 「확인 중」을 벗어나면 느린 응답 안내·보조 버튼은 감춘다 */
+    if (step !== 'checking') { gateClearSlow(); }
     var steps = { checking: 'gate-check', login: 'gate-form', denied: 'gate-denied', setup: 'gate-setup' };
     Object.keys(steps).forEach(function (k) { show(steps[k], k === step); });
     var root = gateRoot();
@@ -1049,6 +1056,57 @@
     if (btn) { btn.disabled = !!on; btn.textContent = on ? (label || '로그인 중…') : '로그인'; }
   }
 
+  /* ---------------------------------------------------------------------------
+     v49 — 「로그인 상태를 확인하는 중…」에 갇히지 않게 하는 안전장치
+     · 서버 확인이 SLOW_AFTER_MS(5초)를 넘기면 안내 문구와 「다시 시도」·
+       「로그인 화면으로」 버튼을 띄운다.
+     · 연결·권한 확인에는 각각 시간 제한(CONNECT/VERIFY_TIMEOUT_MS)이 있고,
+       실패·시간초과는 반드시 로그인(또는 설정) 화면으로 내려온다.
+     --------------------------------------------------------------------------- */
+  var SLOW_AFTER_MS = 5000;
+  var VERIFY_TIMEOUT_MS = 8000;
+  var slowTimer = null;
+  function gateClearSlow() {
+    if (slowTimer) { try { clearTimeout(slowTimer); } catch (e) {} slowTimer = null; }
+    show('gate-slow', false);
+  }
+  function gateArmSlow(ms) {
+    gateClearSlow();
+    var wait = Number(ms) > 0 ? Number(ms) : SLOW_AFTER_MS;
+    try {
+      slowTimer = setTimeout(function () {
+        slowTimer = null;
+        if (G.step !== 'checking') { return; }
+        show('gate-slow', true);
+        gateMsg('서버 응답을 기다리는 중… ' + Math.round(wait / 1000) + '초가 넘었습니다. 그대로 기다리거나 아래 버튼으로 빠져나오세요.', 'warn');
+      }, wait);
+    } catch (e) { slowTimer = null; }
+  }
+
+  /* 로그인 화면으로 내려온다 — 마지막 관리자 확인 기록이 있으면 「인터넷 없이 열기」도 함께 보여 준다 */
+  function gateToLogin(msg, note) {
+    G.uid = '';
+    G.email = '';
+    S.auth = null;
+    if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
+      try { S.engine.setVerifiedRole(''); } catch (e) {}
+    }
+    gateShowStep('login');
+    gateMsg(msg || '', msg ? 'warn' : '');
+    gateNote(note || ('도장 ID ' + S.cfg.dojangId + ' · 관리자 계정으로 로그인해 주세요.'));
+    var cached = cachedVerified();
+    var off = $('gate-offline-open');
+    if (off) {
+      off.style.display = cached ? '' : 'none';
+      off.textContent = cached
+        ? ('📴 인터넷 없이 열기 (마지막 관리자: ' + String(cached.email || cached.uid) + ')')
+        : '📴 인터넷 없이 열기';
+    }
+    var em = $('gate-email');
+    if (em && !em.value && S.cfg.adminEmail) { em.value = String(S.cfg.adminEmail); }
+    return false;
+  }
+
   /* 마지막으로 관리자 확인된 계정 — 인터넷이 없을 때만 쓰는 기억 */
   function rememberVerified(info) {
     if (!info || !info.uid) { return; }
@@ -1080,7 +1138,16 @@
     if (typeof ad.getDoc !== 'function') { return Promise.resolve({ verified: '', role: 'none', reason: 'no-adapter', uid: id, path: path }); }
     var call;
     try { call = ad.getDoc(path); } catch (err) { call = Promise.reject(err); }
-    return Promise.resolve(call).then(function (res) {
+    /* v49 — 서버가 응답하지 않아도(모바일 네트워크·캐시·IndexedDB 지연) 영원히 기다리지 않는다 */
+    var bounded = (typeof FB.withinTime === 'function')
+      ? FB.withinTime(Promise.resolve(call), VERIFY_TIMEOUT_MS, function () {
+          return {
+            code: 'verify-timeout',
+            message: '관리자 권한 확인이 ' + Math.round(VERIFY_TIMEOUT_MS / 1000) + '초 안에 끝나지 않았습니다 — 인터넷을 확인해 주세요'
+          };
+        })
+      : Promise.resolve(call);
+    return bounded.then(function (res) {
       var v = (res && res.exists && res.data) ? String(res.data.role || '') : '';
       /* 서버 roles 로 유효 권한을 잠근다 — admin 이면 엔진이 구독·전송을 시작한다 */
       if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
@@ -1108,9 +1175,20 @@
   function decideNow(pre) {
     var ad = S.adapter;
     if (!ad || ad.mode !== 'firestore') {
-      gateShowStep('setup');
-      gateMsg('', '');
-      return Promise.resolve(false);
+      /* v49 — 연결이 없으면 단계만 보고 판단한다: 설정이 없으면 설정 화면,
+         설정은 있는데 연결이 실패한 것이면 로그인 화면 + 다시 시도 */
+      var cfgOk = FB.validateConfig(S.cfg.config || {}).ok;
+      if (!cfgOk) {
+        fillGateSetup();
+        gateShowStep('setup');
+        gateMsg('', '');
+        return Promise.resolve(false);
+      }
+      return Promise.resolve(gateToLogin(
+        (S.msgKind === 'warn' && /연결하지 못했습니다/.test(String(S.msg || '')))
+          ? S.msg + ' — 「🔄 연결 다시 시도」를 눌러 주세요.'
+          : 'Firebase 에 연결하지 못했습니다 — 「🔄 연결 다시 시도」를 눌러 주세요.',
+        '도장 ID ' + S.cfg.dojangId + ' · 로그인하려면 먼저 서버에 연결되어야 합니다.'));
     }
     var uid = String((pre && pre.uid) || '');
     var email = String((pre && pre.email) || '');
@@ -1122,20 +1200,14 @@
     }
     if (!uid) {
       /* 세션이 없다 — 로그인 화면 */
-      G.uid = '';
-      G.email = '';
-      S.auth = null;
-      gateShowStep('login');
-      gateMsg('', '');
-      gateNote('도장 ID ' + S.cfg.dojangId + ' · 관리자 계정으로 로그인해 주세요.');
-      var em = $('gate-email');
-      if (em && !em.value && S.cfg.adminEmail) { em.value = String(S.cfg.adminEmail); }
-      return Promise.resolve(false);
+      return Promise.resolve(gateToLogin('', '도장 ID ' + S.cfg.dojangId + ' · 관리자 계정으로 로그인해 주세요.'));
     }
     G.uid = uid;
     G.email = email;
     gateShowStep('checking');
     gateMsg('', '');
+    gateNote('도장 ID ' + S.cfg.dojangId + ' · 관리자 권한을 확인하는 중…');
+    gateArmSlow();
     return verifyAdminNow(uid).then(function (r) {
       if (r && r.verified === 'admin') {
         gateUnlock({ uid: uid, email: email });
@@ -1148,16 +1220,15 @@
           gateUnlock({ uid: uid, email: email || cached.email, offline: true });
           return true;
         }
-        gateShowStep('login');
-        gateMsg('관리자 권한을 확인하지 못했습니다 — 인터넷 연결을 확인한 뒤 다시 시도해 주세요. (' + String(r.error) + ')', 'warn');
+        gateToLogin('관리자 권한을 확인하지 못했습니다 — 인터넷 연결을 확인한 뒤 다시 시도해 주세요. (' + String(r.error) + ')',
+          '도장 ID ' + S.cfg.dojangId + ' · 「🔄 연결 다시 시도」로 다시 확인할 수 있습니다.');
         return false;
       }
       /* 로그인은 됐지만 관리자가 아니다 */
       gateDenied(r);
       return false;
     }, function (err) {
-      gateShowStep('login');
-      gateMsg('권한을 확인하지 못했습니다: ' + FB.errorText(err), 'warn');
+      gateToLogin('권한을 확인하지 못했습니다: ' + FB.errorText(err), '도장 ID ' + S.cfg.dojangId);
       return false;
     });
   }
@@ -1226,6 +1297,76 @@
     return false;
   }
 
+  /* v49 — Firebase 연결(어댑터 만들기)이 실패하거나 시간을 넘겼을 때 관문을 반드시 움직인다.
+     v48 까지는 이 자리에서 관문을 전혀 바꾸지 않아 「로그인 상태를 확인하는 중…」
+     스피너에 영원히 갇혔다. */
+  function gateConnectFailed(err) {
+    if (G.step === 'ready') { return false; }   /* 이미 열려 있으면(재연결 시도 중) 건드리지 않는다 */
+    gateClearSlow();
+    gateBusy(false);
+    var why = FB.errorText(err);
+    var v = FB.validateConfig(S.cfg.config || {});
+    if (!v.ok) {
+      fillGateSetup();
+      gateShowStep('setup');
+      gateMsg('Firebase 에 연결하지 못했습니다: ' + why + ' — firebaseConfig 를 확인해 주세요.', 'warn');
+      gateNote('');
+      return false;
+    }
+    return gateToLogin('Firebase 에 연결하지 못했습니다: ' + why + ' — 인터넷을 확인한 뒤 「🔄 연결 다시 시도」를 눌러 주세요.',
+      '도장 ID ' + S.cfg.dojangId + ' · 로그인하려면 먼저 서버에 연결되어야 합니다.');
+  }
+
+  /* 「다시 시도」 — 멈춰 있던 연결은 버리고 새로 연결한 뒤 관문을 다시 정한다 */
+  function gateRetryConnect() {
+    gateClearSlow();
+    if (G.step === 'ready') { return Promise.resolve(true); }
+    var v = FB.validateConfig(S.cfg.config || {});
+    if (!v.ok) {
+      fillGateSetup();
+      gateShowStep('setup');
+      gateMsg('연결 설정이 없습니다 — firebaseConfig 를 넣어 주세요.', 'warn');
+      return Promise.resolve(false);
+    }
+    S.connecting = null;                 /* 응답이 없는 이전 시도는 기다리지 않는다 */
+    gateShowStep('checking');
+    gateMsg('', '');
+    gateNote('도장 ID ' + S.cfg.dojangId + ' · Firebase 에 다시 연결하는 중…');
+    gateArmSlow();
+    return Promise.resolve(connectFirestore()).then(function () {
+      return G.step === 'ready';
+    }, function (err) {
+      gateConnectFailed(err);
+      return false;
+    });
+  }
+
+  /* 「로그인 화면으로」 — 서버 응답을 더 기다리지 않고 바로 로그인 화면으로 내린다 */
+  function gateEscapeToLogin() {
+    gateClearSlow();
+    if (G.step === 'ready') { return false; }
+    var v = FB.validateConfig(S.cfg.config || {});
+    if (!v.ok) {
+      fillGateSetup();
+      gateShowStep('setup');
+      gateMsg('연결 설정이 없습니다 — firebaseConfig 를 넣어 주세요.', 'warn');
+      return false;
+    }
+    return gateToLogin('서버 응답을 기다리지 않고 로그인 화면으로 왔습니다 — 「🔄 연결 다시 시도」를 누르면 다시 연결합니다.',
+      '도장 ID ' + S.cfg.dojangId + ' · 관리자 계정으로 로그인해 주세요.');
+  }
+
+  /* 「인터넷 없이 열기」 — 이 기기에서 마지막으로 관리자 확인된 계정이 있을 때만 */
+  function gateOfflineOpen() {
+    var cached = cachedVerified();
+    if (!cached) {
+      gateMsg('이 기기에서 관리자로 확인된 기록이 없습니다 — 인터넷이 연결된 뒤 로그인해 주세요.', 'warn');
+      show('gate-offline-open', false);
+      return false;
+    }
+    return gateUnlock({ uid: cached.uid, email: cached.email, offline: true });
+  }
+
   /* 로그인 버튼 — 이메일·비밀번호 → Firebase 로그인 → roles/{uid} 확인 */
   function gateLogin() {
     if (G.busy) { return false; }
@@ -1237,8 +1378,23 @@
     }
     var ad = S.adapter;
     if (!ad || ad.mode !== 'firestore' || typeof ad.signInEmail !== 'function') {
-      gateMsg('Firebase 에 아직 연결되지 않았습니다 — 잠시 뒤 다시 시도하거나 「연결 설정」을 확인해 주세요.', 'warn');
-      return false;
+      /* v49 — 연결이 아직(또는 실패로) 없으면 먼저 다시 연결해 보고, 되면 바로 로그인한다 */
+      gateBusy(true);
+      gateMsg('Firebase 에 연결하는 중…', '');
+      return Promise.resolve(gateRetryConnect()).then(function () {
+        gateBusy(false);
+        if (G.step === 'ready') { return true; }
+        var ad2 = S.adapter;
+        if (!ad2 || ad2.mode !== 'firestore' || typeof ad2.signInEmail !== 'function') {
+          gateMsg('Firebase 에 아직 연결되지 않았습니다 — 인터넷을 확인한 뒤 「🔄 연결 다시 시도」를 눌러 주세요.', 'warn');
+          return false;
+        }
+        return gateLogin();
+      }, function () {
+        gateBusy(false);
+        gateMsg('Firebase 에 연결하지 못했습니다 — 「🔄 연결 다시 시도」를 눌러 주세요.', 'warn');
+        return false;
+      });
     }
     gateBusy(true);
     gateMsg('로그인하는 중…', '');
@@ -1306,8 +1462,13 @@
       return;
     }
     gateShowStep('checking');
-    gateNote('도장 ID ' + S.cfg.dojangId);
-    connectFirestore();
+    gateNote('도장 ID ' + S.cfg.dojangId + ' · 로그인 상태를 확인하는 중…');
+    gateArmSlow();
+    /* v49 — 연결이 어떤 이유로든 끝나지 않으면 8초 뒤 실패로 돌아온다.
+       그때는 gateConnectFailed 가 로그인 화면 + 「다시 시도」로 내려 준다. */
+    Promise.resolve(connectFirestore()).then(function () {}, function (err) {
+      gateConnectFailed(err);
+    });
   }
 
   /* 관문의 버튼·입력 연결 */
@@ -1328,6 +1489,35 @@
     }
     var retry = $('gate-denied-logout');
     if (retry) { retry.addEventListener('click', function () { gateLock('retry'); }); }
+    /* v49 — 「확인 중」에 갇히지 않게 하는 보조 버튼들 */
+    var slowRetry = $('gate-slow-retry');
+    if (slowRetry) {
+      slowRetry.addEventListener('click', function (ev) {
+        if (ev && typeof ev.preventDefault === 'function') { ev.preventDefault(); }
+        gateRetryConnect();
+      });
+    }
+    var slowLogin = $('gate-slow-login');
+    if (slowLogin) {
+      slowLogin.addEventListener('click', function (ev) {
+        if (ev && typeof ev.preventDefault === 'function') { ev.preventDefault(); }
+        gateEscapeToLogin();
+      });
+    }
+    var retryBtn = $('gate-retry');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', function (ev) {
+        if (ev && typeof ev.preventDefault === 'function') { ev.preventDefault(); }
+        gateRetryConnect();
+      });
+    }
+    var offBtn = $('gate-offline-open');
+    if (offBtn) {
+      offBtn.addEventListener('click', function (ev) {
+        if (ev && typeof ev.preventDefault === 'function') { ev.preventDefault(); }
+        gateOfflineOpen();
+      });
+    }
     var save = $('gate-setup-save');
     if (save) {
       save.addEventListener('click', function (ev) {
@@ -1400,6 +1590,10 @@
       },
       login: gateLogin,
       decide: gateDecide,
+      retry: gateRetryConnect,
+      toLogin: gateEscapeToLogin,
+      offlineOpen: gateOfflineOpen,
+      slowShown: function () { var e = $('gate-slow'); return !!e && e.style.display !== 'none'; },
       lock: gateLock,
       unlock: gateUnlock,
       logout: logoutNow,

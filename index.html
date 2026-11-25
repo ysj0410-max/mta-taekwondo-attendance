@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=48"></script>
-<script src="firebase-sync-ui.js?v=48"></script>
+<script src="firebase-sync.js?v=49"></script>
+<script src="firebase-sync-ui.js?v=49"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1574,6 +1574,12 @@
   .gate-spin{width:34px; height:34px; border-radius:50%; border:3px solid rgba(255,255,255,.18); border-top-color:#6fa0ff;
     animation:gatespin .9s linear infinite}
   @keyframes gatespin{to{transform:rotate(360deg)}}
+  /* v49 — 서버 응답이 느릴 때 「확인 중」에서 빠져나오는 보조 버튼 */
+  .gate-slow{width:100%; margin-top:4px}
+  .gate-slow-btns{display:flex; gap:8px; margin-top:4px}
+  .gate-slow-btns .gate-btn2{flex:1; margin:0; padding:11px; font-size:13px; font-weight:800; border-radius:11px;
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); color:#eaf1ff; cursor:pointer}
+  .gate-btn-2nd{margin-top:8px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); font-size:13.5px}
   .gate-big{font-size:30px; text-align:center; margin:2px 0 10px}
   .gate-step p{font-size:12.5px; line-height:1.65; color:#c6d6f2; margin:0 0 12px}
   .gate-step p b{color:#fff}
@@ -1602,6 +1608,12 @@
     <div class="gate-step gate-check" id="gate-check">
       <div class="gate-spin" aria-hidden="true"></div>
       <p style="text-align:center; margin:0">로그인 상태를 확인하는 중…</p>
+      <div class="gate-slow" id="gate-slow" style="display:none">
+        <div class="gate-slow-btns">
+          <button class="gate-btn2" id="gate-slow-retry" type="button">🔄 다시 시도</button>
+          <button class="gate-btn2" id="gate-slow-login" type="button">로그인 화면으로</button>
+        </div>
+      </div>
     </div>
 
     <form class="gate-step" id="gate-form" style="display:none" autocomplete="on">
@@ -1614,6 +1626,8 @@
         <input class="input" id="gate-pw" type="password" autocomplete="current-password" placeholder="••••••••">
       </div>
       <button class="gate-btn" id="gate-login" type="submit">로그인</button>
+      <button class="gate-btn gate-btn-2nd" id="gate-retry" type="button">🔄 연결 다시 시도</button>
+      <button class="gate-btn gate-btn-2nd" id="gate-offline-open" type="button" style="display:none">📴 인터넷 없이 열기</button>
     </form>
 
     <div class="gate-step" id="gate-denied" style="display:none">
@@ -1643,7 +1657,7 @@
 
     <div class="gate-msg" id="gate-msg" style="display:none"></div>
     <div class="gate-note" id="gate-note" style="display:none"></div>
-    <div class="gate-ver">v48 · 2026-11-25 · Spark 무료 요금제</div>
+    <div class="gate-ver">v49 · 2026-11-25 · Spark 무료 요금제</div>
   </div>
 </div>
 
