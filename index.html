@@ -479,6 +479,9 @@
   .tu-charge{font-variant-numeric:tabular-nums; font-weight:800; color:#1b2a5b; white-space:nowrap}
   .tu-charge small{display:block; font-size:10px; font-weight:700; color:#0b7a55}
   .tu-charge.zero{color:#c0392b}
+  /* v47 — 입관 전 · 휴관 기간 칸 */
+  .tu-free{font-size:11.5px; font-weight:800; color:#7b869c; white-space:nowrap}
+  .chip.tub-free{background:#eef1f6; color:#66748c; font-size:10px; padding:2px 7px; margin-left:1px}
   .tu-tablewrap > table.tub{min-width:1084px}
   .empty-row td{text-align:center; color:#9aa4b5; padding:22px; font-weight:600}
 
@@ -845,6 +848,8 @@
   table.sy-table tr.sy-row.none td{color:#98a2b3}
   table.sy-table tr.sy-row.paid td:nth-child(2){color:#0ca678; font-weight:800}
   table.sy-table tr.sy-row.exempt td:nth-child(2){color:#6b4fa8; font-weight:800}
+  table.sy-table tr.sy-row.before td:nth-child(2),
+  table.sy-table tr.sy-row.pausedMonth td:nth-child(2){color:#7b869c; font-weight:800}
   .sy-memo{max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .tu-note{font-size:10.5px; font-weight:700; color:#8a94a6}
   .fee-sec{border-top:1px solid #e8edf5; margin-top:14px; padding-top:13px}
@@ -1160,6 +1165,9 @@
   .rp-state.unpaid{background:#fdecec; color:#c0392b}
   .rp-state.exempt{background:#eef1f6; color:#5b6b85}
   .rp-state.paused{background:#f2ecff; color:#6b46c1}
+  /* v47 — 입관 전 · 휴관 기간 (원비를 매기지 않는 달) */
+  .rp-state.before{background:#eef1f6; color:#66748c}
+  .rp-before td.nm, .rp-pausedMonth td.nm{color:#66748c}
   .rp-ymethods{font-size:12px; font-weight:800; color:#475467; margin-top:8px; display:flex; gap:12px; flex-wrap:wrap}
   .rp-ymethods b{color:var(--navy)}
   .rp-print-head{display:none}
@@ -1866,6 +1874,11 @@
                     <div class="field"><label>휴관일 (휴관생일 때)</label><input class="input" id="f-paused-date" type="date"></div>
                     <div class="field"><label>휴관 사유/메모</label><input class="input" id="f-pause-reason" maxlength="40" placeholder="예: 개인 사정 3개월"></div>
                   </div>
+                  <div class="row2">
+                    <div class="field"><label>복관일 (휴관 뒤 다시 다니기 시작한 날)</label><input class="input" id="f-resumed-date" type="date"></div>
+                    <div class="field"><label>휴관 이력 (읽기 전용)</label><input class="input" id="f-pause-history" type="text" readonly placeholder="휴관 이력이 없습니다"></div>
+                  </div>
+                  <div class="tiny-note" style="margin:-2px 0 10px; line-height:1.55">원비는 <b>첫 등록일이 속한 달</b>부터 매기고, <b>휴관 기간의 달</b>은 미납으로 잡지 않습니다. 다시 다니기 시작하면 <b>복관일이 속한 달</b>부터 다시 미납·완납을 매깁니다.</div>
                   <div class="field"><label>특이사항 · 비고 <span style="font-weight:600;color:#8a94a6">(알레르기 · 차량 · 학부모 요청 등)</span></label>
                     <textarea class="input stu-note-input" id="f-note" rows="2" maxlength="200" placeholder="예: 알레르기, 차량 주의사항, 학부모 요청 등" aria-label="특이사항 · 비고"></textarea></div>
                   <div class="tiny-note" style="margin:-2px 0 10px; line-height:1.55">특이사항·비고는 <b>관리자 화면에만</b> 보이고 출석 키오스크·공개 안내·학부모 문자에는 나가지 않습니다. 명단 표에서도 바로 고칠 수 있어요.</div>
@@ -3122,6 +3135,13 @@
 
   var TUITION_STATUS = { unpaid: '미납', paid: '완납', exempt: '면제·휴원' };
   var TUITION_STATUS_ORDER = ['unpaid', 'paid', 'exempt'];
+  /* v47 — 기록(status)으로 남지 않지만 화면에는 보여야 하는 달의 이름
+     · before      : 최초등록일보다 앞선 달 (입관 전)
+     · pausedMonth : 휴관 기간에 긴 달 (휴관일 달 < 이 달 < 복관일 달)
+     두 달 모두 원비(미납·예정액)에서 빠지고, 그 달에 완납 기록이 있으면 완납만 인정한다. */
+  var TUITION_FREE_STATUS = { before: '입관 전', pausedMonth: '휴관 기간' };
+  function tuitionIsFree(st) { return st === 'before' || st === 'pausedMonth'; }
+  function tuitionStatusLabel(st) { return TUITION_STATUS[st] || TUITION_FREE_STATUS[st] || TUITION_STATUS.unpaid; }
   var TUITION_METHODS = ['카드', '현금', '입금'];
   var TUITION_METHOD_ICON = { '카드': '💳', '현금': '💵', '입금': '🏦' };
 
@@ -3359,8 +3379,8 @@
   function pausedOrder(a, b) {
     var m = sortMode('pz');
     if (m === 'pausedRecent') {
-      var pa = isDateKey(a.pausedDate) ? String(a.pausedDate) : '';
-      var pb = isDateKey(b.pausedDate) ? String(b.pausedDate) : '';
+      var pa = pausedDateOf(a);
+      var pb = pausedDateOf(b);
       if (pa !== pb) {
         if (!pa) { return 1; }
         if (!pb) { return -1; }
@@ -3914,8 +3934,22 @@
         gukStatus: GK_STATUS[s.gukStatus] ? s.gukStatus : 'none',
         gukExamDate: String(s.gukExamDate || '').trim(),
         status: (s.status === 'paused') ? 'paused' : 'active',
-        pausedDate: isDateKey(s.pausedDate) ? String(s.pausedDate) : '',
+        pausedDate: isDateKey(s.pausedDate) ? String(s.pausedDate) : (isDateKey(s.pausedAt) ? String(s.pausedAt) : ''),
         pauseReason: String(s.pauseReason || '').trim().slice(0, 60),
+        /* v47 — 복관일과 휴관 이력. 예전 백업(pausedAt/resumedAt 이름)도 함께 읽는다 */
+        resumedDate: isDateKey(s.resumedDate) ? String(s.resumedDate) : (isDateKey(s.resumedAt) ? String(s.resumedAt) : ''),
+        pausePeriods: (function () {
+          var src = Array.isArray(s.pausePeriods) ? s.pausePeriods : [];
+          var out = [];
+          src.forEach(function (p) {
+            if (!p || typeof p !== 'object') { return; }
+            var from = isDateKey(p.from) ? String(p.from) : (isDateKey(p.pausedAt) ? String(p.pausedAt) : '');
+            var to = isDateKey(p.to) ? String(p.to) : (isDateKey(p.resumedAt) ? String(p.resumedAt) : '');
+            if (!from && !to) { return; }
+            out.push({ from: from, to: to });
+          });
+          return out;
+        })(),
         note: normalizeNote(s.note || s.remarks || s.비고 || ''),
         firstRegDate: isDateKey(s.firstRegDate) ? String(s.firstRegDate) : '',
         // 국기원 심사접수용 — 구버전 데이터·백업에는 없으니 빈 값으로 맞춘다
@@ -6904,6 +6938,8 @@
     if (el('f-status')) { el('f-status').value = 'active'; }
     if (el('f-paused-date')) { el('f-paused-date').value = ''; }
     if (el('f-pause-reason')) { el('f-pause-reason').value = ''; }
+    if (el('f-resumed-date')) { el('f-resumed-date').value = ''; }
+    if (el('f-pause-history')) { el('f-pause-history').value = ''; }
     if (el('f-note')) { el('f-note').value = ''; }
     renderBeltOptions('');
     renderPoomOptions('없음');
@@ -6937,8 +6973,10 @@
     el('f-fee').setAttribute('data-auto', s.monthlyFee == null ? '1' : '0');
     updateFeeCalc();
     if (el('f-status')) { el('f-status').value = isPaused(s) ? 'paused' : 'active'; }
-    if (el('f-paused-date')) { el('f-paused-date').value = isPaused(s) ? (s.pausedDate || '') : ''; }
+    if (el('f-paused-date')) { el('f-paused-date').value = isPaused(s) ? pausedDateOf(s) : ''; }
     if (el('f-pause-reason')) { el('f-pause-reason').value = isPaused(s) ? (s.pauseReason || '') : ''; }
+    if (el('f-resumed-date')) { el('f-resumed-date').value = resumedDateOf(s); }
+    if (el('f-pause-history')) { el('f-pause-history').value = pauseHistoryText(s); }
     if (el('f-note')) { el('f-note').value = noteOf(s); }
     renderBeltOptions(s.belt);
     renderPoomOptions(s.poomDan);
@@ -7015,6 +7053,8 @@
     if (isNaN(tuitionDay) || tuitionDay < 1 || tuitionDay > 31) { tuitionDay = 0; }
     var pausedDateRaw = String(el('f-paused-date') ? el('f-paused-date').value : '').trim();
     var pauseReason = String(el('f-pause-reason') ? el('f-pause-reason').value : '').trim().slice(0, 60);
+    var resumedDateRaw = String(el('f-resumed-date') ? el('f-resumed-date').value : '').trim();
+    var resumedDate = isDateKey(resumedDateRaw) ? resumedDateRaw : '';
     var note = normalizeNote(el('f-note') ? el('f-note').value : '');
     var pausedDate = (status === 'paused') ? (isDateKey(pausedDateRaw) ? pausedDateRaw : todayKey()) : '';
     if (status !== 'paused') { pauseReason = ''; }
@@ -7032,9 +7072,8 @@
         s.className = ''; s.division = division; s.course = course; s.siblingDiscount = siblingDiscount;
         s.grade = grade; s.poomDan = poomDan;
         s.monthlyFee = monthlyFee;
-        s.status = status;
-        s.pausedDate = pausedDate;
-        s.pauseReason = pauseReason;
+        /* v47 — 상태·휴관일·복관일·휴관 이력을 함께 맞춘다 (복관일 달부터 다시 원비 대상) */
+        applyPauseState(s, status, { pausedDate: pausedDate, pauseReason: pauseReason, resumedDate: resumedDate });
         s.note = note;
         s.firstRegDate = firstRegDate;
         s.birthDate = birthDate;
@@ -7060,6 +7099,8 @@
         birthDate: birthDate, tconId: tconId, barcode: barcodeNo
       };
       app.students.push(fresh);
+      /* v47 — 휴관생으로 새로 등록하면 휴관 이력의 첫 구간도 남긴다 */
+      if (status === 'paused') { applyPauseState(fresh, 'paused', { pausedDate: pausedDate, pauseReason: pauseReason }); }
       if (tuitionDay) { syncTuitionFromStudentDay(fresh.id, 0, tuitionDay); }
       toast(name + ' 관원을 추가했어요.' + (status === 'paused' ? ' · 휴관생은 「🛌 휴관생 관리」에 모입니다' : ''));
     }
@@ -7662,30 +7703,106 @@
   function isActive(s) { return !isPaused(s); }
   function activeStudents() { return app.students.filter(isActive); }
   function pausedStudents() { return app.students.filter(isPaused); }
+  /* v47 — 휴관일·복관일·휴관 이력
+     · 처음 쓰던 이름은 pausedDate 이고, 새 이름(pausedAt / resumedAt)도 같이 읽는다
+     · pausePeriods = [{ from: 휴관일, to: 복관일 }] — to 가 비어 있으면 아직 휴관 중인 구간 */
+  function pausedDateOf(s) {
+    if (!s) { return ''; }
+    if (isDateKey(s.pausedDate)) { return String(s.pausedDate); }
+    if (isDateKey(s.pausedAt)) { return String(s.pausedAt); }
+    return '';
+  }
+  function resumedDateOf(s) {
+    if (!s) { return ''; }
+    if (isDateKey(s.resumedDate)) { return String(s.resumedDate); }
+    if (isDateKey(s.resumedAt)) { return String(s.resumedAt); }
+    return '';
+  }
+  function pausePeriodsOf(s) {
+    var out = [];
+    if (!s) { return out; }
+    var list = Array.isArray(s.pausePeriods) ? s.pausePeriods : [];
+    list.forEach(function (p) {
+      if (!p || typeof p !== 'object') { return; }
+      var from = isDateKey(p.from) ? String(p.from) : (isDateKey(p.pausedAt) ? String(p.pausedAt) : '');
+      var to = isDateKey(p.to) ? String(p.to) : (isDateKey(p.resumedAt) ? String(p.resumedAt) : '');
+      if (!from && !to) { return; }
+      out.push({ from: from, to: to });
+    });
+    /* 이력이 아직 없고 지금 휴관 중이면(예전 데이터) 휴관일 하나로 구간을 만든다 */
+    if (isPaused(s) && pausedDateOf(s)) {
+      var open = false;
+      for (var i = 0; i < out.length; i++) { if (!out[i].to) { open = true; } }
+      if (!open) { out.push({ from: pausedDateOf(s), to: '' }); }
+    }
+    /* 이력이 없는데 휴관일·복관일만 남아 있는 예전 데이터 — 그 한 구간으로 본다 */
+    if (!out.length && !isPaused(s) && pausedDateOf(s) && resumedDateOf(s)) {
+      out.push({ from: pausedDateOf(s), to: resumedDateOf(s) });
+    }
+    return out;
+  }
+  /* "2026-03-15 ~ 2026-08-31 · …" — 원생 관리 화면에 보여 주는 휴관 이력 */
+  function pauseHistoryText(s) {
+    var list = pausePeriodsOf(s);
+    if (!list.length) { return ''; }
+    return list.map(function (p) {
+      return (p.from || '?') + ' ~ ' + (p.to || '휴관 중');
+    }).join(' · ');
+  }
   function pausedDays(s) {
-    if (!s || !isDateKey(s.pausedDate)) { return 0; }
-    var p = String(s.pausedDate).split('-');
+    var pd = pausedDateOf(s);
+    if (!isDateKey(pd)) { return 0; }
+    var p = String(pd).split('-');
     var start = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
     var today = new Date();
     today.setHours(0, 0, 0, 0);
     var days = Math.floor((today.getTime() - start.getTime()) / 86400000);
     return days < 0 ? 0 : days;
   }
+  /* v47 — 휴관 처리·복관을 한 곳에서: 상태 · 휴관일 · 복관일 · pausePeriods 를 함께 맞춘다
+     opts.pausedDate(휴관일) · opts.pauseReason · opts.resumedDate(복관일)
+     복관일이 없으면 오늘로 잡고, 열려 있던 휴관 이력의 to 를 그 날짜로 닫는다. */
+  function applyPauseState(s, status, opts) {
+    if (!s) { return null; }
+    opts = opts || {};
+    var periods = pausePeriodsOf(s).filter(function (p) { return !!p.from || !!p.to; });
+    if (status === 'paused') {
+      var pd = isDateKey(opts.pausedDate) ? String(opts.pausedDate) : (pausedDateOf(s) || todayKey());
+      s.status = 'paused';
+      s.pausedDate = pd;
+      var reason = (opts.pauseReason === undefined) ? String(s.pauseReason || '') : String(opts.pauseReason || '');
+      s.pauseReason = reason.trim().slice(0, 60);
+      var openIdx = -1;
+      for (var i = periods.length - 1; i >= 0; i--) { if (!periods[i].to) { openIdx = i; break; } }
+      if (openIdx >= 0) { periods[openIdx].from = periods[openIdx].from || pd; }
+      else { periods.push({ from: pd, to: '' }); }
+      s.pausePeriods = periods;
+      return s;
+    }
+    /* 재원(복관) */
+    var rd = isDateKey(opts.resumedDate) ? String(opts.resumedDate) : '';
+    var hadPause = isPaused(s) || !!pausedDateOf(s) || periods.some(function (p) { return !p.to; });
+    s.status = 'active';
+    if (rd) { s.resumedDate = rd; }
+    else if (hadPause) { s.resumedDate = todayKey(); }
+    if (resumedDateOf(s)) {
+      var closed = false;
+      for (var j = periods.length - 1; j >= 0; j--) {
+        if (!periods[j].to) { periods[j].to = resumedDateOf(s); closed = true; break; }
+      }
+      if (!closed && !periods.length && pausedDateOf(s)) {
+        periods.push({ from: pausedDateOf(s), to: resumedDateOf(s) });
+      }
+    }
+    if (periods.length) { s.pausePeriods = periods; }
+    s.pausedDate = '';
+    s.pauseReason = '';
+    return s;
+  }
   function setStudentStatus(id, status, opts) {
     var s = byId(id);
     if (!s) { return null; }
-    opts = opts || {};
-    if (status === 'paused') {
-      s.status = 'paused';
-      s.pausedDate = isDateKey(opts.pausedDate) ? String(opts.pausedDate)
-        : (isDateKey(s.pausedDate) ? String(s.pausedDate) : todayKey());
-      var reason = (opts.pauseReason === undefined) ? String(s.pauseReason || '') : String(opts.pauseReason || '');
-      s.pauseReason = reason.trim().slice(0, 60);
-    } else {
-      s.status = 'active';
-      s.pausedDate = '';
-      s.pauseReason = '';
-    }
+    applyPauseState(s, status, opts || {});
     saveStudents();
     renderAll();
     return s;
@@ -7722,20 +7839,30 @@
     var s = byId(id);
     if (!s) { return; }
     if (!isPaused(s)) { toast(s.name + ' 관원은 이미 재원생이에요.'); return; }
+    var draft = { date: todayKey() };
+    var pausedOn = pausedDateOf(s);
     openModal({
       title: s.name + ' 관원을 재원으로 복귀시킬까요?',
       sub: '복귀하면 출석·원비·단체문자 대상에 다시 포함됩니다.',
-      body: '<div class="help" style="margin-top:0">누적 출석 <b>' + (Number(s.attendCount) || 0) + '회</b> · 띠 <b>' + esc(s.belt || '미지정') +
+      body: '<div class="field"><label>복관일 (다시 다니기 시작한 날)</label>' +
+        '<input class="input" id="rs-modal-date" type="date" value="' + esc(todayKey()) + '"></div>' +
+        '<div class="help" style="margin-top:0">누적 출석 <b>' + (Number(s.attendCount) || 0) + '회</b> · 띠 <b>' + esc(s.belt || '미지정') +
         '</b> — 출결·원비 기록은 모두 그대로 이어집니다.' +
-        (s.pauseReason ? '<br>휴관 사유: ' + esc(s.pauseReason) : '') + '</div>',
+        (pausedOn ? '<br>휴관일: ' + esc(pausedOn) : '') +
+        (s.pauseReason ? '<br>휴관 사유: ' + esc(s.pauseReason) : '') +
+        '<br><b>복관일이 속한 달부터</b> 원비(미납·완납)를 다시 매깁니다. 그 전 휴관 기간의 달은 미납으로 잡히지 않아요.</div>',
       actions: [
         { label: '취소', value: null, kind: 'btn-ghost' },
         { label: '재원 복귀', value: true, kind: 'btn-primary' }
-      ]
+      ],
+      onAction: function () {
+        if (el('rs-modal-date')) { draft.date = String(el('rs-modal-date').value || '').trim(); }
+      }
     }).then(function (ok) {
       if (!ok) { return; }
-      setStudentStatus(id, 'active');
-      toast(s.name + ' 관원을 재원으로 복귀했어요 · 「🥋 원생 관리」로 돌아갔어요 · 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로');
+      var rd = isDateKey(draft.date) ? draft.date : todayKey();
+      setStudentStatus(id, 'active', { resumedDate: rd });
+      toast(s.name + ' 관원을 재원으로 복귀했어요 (복관일 ' + rd + ') · 「🥋 원생 관리」로 돌아갔어요 · 누적 출석 ' + (Number(s.attendCount) || 0) + '회 그대로');
     });
   }
 
@@ -9875,7 +10002,31 @@
   }
   function tuitionStatusOf(mk, sid) {
     var r = tuitionOf(mk, sid);
+    /* 그 달에 완납·면제 기록이 있으면 입관 전·휴관 달이라도 그대로 인정한다 */
+    if (r && r.status === 'paid') { return 'paid'; }
+    if (r && r.status === 'exempt') { return 'exempt'; }
+    var free = tuitionMonthStateOf(byId(sid), mk);
+    if (free) { return free; }
     return (r && TUITION_STATUS[r.status]) ? r.status : 'unpaid';
+  }
+  /* ---------- v47 — 원비를 매기지 않는 달 ----------
+     · 최초등록일(firstRegDate)보다 앞선 달                 → 'before' (입관 전)
+     · 휴관일이 있는 달 다음 달 ~ 복관일이 있는 달 전 달    → 'pausedMonth' (휴관 기간)
+       복관일이 속한 달부터는 다시 정상 원비(미납·완납) 대상이다.
+     · 날짜가 비었거나 형식이 틀린 예전 관원은 예전과 똑같이 동작한다(빈 값). */
+  function tuitionMonthStateOf(s, mk) {
+    if (!s || !isMonthKey(mk)) { return ''; }
+    var fr = firstRegOf(s);
+    if (fr && String(mk) < fr.slice(0, 7)) { return 'before'; }
+    var periods = pausePeriodsOf(s);
+    for (var i = 0; i < periods.length; i++) {
+      var p = periods[i];
+      if (!p || !isDateKey(p.from)) { continue; }
+      if (String(mk) <= p.from.slice(0, 7)) { continue; }                  /* 휴관일이 있는 달은 그대로 낸다 */
+      if (isDateKey(p.to) && String(mk) >= p.to.slice(0, 7)) { continue; }  /* 복관일이 있는 달부터는 다시 낸다 */
+      return 'pausedMonth';
+    }
+    return '';
   }
   /* 이 달의 기본 원비(차감 전) — 기록에 직접 넣은 금액이 있으면 그 금액 */
   function tuitionBaseAmount(mk, sid) {
@@ -10010,11 +10161,17 @@
       expected: 0, paid: 0, paidCount: 0, unpaid: 0, unpaidCount: 0,
       base: 0, deduction: 0,
       exempt: 0, exemptCount: 0, rate: 0, noMethod: 0, noMethodCount: 0,
+      /* v47 — 원비를 매기지 않는 달에 있는 관원 (입관 전 · 휴관 기간) */
+      beforeCount: 0, pausedMonthCount: 0,
       byMethod: { '카드': 0, '현금': 0, '입금': 0 },
       byMethodCount: { '카드': 0, '현금': 0, '입금': 0 }
     };
     (rows || []).forEach(function (s) {
       var st = tuitionStatusOf(mk, s.id);
+      if (tuitionIsFree(st)) {
+        if (st === 'before') { out.beforeCount++; } else { out.pausedMonthCount++; }
+        return;
+      }
       var baseAmt = tuitionBaseAmount(mk, s.id);
       var dedAmt = tuitionDeduction(mk, s.id);
       var amt = Math.max(0, baseAmt - dedAmt);
@@ -10109,7 +10266,7 @@
     var pzPfx = pzView ? '재원생 ' : '';
     if (el('tu-expected')) { el('tu-expected').innerHTML = fmtWon(sum.expected) + '<small>원</small>'; }
     if (el('tu-expected-n')) {
-      el('tu-expected-n').textContent = pzPfx + (scope.length - sum.exemptCount) + '명 기준' +
+      el('tu-expected-n').textContent = pzPfx + (scope.length - sum.exemptCount - sum.beforeCount - sum.pausedMonthCount) + '명 기준' +
         (sum.deduction ? ' · 차감 ' + fmtWon(sum.deduction) + '원' : '');
     }
     if (el('tu-paid')) { el('tu-paid').innerHTML = fmtWon(sum.paid) + '<small>원</small>'; }
@@ -10142,6 +10299,8 @@
         el('tu-note').textContent = tuitionMonthLabel(mk) + ' · 납부 기한 매월 ' + tuitionDueDay() + '일 · ' +
           (u.className === 'all' ? '전체 부서' : u.className) + ' ' + scope.length + '명' +
           (sum.deduction ? ' · 차감 ' + fmtWon(sum.deduction) + '원 반영' : '') +
+          (sum.beforeCount ? ' · 입관 전 ' + sum.beforeCount + '명' : '') +
+          (sum.pausedMonthCount ? ' · 휴관 기간 ' + sum.pausedMonthCount + '명' : '') +
           (filtered ? ' · 표는 필터 적용' : '');
       }
     }
@@ -10166,6 +10325,7 @@
         var amt = Math.max(0, base - ded);
         var rec = tuitionOf(mk, s.id) || {};
         var grade = studentGrade(s);
+        var dateShown = tuitionIsFree(st) ? (rec.paidDate || '') : tuitionDateShown(mk, s.id);
         var methods = TUITION_METHODS.map(function (m) {
           var on = (st === 'paid' && rec.method === m);
           return '<button type="button" class="tu-mbtn' + (on ? ' on' : '') + '" data-tmethod="' + esc(m) + '" data-sid="' + esc(s.id) + '"' +
@@ -10177,8 +10337,11 @@
           ' aria-label="' + esc(s.name + ' 선택') + '"></td>' +
           '<td class="nm"><div class="nm-line">' + esc(s.name) +
           (isPaused(s) ? '<span class="chip pause tub-paused" title="휴관생 — 이 달 원비 기록">🛌 휴관</span>' : '') +
+          (st === 'before' ? '<span class="chip tub-free" title="최초등록일 ' + esc(firstRegOf(s) || '-') + '보다 앞선 달 — 원비 대상이 아니에요">입관 전</span>' : '') +
+          (st === 'pausedMonth' ? '<span class="chip tub-free" title="휴관 기간의 달 — 원비 대상이 아니에요. 복관일이 속한 달부터 다시 매깁니다">휴관 기간</span>' : '') +
           '<span class="belt-badge tub-belt">' + beltSwatchHtml(s.belt) + esc(s.belt || '미지정') + '</span></div>' +
           '<div class="sub">' + esc(studentLabel(s)) + (grade ? ' · ' + esc(grade) : '') + siblingBadge(s) +
+          (st === 'before' ? ' · 첫 등록 ' + esc(firstRegOf(s)) : '') +
           '<button type="button" class="tu-year-btn" data-tyear="' + esc(s.id) + '" title="1년 납부 기록 보기" aria-label="1년 납부 기록 보기">1년</button></div>' +
           (parentNamesText(s) ? '<div class="sub tu-parent" title="원비 입금자명 확인용">' + esc(parentNamesText(s)) + '</div>' : '') +
           '</td>' +
@@ -10192,13 +10355,15 @@
           '<input class="input mini tu-ded-reason" type="text" maxlength="40" value="' + esc(dedReason) + '"' +
           ' data-tdedreason="' + esc(s.id) + '" placeholder="차감 사유 (예: 결석 2회)" aria-label="' + esc(s.name + ' 차감 사유') + '">' +
           '</div></td>' +
-          '<td class="tu-charge' + (amt ? '' : ' zero') + '">' + fmtWon(amt) + '원' +
-          (ded ? '<small>−' + fmtWon(ded) + '원</small>' : '') + '</td>' +
+          '<td class="tu-charge' + (amt ? '' : ' zero') + '">' + (tuitionIsFree(st)
+            ? '<span class="tu-free">' + esc(tuitionStatusLabel(st)) + '</span>'
+            : (fmtWon(amt) + '원' + (ded ? '<small>−' + fmtWon(ded) + '원</small>' : ''))) + '</td>' +
           '<td><select class="input mini tu-status" data-tstatus="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 납부 상태') + '">' +
+          (tuitionIsFree(st) ? '<option value="' + esc(st) + '" selected>' + esc(tuitionStatusLabel(st)) + '</option>' : '') +
           '<option value="unpaid"' + (st === 'unpaid' ? ' selected' : '') + '>미납</option>' +
           '<option value="paid"' + (st === 'paid' ? ' selected' : '') + '>완납</option>' +
           '<option value="exempt"' + (st === 'exempt' ? ' selected' : '') + '>면제·휴원</option></select></td>' +
-          '<td><input class="input mini tu-date' + (!rec.paidDate && tuitionDayOf(s) ? ' tu-date-def' : '') + '" type="date" value="' + esc(tuitionDateShown(mk, s.id)) + '"' +
+          '<td><input class="input mini tu-date' + (!rec.paidDate && !tuitionIsFree(st) && tuitionDayOf(s) ? ' tu-date-def' : '') + '" type="date" value="' + esc(dateShown) + '"' +
           ' data-tdate="' + esc(s.id) + '" aria-label="' + esc(s.name + ' 납부일') + '"' +
           ' title="' + esc(!rec.paidDate && tuitionDayOf(s)
             ? ('원비 날짜 ' + dayLabel(tuitionDayOf(s)) + ' 기준으로 보여줍니다 · 고치면 관원의 원비 날짜도 바뀝니다')
@@ -10270,6 +10435,10 @@
     var u = ensureTuition(), mk = u.month, s = byId(sid);
     if (!s) { return 'skipped'; }
     var st = tuitionStatusOf(mk, sid);
+    if (tuitionIsFree(st)) {
+      if (!silent) { toast(s.name + ' 관원은 ' + tuitionStatusLabel(st) + '이라 원비 안내를 보내지 않았어요.'); }
+      return 'skipped';
+    }
     if (st === 'exempt') {
       if (!silent) { toast(s.name + ' 관원은 면제·휴원이라 원비 안내를 보내지 않았어요.'); }
       return 'skipped';
@@ -10329,13 +10498,16 @@
     if (!ids.length) { return; }
     var u = ensureTuition(), mk = u.month;
     var list = ids.map(byId).filter(Boolean);
-    var payable = list.filter(function (s) { return tuitionStatusOf(mk, s.id) !== 'exempt' && smsPhonesOf(s).length; });
-    if (!payable.length) { toast('문자를 보낼 수 있는 관원이 없어요(면제·휴원이거나 연락처 없음).'); return; }
+    var payable = list.filter(function (s) {
+      var st = tuitionStatusOf(mk, s.id);
+      return !tuitionIsFree(st) && st !== 'exempt' && smsPhonesOf(s).length;
+    });
+    if (!payable.length) { toast('문자를 보낼 수 있는 관원이 없어요(입관 전·휴관 기간·면제·휴원이거나 연락처 없음).'); return; }
     openModal({
       title: '선택한 ' + payable.length + '명에게 원비 안내 문자를 보낼까요?',
       sub: tuitionMonthLabel(mk) + ' · 미납자는 납부 안내, 완납자는 수납 감사 문자를 받습니다.',
       body: '<div class="help" style="margin-top:0">도장폰 무료문자 설정(웹훅)을 그대로 쓰고, 여러 명에게는 0.7초 간격으로 차례로 나갑니다.' +
-        (list.length - payable.length ? '<br>면제·휴원 또는 연락처가 없는 ' + (list.length - payable.length) + '명은 제외됩니다.' : '') +
+        (list.length - payable.length ? '<br>입관 전·휴관 기간·면제·휴원 또는 연락처가 없는 ' + (list.length - payable.length) + '명은 제외됩니다.' : '') +
         '</div>',
       actions: [
         { label: '취소', value: false, kind: 'btn-ghost' },
@@ -10377,10 +10549,11 @@
       var rec = tuitionOf(mk, s.id) || {};
       var base = tuitionBaseAmount(mk, s.id);
       var ded = tuitionDeduction(mk, s.id);
+      var free = tuitionIsFree(st);
       lines.push(pad([
         s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '',
-        base, ded, tuitionDeductionReason(mk, s.id), Math.max(0, base - ded),
-        TUITION_STATUS[st],
+        free ? '' : base, free ? '' : ded, free ? '' : tuitionDeductionReason(mk, s.id), free ? '' : Math.max(0, base - ded),
+        tuitionStatusLabel(st),
         (st === 'paid' ? (rec.paidDate || '') : ''),
         (st === 'paid' ? (rec.method || '') : ''),
         rec.memo || ''
@@ -10423,9 +10596,11 @@
       var mk = y + '-' + pad2(m);
       var rec = tuitionOf(mk, sid);
       var has = !!rec;
-      var st = has ? tuitionStatusOf(mk, sid) : 'unpaid';
+      /* v47 — 기록이 없어도 입관 전·휴관 기간의 달은 미납으로 보지 않는다 */
+      var st = tuitionStatusOf(mk, sid);
       out.push({
-        month: m, mk: mk, hasRecord: has, status: st, statusLabel: TUITION_STATUS[st],
+        month: m, mk: mk, hasRecord: has, status: st, statusLabel: tuitionStatusLabel(st),
+        excluded: tuitionIsFree(st) ? st : '',
         paidDate: (has && st === 'paid' && isDateKey(rec.paidDate)) ? String(rec.paidDate) : '',
         method: (has && st === 'paid' && rec.method) ? String(rec.method) : '',
         amount: has ? tuitionCharge(mk, sid) : null,
@@ -10437,9 +10612,11 @@
   function studentYearSummary(sid, year) {
     var out = {
       paidCount: 0, paidTotal: 0, exemptCount: 0, unpaidCount: 0, recordCount: 0, memoCount: 0,
+      excludedCount: 0,
       byMethod: { '카드': 0, '현금': 0, '입금': 0 }
     };
     studentYearRows(sid, year).forEach(function (r) {
+      if (r.excluded) { out.excludedCount++; return; }
       if (!r.hasRecord) { return; }
       out.recordCount++;
       if (r.status === 'paid') {
@@ -10499,6 +10676,7 @@
       '<div class="sy-sum">' + y + '년 완납 <b>' + sum.paidCount + '건</b> · 납부 합계 <b>' + fmtWon(sum.paidTotal) + '원</b>' +
       (sum.exemptCount ? ' · 면제 ' + sum.exemptCount + '건' : '') +
       (sum.unpaidCount ? ' · 미납 ' + sum.unpaidCount + '건' : '') +
+      (sum.excludedCount ? ' · 입관 전·휴관 ' + sum.excludedCount + '달 제외' : '') +
       (sum.memoCount ? ' · 메모 ' + sum.memoCount + '건' : '') + '</div></div>';
     var table = '<div class="sy-tablewrap"><table class="tb sy-table"><thead><tr>' +
       '<th style="width:46px">월</th><th style="width:74px">상태</th><th style="width:96px">납부일</th>' +
@@ -10506,7 +10684,7 @@
       rows.map(function (r) {
         return '<tr class="sy-row ' + r.status + (r.hasRecord ? '' : ' none') + '" data-sy-month="' + r.mk + '" title="' + r.month + '월 원비 관리로 이동">' +
           '<td>' + r.month + '월</td>' +
-          '<td>' + (r.hasRecord ? esc(r.statusLabel) : '기록 없음') + '</td>' +
+          '<td>' + ((r.hasRecord || r.excluded) ? esc(r.statusLabel) : '기록 없음') + '</td>' +
           '<td>' + (r.paidDate ? esc(r.paidDate) : '-') + '</td>' +
           '<td>' + (r.method ? esc(r.method) : '-') + '</td>' +
           '<td>' + (r.hasRecord ? fmtWon(r.amount) + '원' : '-') + '</td>' +
@@ -11406,6 +11584,7 @@
       month: mk, total: 0, paidRoster: 0, expected: 0, unpaid: 0,
       base: 0, deduction: 0,
       paidCount: 0, unpaidCount: 0, exemptCount: 0, pausedCount: 0,
+      beforeCount: 0, pausedMonthCount: 0,
       noMethod: 0, noMethodCount: 0, orphanCount: 0, rate: 0,
       byMethod: emptyMethodMap(), byMethodCount: emptyMethodMap(),
       byDivision: [], byBelt: [], rows: []
@@ -11431,6 +11610,16 @@
         return;
       }
       var st = tuitionStatusOf(mk, s.id);
+      /* v47 — 입관 전·휴관 기간의 달은 예정액·미납·수납률에서 뺀다 (완납 기록은 그대로 매출에 잡힌다) */
+      if (tuitionIsFree(st)) {
+        row.status = st;
+        row.statusLabel = tuitionStatusLabel(st);
+        row.fee = 0;
+        row.base = 0;
+        if (st === 'before') { out.beforeCount++; } else { out.pausedMonthCount++; }
+        out.rows.push(row);
+        return;
+      }
       var baseAmt = tuitionBaseAmount(mk, s.id);
       var dedAmt = tuitionDeduction(mk, s.id);
       var amt = Math.max(0, baseAmt - dedAmt);
@@ -11570,6 +11759,8 @@
     lines.push(reportPad(['수납률', d.rate + '%']));
     lines.push(reportPad(['면제(명)', '', '', '', d.exemptCount]));
     lines.push(reportPad(['휴관 제외(명)', '', '', '', d.pausedCount]));
+    lines.push(reportPad(['입관 전(명)', '', '', '', d.beforeCount || 0]));
+    lines.push(reportPad(['휴관 기간 제외(명)', '', '', '', d.pausedMonthCount || 0]));
     lines.push(reportPad(['수단 미기록(원)', '', '', '', d.noMethod]));
     lines.push(reportPad(['전월 수납액(원)', '', '', '', prev.total]));
     lines.push(reportPad(['전월 대비(원)', '', '', '', del.amount]));
@@ -11578,7 +11769,7 @@
     lines.push(reportPad(['관원', '부서', '수업', '띠', '기본 원비(원)', '차감액(원)', '차감사유', '실 청구액(원)', '상태', '결제 수단', '납부일', '수납 금액(원)']));
     (d.rows || []).forEach(function (r) {
       var paid = r.status === 'paid';
-      var skip = (r.status === 'paused' || r.status === 'exempt');
+      var skip = (r.status === 'paused' || r.status === 'exempt' || tuitionIsFree(r.status));
       var base = skip ? 0 : (r.base || r.fee || 0);
       var ded = skip ? 0 : (r.deduction || 0);
       lines.push(reportPad([
@@ -11673,8 +11864,9 @@
       return '<tr class="empty-row"><td colspan="9">등록된 관원이 없어요. 「출석 · 명단」에서 관원을 먼저 등록해 주세요.</td></tr>';
     }
     return d.rows.map(function (r) {
-      var stateCls = r.status === 'paid' ? 'paid' : (r.status === 'unpaid' ? 'unpaid' : (r.status === 'paused' ? 'paused' : 'exempt'));
-      var feeTxt = (r.status === 'paused' || r.status === 'exempt') ? '-' : (fmtWon(r.fee) + '원');
+      var stateCls = r.status === 'paid' ? 'paid' : (r.status === 'unpaid' ? 'unpaid'
+        : (r.status === 'paused' ? 'paused' : (tuitionIsFree(r.status) ? 'before' : 'exempt')));
+      var feeTxt = (r.status === 'paused' || r.status === 'exempt' || tuitionIsFree(r.status)) ? '-' : (fmtWon(r.fee) + '원');
       var amtTxt = (r.status === 'paid') ? (fmtWon(r.amount) + '원') : (r.status === 'unpaid' ? '0원' : '-');
       var dedTxt = r.deduction
         ? ('−' + fmtWon(r.deduction) + '원' + (r.deductionReason ? '<div class="sub">' + esc(r.deductionReason) + '</div>' : ''))
@@ -11740,7 +11932,9 @@
     if (el('rp-unpaid-n')) { el('rp-unpaid-n').textContent = d.unpaidCount + '명 · ' + fmtWon(d.unpaid) + '원'; }
     if (el('rp-rate')) { el('rp-rate').innerHTML = d.rate + '<small>%</small>'; }
     if (el('rp-rate-n')) {
-      el('rp-rate-n').textContent = '휴관 ' + d.pausedCount + '명 · 면제 ' + d.exemptCount + '명 제외';
+      el('rp-rate-n').textContent = '휴관 ' + d.pausedCount + '명 · 면제 ' + d.exemptCount + '명 제외' +
+        (d.beforeCount ? ' · 입관 전 ' + d.beforeCount + '명' : '') +
+        (d.pausedMonthCount ? ' · 휴관 기간 ' + d.pausedMonthCount + '명' : '');
     }
 
     if (el('rp-methods')) { el('rp-methods').innerHTML = reportMethodRows(d); }
@@ -11769,6 +11963,8 @@
     if (el('rp-note')) {
       el('rp-note').textContent = tuitionMonthLabel(mk) + ' · ' + d.rows.length + '명' +
         (d.deduction ? ' · 차감 ' + fmtWon(d.deduction) + '원 반영' : '') +
+        (d.beforeCount ? ' · 입관 전 ' + d.beforeCount + '명' : '') +
+        (d.pausedMonthCount ? ' · 휴관 기간 ' + d.pausedMonthCount + '명' : '') +
         (d.orphanCount ? ' · 명단 외 납부 ' + d.orphanCount + '건 포함' : '');
     }
     if (el('rp-print-head')) {
@@ -12414,7 +12610,7 @@
     var mk = monthKey(new Date());
     var out = { total: list.length, thisMonth: 0, ready: 0, noReason: 0, active: activeStudents().length };
     list.forEach(function (s) {
-      if (String(s.pausedDate || '').slice(0, 7) === mk) { out.thisMonth++; }
+      if (String(pausedDateOf(s) || '').slice(0, 7) === mk) { out.thisMonth++; }
       if (pausedDays(s) >= PAUSED_READY_DAYS) { out.ready++; }
       if (!String(s.pauseReason || '').trim()) { out.noReason++; }
     });
@@ -12448,7 +12644,7 @@
         s.name, divisionOf(s), courseLabel(s.division, s.course), s.belt || '', studentGrade(s),
         parentNameOf(s, 'mother'), parentPhoneFrom(s, 'mother'), parentNameOf(s, 'father'), parentPhoneFrom(s, 'father'),
         smsTargetLabel(s), s.phone || '', addressOf(s),
-        s.pausedDate || '', s.pauseReason || '', noteOf(s), '휴관'
+        pausedDateOf(s), s.pauseReason || '', noteOf(s), '휴관'
       ]);
     });
     return '\uFEFF' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
@@ -12497,7 +12693,7 @@
       var days = pausedDays(s);
       var grade = studentGrade(s);
       var ready = days >= PAUSED_READY_DAYS;
-      var dayTxt = !isDateKey(s.pausedDate) ? '휴관일 미기록'
+      var dayTxt = !isDateKey(pausedDateOf(s)) ? '휴관일 미기록'
         : (days <= 0 ? '오늘부터 휴관' : '휴관 ' + days + '일째');
       return '<tr>' +
         '<td class="nm"><div class="nm-line">' + esc(s.name) + '<span class="chip pause">휴관</span></div>' +
@@ -12506,7 +12702,7 @@
         '<td>' + beltSwatchHtml(s.belt) + ' <span class="sub" style="font-size:12px;color:#344054;font-weight:800">' + esc(s.belt || '미지정') + '</span>' +
         (grade ? '<span class="grade-chip">' + esc(grade) + '</span>' : '') + '</td>' +
         '<td class="sub">' + phonesCellHtml(s) + '</td>' +
-        '<td><input class="input mini" type="date" data-pzdate="' + esc(s.id) + '" value="' + esc(s.pausedDate || '') + '" aria-label="' + esc(s.name + ' 휴관일') + '"></td>' +
+        '<td><input class="input mini" type="date" data-pzdate="' + esc(s.id) + '" value="' + esc(pausedDateOf(s)) + '" aria-label="' + esc(s.name + ' 휴관일') + '"></td>' +
         '<td><input class="input mini pz-reason" type="text" maxlength="60" data-pzreason="' + esc(s.id) + '" value="' + esc(s.pauseReason || '') + '" placeholder="휴관 사유/메모" aria-label="' + esc(s.name + ' 휴관 사유') + '"></td>' +
         '<td><input class="input mini pz-notein" type="text" maxlength="200" data-pznote="' + esc(s.id) + '" value="' + esc(noteOf(s)) + '" placeholder="특이사항 · 비고" autocomplete="off" aria-label="' + esc(s.name + ' 특이사항 · 비고') + '" title="특이사항 · 비고 (관리자 화면 전용)"></td>' +
         '<td class="pz-act">' +
@@ -12723,6 +12919,7 @@
     if (field === 'pausedDate') {
       s.pausedDate = isDateKey(value) ? String(value) : '';
       if (!s.pausedDate) { toast('휴관일을 날짜로 골라 주세요.(' + s.name + ')'); }
+      else if (isPaused(s)) { applyPauseState(s, 'paused', { pausedDate: s.pausedDate }); }   /* v47 — 이력의 열린 구간도 같은 날짜로 */
     } else if (field === 'pauseReason') {
       s.pauseReason = String(value || '').trim().slice(0, 60);
     } else if (field === 'note') {
@@ -18232,6 +18429,9 @@
       feeOf: studentFee,
       of: tuitionOf,
       statusOf: tuitionStatusOf,
+      monthStateOf: tuitionMonthStateOf,
+      statusLabel: tuitionStatusLabel,
+      isFreeMonth: tuitionIsFree,
       amountOf: tuitionAmountOf,
       set: setTuition,
       setStatus: setTuitionStatus,
@@ -18314,6 +18514,12 @@
     },
     studentInfo: {
       firstReg: firstRegOf,
+      pausedDate: pausedDateOf,
+      resumedDate: resumedDateOf,
+      pausePeriods: pausePeriodsOf,
+      pauseHistory: pauseHistoryText,
+      applyPauseState: applyPauseState,
+      setStatus: setStudentStatus,
       birth: birthOf,
       tcon: tconOf,
       note: noteOf,
@@ -18491,6 +18697,11 @@
       setStatus: setStudentStatus,
       pausePrompt: pauseStudentPrompt,
       resumePrompt: resumeStudentPrompt,
+      pausedDate: pausedDateOf,
+      resumedDate: resumedDateOf,
+      periods: pausePeriodsOf,
+      historyText: pauseHistoryText,
+      applyState: applyPauseState,
       days: pausedDays,
       summary: pausedSummary,
       rows: pausedRows,

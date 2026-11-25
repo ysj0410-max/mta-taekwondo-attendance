@@ -11,7 +11,7 @@
    배포할 때마다 아래 VERSION 값을 올리면 옛 캐시가 정리됩니다.
    ============================================================= */
 
-var VERSION = 'v46-2026-11-25';
+var VERSION = 'v47-2026-11-25';
 var CACHE_NAME = 'mta-taekwondo-' + VERSION;
 var HTML_TIMEOUT_MS = 2000;   /* v46 — 느린 네트워크에서도 2초면 캐시로 넘어간다 */
 
