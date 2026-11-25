@@ -6,6 +6,8 @@
      저장합니다. (tdk.fbConfig.v1 — 다른 기기로 자동 전송되지 않습니다)
    · v43 — 관리자 계정 단일 구조: 모든 기기(PC·태블릿·폰)가 같은 관리자 계정으로
      로그인해 하나의 Firestore 를 함께 씁니다. 태블릿 전용 계정·역할 선택은 없습니다.
+   · v48 — 앱을 켜면 이 Firebase 로그인이 첫 화면(관문)입니다. 앱 잠금(admin / 0000)은
+     없어졌습니다 — 로그인한 계정이 서버 roles/{uid} 에서 관리자로 확인되어야 본문이 열립니다.
    · 모의 모드(🧪)에서는 실제 Firebase 없이 전 기능을 그대로 연습할 수 있습니다.
      같은 브라우저에서 탭을 두 개 열면 두 기기처럼 서로 동기화됩니다.
    ============================================================================= */
@@ -35,6 +37,10 @@
     msgKind: '',
     timer: null
   };
+
+  /* v48 — 첫 화면 관문 상태 (아래 「v48 — 첫 화면의 Firebase 로그인 관문」 절) */
+  var G = { step: 'checking', locked: true, busy: false, deciding: null, uid: '', email: '', offline: false };
+  var VERIFIED_KEY = 'tdk.fbGate.v1';
 
   function $(id) { return document.getElementById(id); }
   function val(id) { var e = $(id); return e ? String(e.value == null ? '' : e.value) : ''; }
@@ -186,19 +192,9 @@
     renderAll();
   }
 
-  /* 서버 roles/{uid} 확인 결과를 화면 문구로 — 연결 직후와 늦은 세션 복원이 같은 말을 하도록 */
-  function roleVerifiedMsg(r) {
-    if (r && r.verified === 'admin') {
-      return '✅ 관리자 계정(' + (r.email || r.uid) + ')으로 확인되었습니다 — 데이터 이전을 진행할 수 있습니다.';
-    }
-    if (r && r.uid) {
-      return '🔒 이 계정은 관리자가 아닙니다 — 아래 관리자 계정으로 로그인해 주세요. (관리자로 확인되기 전에는 서버로 아무것도 보내지 않습니다)';
-    }
-    return '🔒 아직 로그인하지 않았습니다 — 아래 관리자 계정으로 로그인해 주세요. (로그인 전에는 서버로 아무것도 보내지 않습니다)';
-  }
-
-  /* connect() 가 기다린 4초 안에는 세션이 복원되지 않았는데 그 뒤에 복원되는 경우까지 따라간다.
-     Firebase 의 onAuthStateChanged 로 uid 가 생기면 roles/{uid} 를 다시 읽어 자동으로 🟢 연결됨 까지 간다. */
+  /* 세션 변화를 관문에 그대로 반영한다 (v48).
+     · 늦게 복원된 세션이 생기면 roles/{uid} 를 확인해 관문을 연다(관리자일 때만).
+     · 세션이 사라지면(다른 탭 로그아웃·만료) 다시 잠그고 로그인 화면으로 돌아간다. */
   function watchAuthRestore(adapter, engine) {
     if (!adapter || typeof adapter.onAuthChange !== 'function') { return; }
     if (S.authUnsub) { try { S.authUnsub(); } catch (e) {} S.authUnsub = null; }
@@ -206,28 +202,13 @@
       S.authUnsub = adapter.onAuthChange(function (user) {
         if (S.engine !== engine) { return; }
         var uid = (user && user.uid) ? String(user.uid) : '';
-        if (!uid) { return; }
-        /* 이미 누군가 로그인한 상태(로그인 흐름 포함)에서는 그쪽이 처리한다 —
-           여기서는 「S.auth 가 비어 있는데 세션이 생겼을 때」만 따라간다 */
-        if (S.auth && S.auth.uid) { return; }
-        S.auth = { uid: uid, email: (user && user.email) || '', role: '' };
-        S.msg = '🔎 로그인 세션이 복원되었습니다 — 이 계정(' + ((user && user.email) || uid) + ')의 역할을 서버에서 확인하는 중…';
-        S.msgKind = '';
-        renderAll();
-        var verifying;
-        try { verifying = engine.verifyRole(); } catch (err) { return; }
-        Promise.resolve(verifying).then(function (r) {
-          if (S.engine !== engine) { return; }
-          if (r && r.uid) {
-            S.auth = { uid: r.uid, email: r.email || '', role: r.verified || '' };
-          }
-          S.msg = roleVerifiedMsg(r);
-          S.msgKind = (r && r.verified === 'admin') ? 'ok' : 'warn';
-          renderAll();
-        }, function (err) {
-          if (S.engine !== engine) { return; }
-          showError('⚠️ 역할 확인에 실패했습니다: ', err);
-        });
+        if (!uid) {
+          /* 세션이 사라졌다 — 열려 있던 관문을 다시 잠근다 */
+          if (G.step === 'ready') { gateLock('expired'); }
+          return;
+        }
+        if (G.step === 'ready' && G.uid === uid) { return; }
+        gateDecide();
       });
     } catch (e) { S.authUnsub = null; }
   }
@@ -275,38 +256,13 @@
         S.adapter = adapter;
         var engine = makeEngine(adapter);
         saveConfig({ mode: 'firestore', config: v.config });
-        S.msg = '🔥 Firebase 에 연결했습니다. 관리자 계정으로 로그인하면 서버 roles 기준으로 동기화가 시작됩니다.';
+        S.msg = '🔥 Firebase 에 연결했습니다.';
         S.msgKind = 'ok';
-        /* 이전에 로그인한 세션이 남아 있으면 바로 역할을 확인해 연결 상태를 갱신한다 */
-        var cu = null;
-        try { cu = (typeof adapter.currentUser === 'function') ? adapter.currentUser() : null; } catch (e) { cu = null; }
-        if (cu && cu.uid) {
-          S.auth = { uid: cu.uid, email: cu.email || '', role: '' };
-          S.msg = '🔎 이전에 로그인한 계정(' + (cu.email || cu.uid) + ')의 역할을 서버에서 확인하는 중…';
-          S.msgKind = '';
-        }
         renderAll();
-        var verifying;
-        try { verifying = engine.verifyRole(); } catch (err) { verifying = Promise.reject(err); }
-        return Promise.resolve(verifying).then(function (r) {
-          try {
-            if (r && r.uid) {
-              S.auth = { uid: r.uid, email: r.email || '', role: r.verified || '' };
-            }
-            S.msg = roleVerifiedMsg(r);
-            S.msgKind = (r && r.verified === 'admin') ? 'ok' : 'warn';
-            renderAll();
-          } catch (err) {
-            showError('⚠️ 연결 상태를 화면에 표시하지 못했습니다: ', err);
-          }
-          /* 여기까지 와도 세션이 늦게 복원될 수 있으니 계속 지켜본다 */
-          try { watchAuthRestore(adapter, engine); } catch (e) {}
-          return true;
-        }, function (err) {
-          showError('⚠️ 역할 확인에 실패했습니다: ', err);
-          try { watchAuthRestore(adapter, engine); } catch (e) {}
-          return true;
-        });
+        /* 세션이 늦게 복원되거나 사라지는 것까지 계속 지켜본다 */
+        try { watchAuthRestore(adapter, engine); } catch (e) {}
+        /* 저장된 로그인 세션 → roles/{uid} 확인 → 관문을 열지 정한다 */
+        return gateDecide().then(function (ok) { return !!ok; }, function () { return false; });
       } catch (err) {
         showError('⚠️ 연결하지 못했습니다: ', err);
         return false;
@@ -538,6 +494,8 @@
     return '서버 roles 문서의 「관리자」 권한으로 동작합니다.';
   }
 
+  /* v48 — 패널의 로그인 안내칸. 실제 로그인은 첫 화면 관문이 맡고,
+     여기서는 「지금 어느 계정인지」만 보여 준다. */
   function renderAuth() {
     var a = S.auth;
     var el = $('fb-auth');
@@ -551,7 +509,7 @@
     if (cardA) { cardA.className = 'fb-login-card active'; }
     var hint = $('fb-role-hint');
     if (hint) {
-      hint.innerHTML = '모든 기기가 <b>같은 관리자 계정</b>으로 로그인합니다 — 아래 <b>관리자 계정</b>으로 로그인하세요.';
+      hint.innerHTML = '로그인은 앱을 열 때 첫 화면에서 합니다 — 이 화면에서는 계정을 바꿀 때만 <b>로그아웃</b>을 눌러 주세요.';
     }
     var note = $('fb-role-state');
     if (!note) { return; }
@@ -560,7 +518,7 @@
       return;
     }
     if (!a) {
-      note.textContent = 'Firebase 콘솔 → Authentication 에서 만든 관리자 계정으로 로그인하세요 — PC·태블릿·폰이 모두 같은 계정을 씁니다.';
+      note.textContent = '아직 로그인하지 않았습니다 — 앱 첫 화면의 로그인에서 관리자 계정으로 들어와 주세요.';
       return;
     }
     if (!a.role) {
@@ -574,7 +532,8 @@
 
   function renderAll() {
     var modeSel = $('fb-mode');
-    if (modeSel) { modeSel.value = S.cfg.mode; }
+    /* v48 — 미연결(로컬) 모드는 없다: 저장된 설정이 있으면 실제 Firebase, 연습은 모의 모드 */
+    if (modeSel) { modeSel.value = (S.cfg.mode === 'mock') ? 'mock' : 'firestore'; }
     var dj = $('fb-dojang');
     if (dj && !dj.value) { dj.value = S.cfg.dojangId; }
     var emailA = $('fb-admin-email');
@@ -667,98 +626,23 @@
     });
   }
 
-  /* 관리자 로그인 — PC·태블릿·폰이 모두 같은 관리자 계정 하나를 쓴다 (v43) */
-  function loginAs() {
-    if (!S.adapter || S.adapter.mode !== 'firestore' || !S.adapter.signInEmail) {
-      S.msg = '실제 Firebase 모드에서만 로그인할 수 있습니다. (모의 모드는 로그인 없이 시험)';
-      S.msgKind = 'warn';
-      renderAll();
-      return;
-    }
-    var email = val('fb-admin-email').trim();
-    var pw = val('fb-admin-pw');
-    if (!email || !pw) {
-      S.msg = '관리자 계정의 이메일과 비밀번호를 입력해 주세요.';
-      S.msgKind = 'warn';
-      renderAll();
-      return;
-    }
-    S.msg = '관리자 계정으로 로그인 중…';
-    renderAll();
-    var signing;
-    try {
-      signing = S.adapter.signInEmail(email, pw);
-    } catch (err) {
-      showError('⚠️ 로그인 실패: ', err);
-      return;
-    }
-    Promise.resolve(signing).then(function (u) {
-      if (!u || !u.uid) {
-        S.msg = '⚠️ 로그인 응답에 사용자 정보가 없습니다 — 다시 시도해 주세요.';
-        S.msgKind = 'warn';
-        renderAll();
-        return;
-      }
-      var pwEl = $('fb-admin-pw');
-      if (pwEl) { pwEl.value = ''; }
-      S.auth = { uid: u.uid, email: u.email, role: '' };
-      saveConfig({ adminEmail: email });
-      var roleCall;
-      try {
-        roleCall = S.adapter.getDoc('dojangs/' + S.cfg.dojangId + '/roles/' + u.uid);
-      } catch (err) {
-        if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
-          try { S.engine.setVerifiedRole(''); } catch (e) {}
-        }
-        showError('⚠️ 로그인은 됐지만 관리자 역할을 확인하지 못했습니다: ', err);
-        return;
-      }
-      return Promise.resolve(roleCall).then(function (r) {
-        S.auth.role = r && r.exists && r.data ? String(r.data.role || '') : '';
-        /* 서버 roles 로 유효 권한을 잠근다 */
-        if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
-          try { S.engine.setVerifiedRole(S.auth.role); } catch (e) {}
-        }
-        if (!S.auth.role) {
-          S.msg = '⚠️ 로그인은 됐지만 roles 문서가 없습니다 — dojangs/' + S.cfg.dojangId + '/roles/' + u.uid +
-            ' 문서에 role: "admin" 을 만들어 주세요. (만들기 전까지는 동기화를 하지 않습니다)';
-          S.msgKind = 'warn';
-        } else if (S.auth.role !== 'admin') {
-          S.msg = '⚠️ 이 계정의 역할은 「' + roleLabel(S.auth.role) + '」이라 관리자가 아닙니다 — roles 문서의 role 을 "admin" 으로 맞추거나 관리자 계정으로 다시 로그인해 주세요.';
-          S.msgKind = 'warn';
-        } else {
-          S.msg = '✅ 관리자 계정으로 로그인했습니다. (서버 roles 기준으로 관리자 권한이 확인되었습니다)';
-          S.msgKind = 'ok';
-        }
-        renderAll();
-      }, function (err) {
-        if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
-          try { S.engine.setVerifiedRole(''); } catch (e) {}
-        }
-        showError('⚠️ 로그인은 됐지만 관리자 역할을 확인하지 못했습니다: ', err);
-      });
-    }, function (err) {
-      S.msg = '⚠️ 로그인 실패: ' + FB.errorText(err) +
-        ' (Firebase Authentication 에서 이메일/비밀번호 로그인을 켜고 관리자 계정을 만들어 주세요)';
-      S.msgKind = 'warn';
-      renderAll();
+  /* v48 — 로그아웃: 세션을 닫고 첫 화면 관문을 다시 잠갔다
+     (앱 잠금 admin/0000 은 없어졌으므로 「잠금」도 로그아웃 하나로 한다) */
+  function logoutNow() {
+    var ad = S.adapter;
+    var p = null;
+    try { p = (ad && typeof ad.signOut === 'function') ? ad.signOut() : null; } catch (e) { p = null; }
+    return Promise.resolve(p).then(function () { return true; }, function () { return false; }).then(function () {
+      clearVerified();
+      G.uid = '';
+      G.email = '';
+      S.auth = null;
+      gateLock('logout');
+      S.msg = '로그아웃했습니다 — 다음에 관리자 계정으로 로그인해 주세요.';
+      S.msgKind = '';
+      try { renderAll(); } catch (e) {}
+      return true;
     });
-  }
-
-  function logoutAs() {
-    if (!S.adapter || S.adapter.mode !== 'firestore') {
-      S.msg = '로그인된 계정이 없습니다.';
-      renderAll();
-      return;
-    }
-    if (S.adapter && typeof S.adapter.signOut === 'function') {
-      try { Promise.resolve(S.adapter.signOut()).then(function () {}, function () {}); } catch (e) {}
-    }
-    S.auth = null;
-    /* 로그아웃하면 관리자 확인도 지운다 — 다시 잠금(역할 미확인) 상태로 */
-    if (S.engine && typeof S.engine.setVerifiedRole === 'function') { try { S.engine.setVerifiedRole(''); } catch (e) {} }
-    S.msg = '로그아웃했습니다.';
-    renderAll();
   }
 
   function onPreview() {
@@ -915,60 +799,6 @@
   }
 
   /* ---------- 화면 아래 작은 상태 알약 ---------- */
-  /* ---------- 🔑 Firebase 관리자 계정 확인 (앱 잠금 초기화용) ----------
-     앱의 관리자 비밀번호를 잊었을 때 로그인 모달에서 Firebase 관리자 계정으로
-     본인 확인만 하는 통로. 서버 roles/{uid} 가 'admin' 인 경우에만 통과한다.
-     · 화면에서 고른 역할이 아니라 서버 문서를 본다 (태블릿·권한 없는 계정은 거부)
-     · 아직 연결하지 않은 기기라도 설정만 저장돼 있으면 확인용으로 잠깐 연결한다
-       (이때는 동기화 엔진을 켜지 않아 기기에 있는 자료를 건드리지 않는다) */
-  function verifyAdminCredentials(email, pw) {
-    email = String(email || '').trim();
-    pw = String(pw || '');
-    if (!email || !pw) { return Promise.resolve({ ok: false, reason: 'empty' }); }
-    var cfg = loadConfig();
-    if (!cfg.config || typeof cfg.config !== 'object') { return Promise.resolve({ ok: false, reason: 'no-config' }); }
-    var v = FB.validateConfig(cfg.config);
-    if (!v.ok) { return Promise.resolve({ ok: false, reason: 'bad-config', detail: v.errors.join(' / ') }); }
-    var base = 'dojangs/' + cfg.dojangId;
-    var live = (S.adapter && S.adapter.mode === 'firestore' && typeof S.adapter.signInEmail === 'function') ? S.adapter : null;
-    var getting;
-    if (live) {
-      getting = Promise.resolve(live);
-    } else {
-      try {
-        getting = FB.createFirestoreAdapter(Object.assign({ dojangId: cfg.dojangId }, v.config), adapterOpts({ basePath: base }));
-      } catch (err) {
-        return Promise.resolve({ ok: false, reason: 'connect-failed', detail: FB.errorText(err) });
-      }
-    }
-    return Promise.resolve(getting).then(function (adapter) {
-      return Promise.resolve(adapter.signInEmail(email, pw)).then(function (u) {
-        if (!u || !u.uid) { return { ok: false, reason: 'no-user' }; }
-        return Promise.resolve(adapter.getDoc(base + '/roles/' + u.uid)).then(function (snap) {
-          var role = (snap && snap.exists && snap.data) ? String(snap.data.role || '') : '';
-          if (role !== 'admin') {
-            return { ok: false, reason: 'not-admin', role: role || 'none', uid: u.uid };
-          }
-          /* 이미 연결된 기기라면 엔진에도 「관리자로 확인됨」을 알려 바로 관리자로 쓸 수 있게 한다 */
-          if (adapter === S.adapter) {
-            S.auth = { uid: u.uid, email: u.email || email, role: 'admin', expect: 'admin' };
-            saveConfig({ adminEmail: email });
-            if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
-              try { S.engine.setVerifiedRole('admin'); } catch (e) {}
-            }
-            try { renderAll(); } catch (e2) {}
-          }
-          return { ok: true, uid: u.uid, email: u.email || email, role: 'admin', connected: adapter === S.adapter };
-        }, function (err) {
-          return { ok: false, reason: 'role-read-failed', uid: u.uid, detail: FB.errorText(err) };
-        });
-      }, function (err) {
-        return { ok: false, reason: 'auth-failed', detail: FB.errorText(err) };
-      });
-    }, function (err) {
-      return { ok: false, reason: 'connect-failed', detail: FB.errorText(err) };
-    });
-  }
 
   /* ---------- 📊 동기화 상태 창 (헤더 배지·관리자 화면에서 연다) ----------
      · 지금 상태·마지막 동기화·증분(델타) 구독 현황·전송 대기를 한눈에
@@ -1129,8 +959,6 @@
   function bind() {
     var map = [
       ['fb-save', onSave], ['fb-test', onTest], ['fb-mock', connectMock],
-      ['fb-admin-login', function () { loginAs(); }],
-      ['fb-admin-logout', function () { logoutAs(); }],
       ['fb-mig-preview', onPreview], ['fb-mig-run', onMigrate],
       ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-clear-failed', onClearFailed], ['fb-usage-reset', onUsageReset],
       ['fb-guide', onGuide],
@@ -1162,13 +990,361 @@
     }
   }
 
+  /* =========================================================================
+     v48 — 첫 화면의 Firebase 로그인 관문
+     -------------------------------------------------------------------------
+     · index.html 의 #login-gate 가 앱 본문 위를 덮고 있다. 관문이 열려야(ready)
+       앱 본문과 실시간 동기화가 보인다. 앱은 window.__tdkGate.locked 로 잠금을 안다.
+     · 순서: 저장된 세션 확인 → 서버 roles/{uid} 확인 → admin 이면 열림
+             세션 없음 → 로그인 화면 · 관리자 아님 → 사유 안내 뒤 다시 로그인
+             설정 없음(새 기기·저장소 초기화) → firebaseConfig 입력 화면
+     · 인터넷이 없을 때는 「마지막으로 관리자 확인된 계정」(이 기기에 기록)에 한해
+       관문을 연다 — 출석이 인터넷 때문에 멈추지 않게(기록은 기기에 쌓였다가 연결되면 보낸다).
+     ========================================================================= */
+  function gateRoot() { return $('login-gate'); }
+
+  /* 관문 문구·단계 — 지금 보여 줄 한 단계만 남기고 나머지는 숨긴다 */
+  function gateShowStep(step) {
+    G.step = step;
+    var steps = { checking: 'gate-check', login: 'gate-form', denied: 'gate-denied', setup: 'gate-setup' };
+    Object.keys(steps).forEach(function (k) { show(steps[k], k === step); });
+    var root = gateRoot();
+    if (root) {
+      if (root.classList) { root.classList.toggle('off', step === 'ready'); }
+      root.style.display = (step === 'ready') ? 'none' : 'flex';
+    }
+    setLocked(step !== 'ready', step);
+    if (step !== 'ready') { try { renderAll(); } catch (e) {} }
+  }
+
+  /* 잠금 상태를 앱과 나누어 가진다 — 앱은 이 값으로 출석 입력까지 막는다 */
+  function setLocked(locked, reason) {
+    G.locked = !!locked;
+    try {
+      window.__tdkGate = { locked: !!locked, step: G.step, reason: reason || '', uid: G.uid, email: G.email };
+    } catch (e) {}
+    try {
+      if (window.__tdk && typeof window.__tdk.onGate === 'function') {
+        window.__tdk.onGate(!!locked ? 'locked' : 'ready');
+      }
+    } catch (e) {}
+  }
+
+  function gateMsg(text, kind) {
+    var el = $('gate-msg');
+    if (!el) { return; }
+    el.textContent = String(text == null ? '' : text);
+    el.className = 'gate-msg' + (kind === 'bad' ? ' bad' : (kind === 'warn' ? ' warn' : (kind === 'ok' ? ' ok' : '')));
+    el.style.display = text ? '' : 'none';
+  }
+  function gateNote(text) {
+    var el = $('gate-note');
+    if (!el) { return; }
+    el.textContent = String(text || '');
+    el.style.display = text ? '' : 'none';
+  }
+  function gateBusy(on, label) {
+    G.busy = !!on;
+    var btn = $('gate-login');
+    if (btn) { btn.disabled = !!on; btn.textContent = on ? (label || '로그인 중…') : '로그인'; }
+  }
+
+  /* 마지막으로 관리자 확인된 계정 — 인터넷이 없을 때만 쓰는 기억 */
+  function rememberVerified(info) {
+    if (!info || !info.uid) { return; }
+    try {
+      localStorage.setItem(VERIFIED_KEY, JSON.stringify({
+        uid: String(info.uid), email: String(info.email || ''), at: new Date().toISOString()
+      }));
+    } catch (e) {}
+  }
+  function cachedVerified() {
+    try {
+      var v = JSON.parse(localStorage.getItem(VERIFIED_KEY) || 'null');
+      return (v && v.uid) ? v : null;
+    } catch (e) { return null; }
+  }
+  function clearVerified() { try { localStorage.removeItem(VERIFIED_KEY); } catch (e) {} }
+
+  /* 서버 roles/{uid} 를 직접 읽어 관리자인지 확인하고, 엔진의 유효 권한도 맞춘다 */
+  function verifyAdminNow(uid) {
+    var ad = S.adapter;
+    var id = String(uid || '');
+    if (!id) {
+      var cu = null;
+      try { cu = (ad && typeof ad.currentUser === 'function') ? ad.currentUser() : null; } catch (e) { cu = null; }
+      id = (cu && cu.uid) ? String(cu.uid) : '';
+    }
+    if (!ad || !id) { return Promise.resolve({ verified: '', role: 'none', reason: 'no-sign-in' }); }
+    var path = 'dojangs/' + S.cfg.dojangId + '/roles/' + id;
+    if (typeof ad.getDoc !== 'function') { return Promise.resolve({ verified: '', role: 'none', reason: 'no-adapter', uid: id, path: path }); }
+    var call;
+    try { call = ad.getDoc(path); } catch (err) { call = Promise.reject(err); }
+    return Promise.resolve(call).then(function (res) {
+      var v = (res && res.exists && res.data) ? String(res.data.role || '') : '';
+      /* 서버 roles 로 유효 권한을 잠근다 — admin 이면 엔진이 구독·전송을 시작한다 */
+      if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
+        try { S.engine.setVerifiedRole(v); } catch (e) {}
+      }
+      return { verified: v, role: v || 'none', uid: id, email: G.email, path: path };
+    }, function (err) {
+      if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
+        try { S.engine.setVerifiedRole(''); } catch (e) {}
+      }
+      return { verified: '', role: 'none', uid: id, error: FB.errorText(err), path: path };
+    });
+  }
+
+  /* 지금 세션이 관리자인지 보고 관문을 열지 정한다 (동시에 여러 번 불러도 한 번만 확인) */
+  function gateDecide(pre) {
+    if (G.deciding) { return G.deciding; }
+    var p = decideNow(pre || null);
+    G.deciding = p;
+    var done = function () { if (G.deciding === p) { G.deciding = null; } };
+    p.then(done, done);
+    return p;
+  }
+
+  function decideNow(pre) {
+    var ad = S.adapter;
+    if (!ad || ad.mode !== 'firestore') {
+      gateShowStep('setup');
+      gateMsg('', '');
+      return Promise.resolve(false);
+    }
+    var uid = String((pre && pre.uid) || '');
+    var email = String((pre && pre.email) || '');
+    if (!uid) {
+      var cu = null;
+      try { cu = (typeof ad.currentUser === 'function') ? ad.currentUser() : null; } catch (e) { cu = null; }
+      uid = (cu && cu.uid) ? String(cu.uid) : '';
+      email = (cu && cu.email) || '';
+    }
+    if (!uid) {
+      /* 세션이 없다 — 로그인 화면 */
+      G.uid = '';
+      G.email = '';
+      S.auth = null;
+      gateShowStep('login');
+      gateMsg('', '');
+      gateNote('도장 ID ' + S.cfg.dojangId + ' · 관리자 계정으로 로그인해 주세요.');
+      var em = $('gate-email');
+      if (em && !em.value && S.cfg.adminEmail) { em.value = String(S.cfg.adminEmail); }
+      return Promise.resolve(false);
+    }
+    G.uid = uid;
+    G.email = email;
+    gateShowStep('checking');
+    gateMsg('', '');
+    return verifyAdminNow(uid).then(function (r) {
+      if (r && r.verified === 'admin') {
+        gateUnlock({ uid: uid, email: email });
+        return true;
+      }
+      if (r && r.error) {
+        /* 서버에 닿지 못했다 — 이 기기에서 마지막으로 관리자 확인된 바로 그 계정이면 연다 */
+        var cached = cachedVerified();
+        if (cached && String(cached.uid) === uid) {
+          gateUnlock({ uid: uid, email: email || cached.email, offline: true });
+          return true;
+        }
+        gateShowStep('login');
+        gateMsg('관리자 권한을 확인하지 못했습니다 — 인터넷 연결을 확인한 뒤 다시 시도해 주세요. (' + String(r.error) + ')', 'warn');
+        return false;
+      }
+      /* 로그인은 됐지만 관리자가 아니다 */
+      gateDenied(r);
+      return false;
+    }, function (err) {
+      gateShowStep('login');
+      gateMsg('권한을 확인하지 못했습니다: ' + FB.errorText(err), 'warn');
+      return false;
+    });
+  }
+
+  function gateDenied(r) {
+    var role = (r && (r.verified || r.role)) || '';
+    var who = G.email || G.uid;
+    var path = (r && r.path) || ('dojangs/' + S.cfg.dojangId + '/roles/' + G.uid);
+    setHtml('gate-denied-msg',
+      (who ? '<b>' + escHtml(who) + '</b> 계정은 ' : '') + '이 도장의 관리자가 아닙니다' +
+      (role ? ' (서버 역할: ' + escHtml(role) + ')' : ' (서버 역할 문서 없음)') + '.<br>' +
+      'Firebase 콘솔에서 <b>' + escHtml(path) + '</b> 문서의 role 을 <b>admin</b> 으로 맞추거나, 관리자 계정으로 다시 로그인해 주세요.');
+    gateShowStep('denied');
+    gateMsg('', '');
+    /* 세션이 남아 있으면 다음 실행에도 같은 계정으로 막히니 로그아웃해 둔다 */
+    S.auth = null;
+    clearVerified();
+    try {
+      if (S.adapter && typeof S.adapter.signOut === 'function') {
+        Promise.resolve(S.adapter.signOut()).then(function () {}, function () {});
+      }
+    } catch (e) {}
+  }
+
+  function gateUnlock(info) {
+    info = info || {};
+    if (info.uid) { G.uid = String(info.uid); }
+    if (info.email) { G.email = String(info.email); }
+    G.offline = !!info.offline;
+    S.auth = { uid: G.uid, email: G.email, role: 'admin' };
+    if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
+      try { S.engine.setVerifiedRole('admin'); } catch (e) {}
+    }
+    if (!info.offline) { rememberVerified({ uid: G.uid, email: G.email }); }
+    gateBusy(false);
+    gateMsg('', '');
+    gateShowStep('ready');
+    if (info.mock) {
+      S.msg = '🧪 연습(모의) 모드로 열었습니다 — 실제 서버 자료와 섞이지 않는 시험용입니다.';
+      S.msgKind = '';
+    } else if (info.offline) {
+      S.msg = '⚠️ 인터넷이 없어 「마지막으로 관리자 확인된 계정」으로 열었습니다 — 찍은 출석은 이 기기에 보관되고, 연결되면 자동으로 보냅니다.';
+      S.msgKind = 'warn';
+    } else {
+      S.msg = '✅ 관리자 계정(' + (G.email || G.uid) + ')으로 확인되어 출결·관리자 화면과 동기화를 시작했습니다.';
+      S.msgKind = 'ok';
+    }
+    try { renderAll(); } catch (e) {}
+    return true;
+  }
+
+  /* 관문을 다시 잠근다 — 로그인 화면(또는 설정 화면)으로 돌아간다 */
+  function gateLock(reason) {
+    gateBusy(false);
+    var ad = S.adapter;
+    var canLogin = !!(ad && ad.mode === 'firestore');
+    if (reason === 'logout' || reason === 'expired') { G.uid = ''; G.email = ''; }
+    S.auth = null;
+    if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
+      try { S.engine.setVerifiedRole(''); } catch (e) {}
+    }
+    gateShowStep(canLogin ? 'login' : 'setup');
+    if (reason === 'logout') { gateMsg('로그아웃했습니다 — 다시 로그인해 주세요.', 'ok'); }
+    else if (reason === 'expired') { gateMsg('로그인 세션이 끝났습니다 — 다시 로그인해 주세요.', 'warn'); }
+    else { gateMsg('', ''); }
+    return false;
+  }
+
+  /* 로그인 버튼 — 이메일·비밀번호 → Firebase 로그인 → roles/{uid} 확인 */
+  function gateLogin() {
+    if (G.busy) { return false; }
+    var email = val('gate-email').trim();
+    var pw = val('gate-pw');
+    if (!email || !pw) {
+      gateMsg('관리자 이메일과 비밀번호를 모두 입력해 주세요.', 'warn');
+      return false;
+    }
+    var ad = S.adapter;
+    if (!ad || ad.mode !== 'firestore' || typeof ad.signInEmail !== 'function') {
+      gateMsg('Firebase 에 아직 연결되지 않았습니다 — 잠시 뒤 다시 시도하거나 「연결 설정」을 확인해 주세요.', 'warn');
+      return false;
+    }
+    gateBusy(true);
+    gateMsg('로그인하는 중…', '');
+    var signing;
+    try { signing = ad.signInEmail(email, pw); } catch (err) { signing = Promise.reject(err); }
+    Promise.resolve(signing).then(function (u) {
+      if (!u || !u.uid) {
+        gateBusy(false);
+        gateMsg('로그인 응답에 사용자 정보가 없습니다 — 다시 시도해 주세요.', 'warn');
+        return;
+      }
+      var pwEl = $('gate-pw');
+      if (pwEl) { pwEl.value = ''; }
+      saveConfig({ adminEmail: email });
+      gateBusy(false);
+      gateDecide({ uid: String(u.uid), email: String(u.email || email) });
+    }, function (err) {
+      gateBusy(false);
+      gateMsg('로그인하지 못했습니다: ' + FB.errorText(err) + ' — 이메일·비밀번호를 확인해 주세요.', 'bad');
+    });
+    return true;
+  }
+
+  /* 설정 화면 — 이 기기에 firebaseConfig 가 없을 때(새 기기·저장소 초기화) */
+  function fillGateSetup() {
+    var dj = $('gate-dojang');
+    if (dj && !dj.value) { dj.value = S.cfg.dojangId || DEFAULT_DOJANG; }
+    var ar = $('gate-config');
+    if (ar && !ar.value && S.cfg.config) {
+      try {
+        ar.value = FB.stableStringify(S.cfg.config).replace(/,"/g, ',\n  "').replace(/^\{/, '{\n  ').replace(/\}$/, '\n}');
+      } catch (e) {}
+    }
+  }
+  function gateSetupSave() {
+    var raw = val('gate-config').trim();
+    var parsed = null;
+    if (raw) {
+      try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+      if (!parsed) {
+        var m = raw.match(/\{[\s\S]*\}/);
+        if (m) { try { parsed = JSON.parse(m[0]); } catch (e2) { parsed = null; } }
+      }
+    }
+    var v = FB.validateConfig(parsed || {});
+    if (!v.ok) {
+      gateMsg('firebaseConfig 를 확인해 주세요: ' + v.errors.join(' / '), 'bad');
+      return Promise.resolve(false);
+    }
+    var dj = FB.safeId(val('gate-dojang') || DEFAULT_DOJANG);
+    saveConfig({ mode: 'firestore', dojangId: dj, config: v.config });
+    gateMsg('Firebase 에 연결하는 중…', '');
+    return Promise.resolve(connectFirestore()).then(function () { return gateDecide(); });
+  }
+
+  /* 앱을 열 때 관문을 처음 세운다 */
+  function startGate() {
+    S.cfg = loadConfig();
+    var v = FB.validateConfig(S.cfg.config || {});
+    if (S.cfg.mode === 'mock') { connectMock(); gateUnlock({ mock: true }); return; }
+    if (!v.ok) {
+      fillGateSetup();
+      gateShowStep('setup');
+      if (S.cfg.config) { gateMsg('저장된 firebaseConfig 를 확인해 주세요: ' + v.errors.join(' / '), 'warn'); }
+      return;
+    }
+    gateShowStep('checking');
+    gateNote('도장 ID ' + S.cfg.dojangId);
+    connectFirestore();
+  }
+
+  /* 관문의 버튼·입력 연결 */
+  function bindGate() {
+    var form = $('gate-form');
+    if (form) {
+      form.addEventListener('submit', function (ev) {
+        if (ev && typeof ev.preventDefault === 'function') { ev.preventDefault(); }
+        gateLogin();
+      });
+    }
+    var btn = $('gate-login');
+    if (btn) {
+      btn.addEventListener('click', function (ev) {
+        if (ev && typeof ev.preventDefault === 'function') { ev.preventDefault(); }
+        gateLogin();
+      });
+    }
+    var retry = $('gate-denied-logout');
+    if (retry) { retry.addEventListener('click', function () { gateLock('retry'); }); }
+    var save = $('gate-setup-save');
+    if (save) {
+      save.addEventListener('click', function (ev) {
+        if (ev && typeof ev.preventDefault === 'function') { ev.preventDefault(); }
+        gateSetupSave();
+      });
+    }
+  }
+
   /* ---------- 시작 ---------- */
   function boot() {
-    if (!$('admin-fb-panel')) { return; }
     S.cfg = loadConfig();
     deviceId();
     ensurePill();
     bind();
+    bindGate();
+    if (!$('admin-fb-panel') && !$('login-gate')) { return; }
     /* 화면이 뜨자마자 옛 동기화 그림자를 IndexedDB 로 옮긴다 —
        localStorage 5MB 한도를 먼저 비워야 앱 데이터 저장이 "저장공간 부족"으로 멈추지 않는다.
        (연결을 하지 않는 로컬 모드에서도 마찬가지) */
@@ -1189,21 +1365,8 @@
       var ok = window.__tdk && window.__tdk.app;
       if (!ok && tries < 60) { setTimeout(ready, 150); return; }
       Promise.resolve(S.migrating).then(function () {
-        if (S.cfg.mode === 'mock') { connectMock(); }
-        else if (S.cfg.mode === 'firestore') {
-          /* 앱을 껐다 켜도 저장된 firebaseConfig 로 혼자 다시 연결한다.
-             로그인 세션은 어댑터가 복원을 기다렸다가(최대 4초) roles/{uid} 로 역할을 확인하므로
-             손대지 않아도 🟢 연결 상태로 돌아온다. */
-          var v = FB.validateConfig(S.cfg.config || {});
-          if (v.ok) { connectFirestore(); }
-          else {
-            S.msg = '⚠️ 저장된 firebaseConfig 를 확인해 주세요: ' + v.errors.join(' / ') +
-              ' — 「설정 저장」을 눌러 다시 연결할 수 있습니다.';
-            S.msgKind = 'warn';
-            renderAll();
-          }
-        }
-        else { renderAll(); }
+        /* v48 — 첫 화면은 로그인 관문이다. 저장된 세션 → roles 확인 뒤 본문을 연다 */
+        startGate();
       });
       if (S.timer) { clearInterval(S.timer); }
       S.timer = setInterval(function () { renderStatus(); renderUsage(); renderQueue(); }, 2000);
@@ -1228,10 +1391,21 @@
     },
     openSyncStatus: openSyncStatus,
     closeSyncStatus: closeSyncStatus,
-    /* 🔑 로그인 모달의 「비밀번호 분실 시」 — Firebase 관리자 계정으로 본인 확인 */
-    verifyAdminCredentials: verifyAdminCredentials,
     roleLabel: function (r) { return roleLabel(r); },
-    loginAs: loginAs,
+    /* v48 — 첫 화면 로그인 관문 */
+    logout: logoutNow,
+    gate: {
+      state: function () {
+        return { step: G.step, locked: G.step !== 'ready', busy: G.busy, uid: G.uid, email: G.email, offline: G.offline };
+      },
+      login: gateLogin,
+      decide: gateDecide,
+      lock: gateLock,
+      unlock: gateUnlock,
+      logout: logoutNow,
+      setup: gateSetupSave,
+      cached: cachedVerified
+    },
     auth: function () { return S.auth ? { uid: S.auth.uid, email: S.auth.email, role: S.auth.role } : null; },
     engine: function () { return S.engine; },
     adapter: function () { return S.adapter; },
