@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=41"></script>
-<script src="firebase-sync-ui.js?v=41"></script>
+<script src="firebase-sync.js?v=42"></script>
+<script src="firebase-sync-ui.js?v=42"></script>
 <title>경희대MTA태권도 · AI 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -245,6 +245,8 @@
   /* 바코드 모드에서는 AI 얼굴 박스·시뮬레이션 버튼을 쓰지 않는다 */
   body.barcode-mode #face-overlay{display:none}
   body.barcode-mode #btn-pick-sim, body.barcode-mode #btn-random-sim{display:none}
+  /* v42 COM(시리얼) 리더기 — 연결되면 초록 글자로 표시, 바코드 모드에서도 그대로 보인다 */
+  #btn-com-reader.on, #btn-com-reader-admin.on{border-color:#0b7a55; color:#0b7a55; font-weight:800; background:#eefaf5}
 
   /* 카메라 위 바코드 조준 가이드 */
   .barcode-guide{
@@ -1487,6 +1489,7 @@
         <div class="cam-bar">
           <div class="cam-status" id="cam-help">관원을 선택하면 인식 → 자동 출석까지 재생됩니다.</div>
           <div class="spacer"></div>
+          <button class="btn" id="btn-com-reader" title="USB·시리얼(COM 포트) 바코드 리더기를 연결합니다">🔌 COM 리더기</button>
           <button class="btn btn-mint" id="btn-pick-sim">🎯 관원 선택 인식</button>
           <button class="btn btn-ghost" id="btn-random-sim">🎲 랜덤 데모</button>
           <button class="btn" id="btn-camera">📷 카메라 연결</button>
@@ -1875,6 +1878,38 @@
         </div>
 
         <div id="admin-settings" class="ov" style="display:none">
+          <div class="panel" id="admin-com-panel">
+                <div class="panel-head">
+                  <h3>🔌 COM 포트(시리얼) 바코드 리더기</h3>
+                  <div class="spacer"></div>
+                  <span class="tiny-note" id="com-state">연결 안 됨</span>
+                </div>
+                <div class="panel-body">
+                  <div class="row2">
+                    <div class="field"><label>통신 속도 (baud rate)</label>
+                      <select class="input" id="com-baud">
+                        <option value="9600" selected>9600 — Symbol DS9208 기본값</option>
+                        <option value="19200">19200</option>
+                        <option value="38400">38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200">115200</option>
+                      </select>
+                    </div>
+                    <div class="field"><label>&nbsp;</label>
+                      <div class="form-actions" style="margin:0">
+                        <button class="btn btn-primary" id="btn-com-reader-admin" title="USB·시리얼(COM 포트) 바코드 리더기를 연결합니다">🔌 COM 리더기</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="tiny-note" id="com-note" style="margin-top:6px;line-height:1.6">
+                    관장님 PC의 <b>크롬·엣지</b>에서 <b>🔌 COM 리더기</b>를 누르면 시리얼 포트 목록이 뜹니다 — 리더기가 꽂힌 포트를 고르세요.
+                    기본 <b>9600 bps · 8N1</b>은 Symbol DS9208 기본값이라 그대로 연결하면 됩니다.
+                    기존 학원 프로그램이 같은 포트를 열고 있으면 연결되지 않으니, 그 프로그램을 잠시 닫고 다시 눌러 주세요.
+                    <b>리더기 설정(호스트 모드)은 바꾸지 않습니다.</b>
+                  </div>
+                </div>
+              </div>
+
           <div class="panel" id="admin-fb-panel">
                 <div class="panel-head">
                   <h3>🔥 Firebase 실시간 동기화</h3>
@@ -6404,8 +6439,10 @@
     }, function () { barcode.busy = false; });
   }
 
-  /* 인식된 바코드 한 건 처리 — 등원/하원 + 효과음 + 토스트 + 문자 큐(얼굴인식과 동일) */
+  /* 인식된 바코드 한 건 처리 — 등원/하원 + 효과음 + 토스트 + 문자 큐(얼굴인식과 동일)
+     · opts 에 글자로 출처를 넘기면(예: 'serial') 그대로 source 로 받고 바로 처리한다 */
   function handleBarcodeScan(raw, opts) {
+    if (typeof opts === 'string') { opts = { force: true, source: opts }; }
     opts = opts || {};
     var code = normalizeBarcode(raw);
     if (!code) { return { ok: false, reason: 'empty' }; }
@@ -6433,6 +6470,7 @@
     setCamStatus(student.name + ' · 바코드 인식 · ' + modeTxt);
     var checked = checkIn(student, 'barcode');
     return { ok: true, code: code, studentId: student.id, name: student.name, mode: app.settings.mode,
+      source: opts.source || 'camera',
       recorded: !!(checked && checked.ok), result: checked };
   }
 
@@ -6630,6 +6668,400 @@
       setCamStatus(res.name + ' · 리더기 인식 · ' + modeTxt);
     }
     return res;
+  }
+
+  /* =========================================================
+     10-F. 🔌 COM 포트(시리얼) 바코드 리더기 (v42)
+     ---------------------------------------------------------
+     · 도장 PC의 기존 학원 프로그램이 쓰는 Symbol DS9208 은 시리얼(COM 포트) 모드다.
+       그 프로그램이 깨지면 안 되므로 리더기 설정(호스트 모드)은 그대로 두고,
+       크롬·엣지의 Web Serial 로 이 앱이 직접 포트를 열어 읽는다.
+     · 포트는 한 번에 한 프로그램만 열 수 있다 — 학원 프로그램이 열고 있으면
+       open() 이 실패하므로 그 사실을 그대로 안내한다.
+     · 받은 글자는 \r · \n · \x03(ETX) 에서 끊어 한 줄로 만들고, \x02(STX) 같은
+       제어문자를 지운 뒤 normalizeBarcode → handleBarcodeScan 으로
+       기존 출석 경로(등원/하원 · 효과음 · 배지 · 토스트 · 문자 큐)를 그대로 탄다.
+     · v41 전역 키보드(HID) 리더기·카메라 바코드 인식은 그대로 둔다.
+     ========================================================= */
+  var COM_DEFAULT_BAUD = 9600;                       /* Symbol DS9208 기본값 */
+  var COM_BAUD_CHOICES = [9600, 19200, 38400, 57600, 115200];
+  var COM_LS_KEY = 'tdk.comReader.v1';               /* 이 PC에만 저장(동기화하지 않음) */
+  var COM_DUP_MS = 1200;                             /* 같은 번호가 곧바로 다시 들어오면 한 번만 */
+  var COM_MAX_KEEP = 40;                             /* normalizeBarcode 와 같은 상한 */
+  var COM_MAX_BUF = 4096;                            /* 구분자가 없이 쌓이는 글자 폭주 방지 */
+  var COM_UNSUPPORTED_MSG = 'PC 크롬 또는 엣지 브라우저에서 COM 포트 리더기를 연결할 수 있어요';
+  var COM_BUSY_MSG = '다른 프로그램(기존 학원 프로그램)이 포트를 쓰고 있어요. 잠시 닫고 다시 눌러 주세요';
+
+  var comReader = {
+    port: null,          /* 열어 둔 SerialPort */
+    reader: null,        /* 읽기 잠금을 잡은 reader */
+    connecting: false,   /* 포트를 여는 중 */
+    connected: false,    /* 다 열려서 읽는 중 */
+    stopped: false,      /* 내가 끊었는지(오류 안내를 두 번 하지 않기 위해) */
+    baud: 0,             /* 지금(또는 다음) 연결에 쓸 속도 */
+    buf: '',             /* 구분자 전까지 모은 글자 */
+    lastCode: '',        /* 바로 전에 처리한 번호(중복 방지) */
+    lastHitAt: 0,
+    chunks: 0,           /* 받은 조각 수(진단용) */
+    scans: 0,            /* 처리한 스캔 수 */
+    lastScanAt: 0,
+    lastError: '',
+    closePending: null,  /* 끊는 중 — 읽기 잠금을 놓으면 닫을 포트 */
+    loopPort: null,      /* 지금 읽고 있는 포트 */
+    eventsBound: false
+  };
+
+  /* 이 브라우저가 시리얼 포트를 다룰 수 있는지(휴대폰·파이어폭스·사파리는 없음) */
+  function comSupported() {
+    try {
+      return !!(typeof navigator !== 'undefined' && navigator && navigator.serial &&
+        typeof navigator.serial.requestPort === 'function');
+    } catch (e) { return false; }
+  }
+
+  /* 저장된(또는 화면에서 고른) 통신 속도 — 기본 9600 */
+  function comStoredBaud() {
+    var saved = readJSON(COM_LS_KEY, null);
+    var b = saved ? Math.round(Number(saved.baudRate)) : 0;
+    return COM_BAUD_CHOICES.indexOf(b) !== -1 ? b : 0;
+  }
+  function comBaud() {
+    var sel = el('com-baud');
+    var v = (sel && sel.value) ? Math.round(Number(sel.value)) : 0;
+    if (COM_BAUD_CHOICES.indexOf(v) !== -1) { return v; }
+    return comStoredBaud() || COM_DEFAULT_BAUD;
+  }
+  function comSaveBaud(b) {
+    if (COM_BAUD_CHOICES.indexOf(b) === -1) { return; }
+    writeJSON(COM_LS_KEY, { baudRate: b });
+  }
+
+  function comReaderStateText() {
+    if (!comSupported())                   { return '이 브라우저는 COM 포트를 지원하지 않아요 · PC 크롬·엣지에서 쓰세요'; }
+    if (comReader.connecting)             { return 'COM 포트를 여는 중…'; }
+    if (comReader.connected) {
+      return '연결됨 · ' + (comReader.baud || COM_DEFAULT_BAUD) + ' bps · 스캔 ' + comReader.scans + '건';
+    }
+    if (comReader.lastError)              { return comReader.lastError; }
+    return '연결 안 됨 · 기본 ' + COM_DEFAULT_BAUD + ' bps';
+  }
+
+  /* 버튼 글자·상태·속도 선택을 한곳에서 다시 그린다 */
+  function renderComReaderUI() {
+    var label = comReader.connected ? '🟢 COM 리더기 연결됨' : '🔌 COM 리더기';
+    var title = comReader.connected
+      ? '누르면 COM 포트 연결을 끊습니다'
+      : 'USB·시리얼(COM 포트) 바코드 리더기를 연결합니다';
+    ['btn-com-reader', 'btn-com-reader-admin'].forEach(function (id) {
+      var b = el(id);
+      if (!b) { return; }
+      b.textContent = label;
+      if (b.classList && typeof b.classList.toggle === 'function') { b.classList.toggle('on', !!comReader.connected); }
+      if (b.setAttribute) { b.setAttribute('title', title); }
+    });
+    var st = el('com-state');
+    if (st) { st.textContent = comReaderStateText(); }
+    var sel = el('com-baud');
+    if (sel && typeof document !== 'undefined' && document && document.activeElement !== sel) {
+      sel.value = String(comReader.baud || comStoredBaud() || COM_DEFAULT_BAUD);
+    }
+    var note = el('com-note');
+    if (note) {
+      var head = comReader.connected
+        ? '<b>🟢 연결됨 (' + (comReader.baud || COM_DEFAULT_BAUD) + ' bps)</b> — 출석 화면에서 카드를 찍으면 바로 등원·하원 처리됩니다.'
+        : (comReader.connecting
+          ? '<b>COM 포트를 여는 중…</b> 브라우저 위에 뜨는 ports 목록에서 리더기를 골라 주세요.'
+          : (comReader.lastError
+            ? '<b style="color:#c0392b">' + esc(comReader.lastError) + '</b>'
+            : '<b>연결 안 됨</b> — 「🔌 COM 리더기」를 누르면 기본 ' + COM_DEFAULT_BAUD + ' bps 로 바로 연결합니다.'));
+      note.innerHTML = head +
+        '<br>PC <b>크롬·엣지</b>에서 시리얼(COM 포트)로 쓰는 리더기를 읽습니다. ' +
+        '기존 학원 프로그램이 같은 포트를 열고 있으면 연결되지 않으니 그 프로그램을 잠시 닫고 다시 눌러 주세요. ' +
+        '<b>리더기 설정(호스트 모드)은 바꾸지 않습니다.</b>';
+    }
+  }
+
+  /* 포트를 열지 못한 이유를 관장님이 읽을 말로 바꾼다 */
+  function comReaderErrorText(err) {
+    var name = String((err && err.name) || '');
+    var msg = String((err && err.message) || err || '');
+    if (name === 'NotFoundError' || /no port selected|user cancel|cancel/i.test(msg)) {
+      return 'COM 포트를 고르지 않았어요. 다시 눌러 리더기가 꽂힌 포트를 골라 주세요.';
+    }
+    if (name === 'NetworkError' || name === 'InvalidStateError' || name === 'UnknownError' ||
+        /failed to open|already open|in use|busy|access denied|open/i.test(msg)) {
+      return COM_BUSY_MSG;
+    }
+    if (name === 'SecurityError' || name === 'NotAllowedError') {
+      return 'COM 포트를 열 권한이 없어요. 주소창의 자물쇠에서 「시리얼 포트」 권한을 허용해 주세요.';
+    }
+    return 'COM 포트를 열지 못했어요' + (msg ? ' (' + msg + ')' : '');
+  }
+
+  /* 글자 조각 → 문자열 (TextDecoder 가 없는 옛 환경에서는 직접 푼다) */
+  function comReaderDecoder() {
+    if (typeof TextDecoder !== 'undefined') {
+      try { return new TextDecoder('utf-8', { fatal: false }); } catch (e) {}
+    }
+    return {
+      decode: function (bytes) {
+        if (bytes == null) { return ''; }
+        if (typeof bytes === 'string') { return bytes; }
+        var out = '', i, n = (bytes.length || 0);
+        for (i = 0; i < n; i++) {
+          var b = bytes[i] & 0xFF;
+          if (b < 0x80) { out += String.fromCharCode(b); }
+          else if (b >= 0xC0 && b < 0xE0 && i + 1 < n) {
+            out += String.fromCharCode(((b & 0x1F) << 6) | (bytes[i + 1] & 0x3F)); i++;
+          } else if (b >= 0xE0 && b < 0xF0 && i + 2 < n) {
+            out += String.fromCharCode(((b & 0x0F) << 12) | ((bytes[i + 1] & 0x3F) << 6) | (bytes[i + 2] & 0x3F)); i += 2;
+          } else if (b >= 0xF0 && i + 3 < n) {
+            var cp = ((b & 0x07) << 18) | ((bytes[i + 1] & 0x3F) << 12) | ((bytes[i + 2] & 0x3F) << 6) | (bytes[i + 3] & 0x3F);
+            cp -= 0x10000;
+            out += String.fromCharCode(0xD800 + (cp >> 10), 0xDC00 + (cp & 0x3FF)); i += 3;
+          }
+        }
+        return out;
+      }
+    };
+  }
+
+  /* 한 줄에서 제어문자(STX·ETX·NUL 등)와 앞뒤 공백을 지운다 */
+  function comCleanLine(line) {
+    var s = String(line == null ? '' : line).replace(/[\x00-\x1F\x7F]/g, '').trim();
+    if (!s) { return ''; }
+    return s.slice(0, COM_MAX_KEEP);
+  }
+  /* 다음 구분자(\r · \n · \x03) 위치 — 없으면 -1 */
+  function comNextDelim(s) {
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (c === '\r' || c === '\n' || c === '\x03') { return i; }
+    }
+    return -1;
+  }
+
+  /* 받은 글자를 버퍼에 모아 완성된 줄마다 출석 처리한다 */
+  function comReaderFeed(text) {
+    var out = [];
+    if (text == null) { return out; }
+    comReader.buf += String(text);
+    if (comReader.buf.length > COM_MAX_BUF) { comReader.buf = comReader.buf.slice(-COM_MAX_KEEP * 2); }
+    var idx = comNextDelim(comReader.buf);
+    while (idx >= 0) {
+      var line = comReader.buf.slice(0, idx);
+      comReader.buf = comReader.buf.slice(idx + 1);
+      var code = comCleanLine(line);
+      if (code) { out.push(comSubmitScan(code)); }
+      idx = comNextDelim(comReader.buf);
+    }
+    return out;
+  }
+
+  /* COM 리더기가 찍은 번호 한 건 처리 — 등원/하원 + 효과음 + 배지 + 토스트 + 문자 큐 */
+  function comSubmitScan(raw) {
+    var code = normalizeBarcode(raw);
+    if (!code) { return { ok: false, reason: 'empty' }; }
+    var now = Date.now();
+    if (comReader.lastCode === code && (now - comReader.lastHitAt) < COM_DUP_MS) {
+      return { ok: false, reason: 'duplicate', code: code };
+    }
+    comReader.lastCode = code;
+    comReader.lastHitAt = now;
+    comReader.scans++;
+    comReader.lastScanAt = now;
+    var modeTxt = app.settings.mode === 'out' ? '하원' : '등원';
+    var stu = findStudentByBarcode(code);
+    var res = handleBarcodeScan(code, 'serial');
+    if (res && res.ok && res.recorded && stu && !isPaused(stu)) {
+      toast('🔌 ' + res.name + ' · COM 리더기 · ' + modeTxt + ' 처리');
+      setCamStatus(res.name + ' · COM 리더기 · ' + modeTxt);
+    }
+    renderComReaderUI();
+    return res;
+  }
+
+  /* 포트를 열고 읽기 루프를 시작한다 (한 번 누르면 기본 9600 으로 바로) */
+  function toggleComReader() {
+    if (comReader.connected || comReader.connecting || comReader.port) { return comReaderDisconnect(); }
+    return comReaderConnect();
+  }
+
+  function comReaderConnect() {
+    if (!comSupported()) {
+      comReader.lastError = '';
+      toast(COM_UNSUPPORTED_MSG);
+      renderComReaderUI();
+      return Promise.resolve({ ok: false, reason: 'unsupported' });
+    }
+    if (comReader.connecting) { return Promise.resolve({ ok: false, reason: 'connecting' }); }
+    comReader.connecting = true;
+    comReader.stopped = false;
+    comReader.lastError = '';
+    var baud = comBaud();
+    comReader.baud = baud;
+    comSaveBaud(baud);
+    renderComReaderUI();
+    var req;
+    try { req = navigator.serial.requestPort(); }
+    catch (e) { req = Promise.reject(e); }
+    return Promise.resolve(req).then(function (port) {
+      if (!port) {
+        var noPort = new Error('no port selected');
+        noPort.name = 'NotFoundError';
+        throw noPort;
+      }
+      comReader.port = port;
+      /* 8N1 · 흐름제어 없음 — Symbol DS9208 기본 설정과 같다 */
+      return port.open({
+        baudRate: baud,
+        dataBits: 8,
+        stopBits: 1,
+        parity: 'none',
+        flowControl: 'none',
+        bufferSize: 255
+      });
+    }).then(function () {
+      comReader.connecting = false;
+      comReader.connected = true;
+      comReader.stopped = false;
+      comReader.buf = '';
+      comReader.lastCode = '';
+      comReader.lastHitAt = 0;
+      comReader.chunks = 0;
+      comReader.lastError = '';
+      renderComReaderUI();
+      toast('🔌 COM 리더기 연결됨 · ' + baud + ' bps');
+      setCamStatus('COM 리더기 연결됨 · 카드를 찍으면 바로 출석 처리해요');
+      comReaderLoop(comReader.port).then(function () {}, function () {});
+      return { ok: true, baud: baud };
+    }, function (err) {
+      comReader.connecting = false;
+      comReader.connected = false;
+      comReader.errCount = (comReader.errCount || 0) + 1;
+      comReader.lastError = comReaderErrorText(err);
+      var port = comReader.port;
+      comReader.port = null;
+      /* 열다 만 포트가 남아 잠기지 않게 닫아 둔다 */
+      if (port && typeof port.close === 'function') {
+        try {
+          var cp = port.close();
+          if (cp && typeof cp.then === 'function') { cp.then(function () {}, function () {}); }
+        } catch (e) {}
+      }
+      renderComReaderUI();
+      toast(comReader.lastError);
+      setCamStatus(COM_BUSY_MSG);
+      return { ok: false, reason: 'open-failed', error: String((err && (err.name || err.message)) || err), text: comReader.lastError };
+    });
+  }
+
+  /* 읽기 루프 — 조각이 쪼개져 들어와도 버퍼에서 이어 붙인다 */
+  async function comReaderLoop(port) {
+    if (!port || !port.readable || typeof port.readable.getReader !== 'function') {
+      comReaderLost(port, null);
+      return;
+    }
+    var reader;
+    try { reader = port.readable.getReader(); }
+    catch (e) { comReaderLost(port, e); return; }
+    comReader.reader = reader;
+    comReader.loopPort = port;
+    var dec = comReaderDecoder();
+    try {
+      while (true) {
+        var res = await reader.read();
+        if (!res || res.done) { break; }
+        comReader.chunks++;
+        var text = dec.decode(res.value);
+        if (text) { comReaderFeed(text); }
+      }
+      if (!comReader.stopped && comReader.port === port) { comReaderLost(port, null); }
+    } catch (err) {
+      if (!comReader.stopped && comReader.port === port) { comReaderLost(port, err); }
+    } finally {
+      try { reader.releaseLock(); } catch (e) {}
+      if (comReader.reader === reader) { comReader.reader = null; }
+      if (comReader.loopPort === port) { comReader.loopPort = null; }
+      /* 끊는 중이었다면, 읽기 잠금을 놓은 이 순간에 포트를 닫는다(잠금 때문에 close 가 거절되지 않게) */
+      if (comReader.stopped && comReader.closePending === port) {
+        comReader.closePending = null;
+        comReaderClosePort(port);
+      }
+    }
+  }
+
+  /* 포트를 안전하게 닫는다 — 실패해도 조용히 넘긴다 */
+  function comReaderClosePort(port) {
+    if (!port || typeof port.close !== 'function') { return Promise.resolve(); }
+    try {
+      var r = port.close();
+      return (r && typeof r.then === 'function') ? r.then(function () {}, function () {}) : Promise.resolve();
+    } catch (e) { return Promise.resolve(); }
+  }
+
+  /* 읽는 도중 케이블이 빠지거나 오류가 나면 상태를 되돌린다 */
+  function comReaderLost(port, err) {
+    if (port && comReader.port && comReader.port !== port) { return; }
+    var was = comReader.connected;
+    comReader.connected = false;
+    comReader.port = null;
+    comReader.buf = '';
+    var st = comReader.lastError;
+    comReader.lastError = err
+      ? 'COM 리더기 연결이 끊겼어요 (' + String((err && (err.name || err.message)) || err) + ')'
+      : 'COM 리더기 연결이 끊겼어요 · 케이블을 확인하고 다시 눌러 주세요';
+    renderComReaderUI();
+    if (was) {
+      toast(comReader.lastError);
+      setCamStatus('COM 리더기 연결 끊김');
+    }
+    /* 남은 포트는 닫아 두어 다음에 다시 열 수 있게 한다 */
+    if (port) { comReaderClosePort(port); }
+  }
+
+  /* 연결 해제 — reader.cancel() 뒤 port.close() 로 포트를 반드시 풀어 준다 */
+  function comReaderDisconnect(opts) {
+    opts = opts || {};
+    var was = comReader.connected || !!comReader.port;
+    comReader.connected = false;
+    comReader.stopped = true;
+    var reader = comReader.reader;
+    var port = comReader.port;
+    comReader.reader = null;
+    comReader.port = null;
+    comReader.buf = '';
+    var cancelled = null;
+    if (reader && typeof reader.cancel === 'function') {
+      comReader.closePending = port;      /* 읽기 루프가 잠금을 놓으면 그때 close */
+      try { cancelled = reader.cancel(); } catch (e) { cancelled = comReaderClosePort(port); }
+    } else {
+      cancelled = comReaderClosePort(port);
+    }
+    if (!opts.keepError) { comReader.lastError = ''; }
+    renderComReaderUI();
+    if (was && !opts.silent) {
+      toast('COM 리더기 연결을 끊었어요');
+      setCamStatus('COM 리더기 연결 끊김 · 다시 연결하려면 「🔌 COM 리더기」');
+    }
+    return Promise.resolve(cancelled).then(function () {}, function () {});
+  }
+
+  /* 리더기 케이블을 뽑으면 브라우저가 알려 준다 */
+  function comReaderBindEvents() {
+    if (comReader.eventsBound || !comSupported()) { return; }
+    try {
+      if (typeof navigator.serial.addEventListener === 'function') {
+        navigator.serial.addEventListener('disconnect', function (ev) {
+          if (!comReader.port) { return; }
+          if (ev && ev.target && ev.target !== comReader.port) { return; }
+          comReaderDisconnect({ silent: false, keepError: true });
+          comReader.lastError = 'COM 리더기가 분리됐어요 · 케이블을 확인해 주세요';
+          renderComReaderUI();
+        });
+        comReader.eventsBound = true;
+      }
+    } catch (e) {}
   }
 
   /* =========================================================
@@ -17368,6 +17800,26 @@
     // 카메라
     el('btn-camera').addEventListener('click', toggleCamera);
     el('btn-pick-sim').addEventListener('click', openSimPicker);
+    // v42 — 🔌 COM 포트(시리얼) 리더기: 출석 화면·관리자 설정 두 곳에서 같은 동작
+    ['btn-com-reader', 'btn-com-reader-admin'].forEach(function (id) {
+      var b = el(id);
+      if (b && b.addEventListener) {
+        b.addEventListener('click', function () { (comReader.connected || comReader.port) ? comReaderDisconnect() : comReaderConnect(); });
+      }
+    });
+    if (el('com-baud')) {
+      el('com-baud').addEventListener('change', function () {
+        var b = comBaud();
+        comSaveBaud(b);
+        comReader.baud = b;
+        renderComReaderUI();
+        if (comReader.connected) {
+          toast('통신 속도를 ' + b + ' bps 로 저장했어요 · 연결을 끊었다 다시 누르면 적용돼요');
+        } else {
+          toast('통신 속도 ' + b + ' bps 로 저장했어요');
+        }
+      });
+    }
     el('btn-random-sim').addEventListener('click', function () {
       if (!app.students.length) { toast('명단이 비어 있어요.'); return; }
       if (app.busy) { return; }
@@ -18672,6 +19124,8 @@
     el('stage-tip').textContent = 'AI ENGINE · READY';
     renderKioskModeUI();
     if (isBarcodeMode()) { startBarcodeLoop(); }
+    comReaderBindEvents();
+    renderComReaderUI();
 
     tickClock();
     clockTimer = setInterval(tickClock, 1000);
@@ -18681,6 +19135,8 @@
       if (app.cameraStream) {
         app.cameraStream.getTracks().forEach(function (t) { t.stop(); });
       }
+      /* v42 — 창을 닫기 전에 COM 포트를 풀어 두지 않으면 다음에 열 수 없다 */
+      try { comReaderDisconnect({ silent: true }); } catch (e) {}
     });
 
     // 태블릿에서 첫 터치 시 오디오 활성화
@@ -18816,6 +19272,34 @@
       maxGapMs: READER_MAX_GAP_MS,
       minLen: READER_MIN_LEN,
       dupMs: READER_DUP_MS
+    },
+    /* v42 — 🔌 COM 포트(시리얼) 바코드 리더기 */
+    com: {
+      supported: comSupported,
+      connect: comReaderConnect,
+      disconnect: comReaderDisconnect,
+      toggle: toggleComReader,
+      feed: comReaderFeed,
+      submit: comSubmitScan,
+      clean: comCleanLine,
+      delim: comNextDelim,
+      loop: comReaderLoop,
+      lost: comReaderLost,
+      decoder: comReaderDecoder,
+      baud: comBaud,
+      storedBaud: comStoredBaud,
+      saveBaud: comSaveBaud,
+      errorText: comReaderErrorText,
+      stateText: comReaderStateText,
+      render: renderComReaderUI,
+      bind: comReaderBindEvents,
+      state: function () { return comReader; },
+      closePort: comReaderClosePort,
+      defaultBaud: COM_DEFAULT_BAUD,
+      baudChoices: function () { return COM_BAUD_CHOICES.slice(); },
+      dupMs: COM_DUP_MS,
+      unsupportedMsg: COM_UNSUPPORTED_MSG,
+      busyMsg: COM_BUSY_MSG
     },
     face: {
       euclideanDistance: euclideanDistance,
