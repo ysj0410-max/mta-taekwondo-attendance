@@ -47,7 +47,13 @@
     };
     window.__xlsxLoading = load('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js')
       .catch(function () { return load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'); })
-      .then(function (x) { window.__xlsxLoadFailed = false; window.__xlsxLoading = null; return x; })
+      .then(function (x) {
+        window.__xlsxLoadFailed = false;
+        window.__xlsxLoading = null;
+        /* 앱이 켜져 있으면 사이드바 표시(#xlsx-state)도 바로 맞춘다 */
+        try { if (typeof window.__xlsxReadyHooked === 'function') { window.__xlsxReadyHooked(); } } catch (e) {}
+        return x;
+      })
       .catch(function (e) { window.__xlsxLoadFailed = true; window.__xlsxLoading = null; throw e; });
     return window.__xlsxLoading;
   };
@@ -8750,6 +8756,7 @@
   }
 
   function renderXlsxState() {
+    window.__xlsxReadyHooked = renderXlsxState;
     var box = el('xlsx-state');
     if (!box) { return; }
     var ok = (typeof XLSX !== 'undefined') && !window.__xlsxLoadFailed;
