@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=44"></script>
-<script src="firebase-sync-ui.js?v=44"></script>
+<script src="firebase-sync.js?v=45"></script>
+<script src="firebase-sync-ui.js?v=45"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1343,6 +1343,151 @@
     .mode-btn{font-size:13px; padding:8px 6px}
     .tab-btn{font-size:11.5px; padding:8px 8px}
   }
+
+  /* =====================================================================
+     v45 — 출결 모니터 초기화면 (아이원 출결 모니터 느낌)
+     · PC 넓은 화면: 왼쪽(시계·모드·안내·수동) / 오른쪽(방금 출석·오늘 표)
+     · 폰·좁은 화면: 세로 1열로 자연스럽게 쌓인다
+     ===================================================================== */
+  .today-pill{margin-left:auto}
+  #view-attendance{padding:12px; gap:10px}
+  #view-attendance.active{display:flex; flex-direction:column; height:100%; min-height:0; overflow:auto; background:#eef2f8}
+  .att-monitor{flex:1 1 auto; min-height:0; display:grid; grid-template-columns:minmax(330px,31%) minmax(0,1fr); gap:10px}
+  .am-left,.am-right{display:flex; flex-direction:column; gap:10px; min-height:0}
+  .am-left{overflow:auto; padding-right:2px}
+  .am-card{background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 1px 2px rgba(13,27,62,.05); padding:12px 14px; min-width:0}
+  .am-clockcard{display:flex; flex-direction:column; gap:3px; background:linear-gradient(155deg,#0d1b3e,#1b3a74 60%,#20437f); border-color:#1b3a74; color:#fff; flex:0 0 auto}
+  .am-clock-date{font-size:14px; font-weight:800; color:rgba(255,255,255,.80); font-variant-numeric:tabular-nums; letter-spacing:.3px}
+  .am-clock-time{display:flex; align-items:baseline; gap:2px; font-size:clamp(30px,3.4vw,44px); font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:1px; line-height:1.05}
+  .am-clock-time .am-sep{opacity:.5; font-weight:600}
+  .am-modewrap{padding:7px; flex:0 0 auto}
+  .am-mode-toggle{background:#f1f4fa; border-color:#dde4f2; width:100%; gap:6px}
+  .am-mode-toggle .mode-btn{flex:1; color:#5a6a86; font-size:16px; padding:11px 8px; border-radius:10px; min-height:44px}
+  .am-mode-toggle .mode-btn.active{background:var(--navy); color:#fff}
+  .am-mode-toggle .mode-btn.active[data-mode="out"]{background:var(--red); color:#fff; box-shadow:none}
+  .am-notice{border:1.5px solid #f2d489; background:#fffbe8; border-radius:12px; padding:11px 14px; text-align:center; flex:0 0 auto}
+  .am-notice-main{font-size:15.5px; font-weight:900; color:#7a5b00; letter-spacing:-.3px; line-height:1.45}
+  .am-notice-sub{font-size:11.5px; font-weight:700; color:#a08a3d; margin-top:3px}
+  .am-connect{display:grid; grid-template-columns:1fr 1fr; gap:8px; flex:0 0 auto}
+  .am-connect-btn{padding:11px 8px; font-size:13px; border-radius:12px; background:#fff; min-height:44px}
+  .am-connect-btn.on{background:#eefaf5; border-color:#0b7a55; color:#0b7a55}
+
+  /* 카메라 영역: 📷 카메라를 눌렀을 때만 열린다 */
+  .cam-drawer{display:none}
+  .cam-drawer.open{display:flex; flex:0 0 auto}
+  .cam-drawer .card-head{padding:8px 12px 7px}
+  .cam-drawer .mode-bar{padding:7px 12px 0}
+  .cam-drawer .stage{flex:0 0 auto; height:clamp(200px,28vh,300px); margin:9px 10px; border-radius:13px}
+  .cam-drawer .cam-bar{padding:0 10px 10px; flex-wrap:wrap}
+
+  .am-manual{display:flex; flex-direction:column; gap:8px; flex:0 0 auto}
+  .am-manual-title{font-size:11.5px; font-weight:900; color:var(--muted); letter-spacing:.5px}
+  .am-row{display:flex; align-items:center; gap:7px; min-width:0}
+  .am-lbl{flex:0 0 auto; width:32px; font-size:13px; font-weight:900; color:var(--navy)}
+  .am-input{flex:1 1 auto; min-width:0; height:40px; font-size:14px}
+  .am-row .btn{flex:0 0 auto; min-height:38px}
+  .am-pin-toggle{align-self:flex-start; border:1px dashed #c9d4ea; background:#f8fafd; color:#5a6a86; font-weight:800; font-size:11.5px; padding:6px 10px; border-radius:9px; cursor:pointer}
+  .am-pin-toggle.on{border-style:solid; border-color:#9fb3d8; color:var(--navy); background:#eef3fc}
+  .am-pin{margin-top:8px; border-top:1px dashed #e3e9f4; padding-top:8px}
+  .am-pin .pin-slots{margin:2px 0 8px; gap:7px}
+  .am-pin .pin-slot{width:44px; height:48px; font-size:20px; border-radius:11px}
+  .am-pin .key{min-height:40px; font-size:17px; border-radius:10px}
+  .am-pin .pin-hint{margin-top:6px; font-size:10.5px}
+  .am-left .stu-list{max-height:180px; margin-top:2px}
+  .am-left .log-card{flex:1 1 auto; min-height:150px}
+  .am-left .log-card .card-head{padding:9px 12px 8px}
+
+  .am-right{min-height:0}
+  .am-last{flex:0 0 auto; padding:16px 20px 18px; display:flex; flex-direction:column; gap:9px; border-left:5px solid var(--navy)}
+  .am-last.has{background:linear-gradient(180deg,#ffffff,#f6faff)}
+  .am-last.has.mode-in{border-left-color:#0b7a55}
+  .am-last.has.mode-out{border-left-color:var(--red)}
+  .am-last-kicker{font-size:11.5px; font-weight:900; letter-spacing:.7px; color:#8a94a6}
+  .am-last-name{font-size:clamp(38px,5vw,66px); font-weight:900; letter-spacing:-2px; line-height:1.08; color:var(--navy); word-break:keep-all; min-height:1.1em}
+  .am-last-name.idle{color:#b3bdcd; font-size:clamp(22px,2.3vw,30px); letter-spacing:-.5px; font-weight:800}
+  .am-last-meta{display:grid; grid-template-columns:minmax(0,1.9fr) minmax(120px,1fr); gap:10px}
+  .am-last-cell{border:1px solid #e6ebf5; background:#f7f9fd; border-radius:12px; padding:9px 14px; display:flex; flex-direction:column; gap:2px; min-width:0}
+  .am-last-cell span{font-size:11px; font-weight:800; color:#8a94a6}
+  .am-last-cell b{font-size:clamp(22px,2.3vw,32px); font-weight:900; letter-spacing:-.5px; color:#1a2b4d; font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .am-last-cell b.kind-in{color:#0b7a55}
+  .am-last-cell b.kind-out{color:#c0392b}
+  .am-last-sum{font-size:15px; font-weight:800; color:#41506c; letter-spacing:-.2px}
+  .am-last.idle .am-last-sum{font-weight:600; color:#8a94a6; font-size:13px; line-height:1.5}
+
+  .am-today{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; padding:0}
+  .am-today-head{display:flex; align-items:center; gap:7px; padding:9px 12px; border-bottom:1px solid #eef1f6; flex-wrap:wrap; flex:0 0 auto}
+  .am-today-head label{font-size:12.5px; font-weight:900; color:#41506c}
+  .am-today-head .input{width:160px; height:32px; font-size:12.5px; padding:0 9px}
+  .am-sms-count{font-size:12.5px; font-weight:800; color:#41506c; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .am-sms-count b{color:var(--navy); font-size:14px}
+  .am-tablewrap{flex:1 1 auto; min-height:0; overflow:auto; border-radius:0 0 14px 14px}
+  table.am-tb{width:100%; border-collapse:collapse}
+  table.am-tb th{position:sticky; top:0; z-index:1; background:#f4f7fd; font-size:11.5px; font-weight:900; color:#5a6a86; padding:9px 10px; border-bottom:1px solid #e2e8f4; text-align:left; white-space:nowrap}
+  table.am-tb td{padding:9px 10px; font-size:13px; border-bottom:1px solid #eff3fa; white-space:nowrap}
+  table.am-tb tr:last-child td{border-bottom:0}
+  table.am-tb td.am-no{width:52px; color:#8a94a6; font-weight:800; font-variant-numeric:tabular-nums}
+  table.am-tb td.am-nm{font-weight:900; color:#1a2b4d}
+  table.am-tb td.am-time{font-variant-numeric:tabular-nums; color:#41506c}
+  table.am-tb .am-kind{display:inline-block; min-width:46px; text-align:center; padding:3px 9px; border-radius:999px; font-size:11.5px; font-weight:900}
+  table.am-tb .am-kind.in{background:#e7f7f0; color:#0b7a55}
+  table.am-tb .am-kind.out{background:#fdeceb; color:#c0392b}
+  .am-sms{font-size:11.5px; font-weight:800}
+  .am-sms.ok{color:#0b7a55}
+  .am-sms.wait{color:#a06a00}
+  .am-sms.none{color:#8a94a6}
+  .am-sms.bad{color:#c0392b}
+  .am-empty{padding:28px 12px; text-align:center; color:#8a94a6; font-size:12.5px; font-weight:700; line-height:1.6}
+
+  /* 바코드 번호 옆 📷 스캔 · 스캔 모달 */
+  .bc-input-row{display:flex; gap:6px; align-items:stretch}
+  .bc-input-row .input{flex:1 1 auto; min-width:0}
+  .bc-input-row .btn{flex:0 0 auto}
+  .fscan{position:relative; width:100%; aspect-ratio:4/3; background:#0a1428; border-radius:14px; overflow:hidden}
+  .fscan video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
+  .fscan .fscan-guide{position:absolute; left:8%; right:8%; top:34%; height:32%; border:2px dashed rgba(142,245,213,.85); border-radius:12px; box-shadow:0 0 0 999px rgba(4,10,24,.28)}
+  .fscan .fscan-line{position:absolute; left:4%; right:4%; top:50%; height:2px; transform:translateY(-50%); background:linear-gradient(90deg,transparent,#8ef5d5,transparent); box-shadow:0 0 12px #8ef5d5}
+  .fscan-status{position:absolute; left:0; right:0; bottom:0; padding:8px 12px; background:rgba(4,10,24,.62); color:#dfe8fb; font-size:12px; font-weight:700; text-align:center}
+
+  /* 폰·좁은 화면: 세로 1열 (시계 → 모드 → 안내 → 버튼 → 방금 출석 → 표 → 수동 → 로그 → 카메라) */
+  @media (max-width:1100px){
+    #view-attendance.active{overflow-y:auto; padding:10px}
+    .att-monitor{display:flex; flex-direction:column; flex:0 0 auto; min-height:0}
+    .am-left,.am-right{display:contents}
+    .am-clockcard{order:1}
+    .am-modewrap{order:2}
+    .am-notice{order:3}
+    .am-connect{order:4}
+    .cam-drawer{order:9}
+    .am-last{order:5}
+    .am-today{order:6; min-height:min(54vh,470px)}
+    .am-manual{order:7}
+    .am-left .log-card{order:8; min-height:230px; flex:0 0 auto}
+    .am-last-name{font-size:clamp(32px,8.4vw,48px)}
+    .am-last-meta{grid-template-columns:1fr 1fr}
+    .am-last-cell b{font-size:22px}
+    .am-last-sum{font-size:13.5px}
+  }
+  @media (max-width:760px){
+    /* 상단 바: 등원/하원 토글이 화면 안으로 들어와 탭 줄이 한 줄을 다 쓴다 */
+    .topbar{grid-template-areas:"brand mute refresh" "tabs tabs tabs"}
+    .tabs{justify-self:stretch}
+    .tab-btn{flex:1}
+    .today-pill{margin-left:auto}
+    .am-clock-time{font-size:34px}
+    .am-clock-date{font-size:12.5px}
+    .am-notice-main{font-size:14px}
+    .am-connect-btn{font-size:12px; padding:10px 6px}
+    .am-last{padding:13px 14px 15px}
+    .am-last-kicker{font-size:10.5px}
+    .am-last-name{font-size:clamp(30px,9vw,42px)}
+    .am-last-cell{padding:7px 10px}
+    .am-last-cell b{font-size:19px}
+    .am-last-sum{font-size:12.5px}
+    .am-today-head .input{width:120px}
+    .am-sms-count{font-size:11.5px}
+    table.am-tb th, table.am-tb td{padding:8px 7px}
+    table.am-tb td, table.am-tb th{font-size:11.5px}
+  }
 </style>
 </head>
 <body>
@@ -1360,16 +1505,6 @@
 
     <div class="today-pill">오늘 <b id="pill-in">0</b> 등원 · <b id="pill-out">0</b> 하원</div>
 
-    <div class="mode-toggle" role="group" aria-label="등원/하원 모드">
-      <button class="mode-btn active" data-mode="in" id="mode-in">등원</button>
-      <button class="mode-btn" data-mode="out" id="mode-out">하원</button>
-    </div>
-
-    <div class="clock">
-      <div class="clock-time"><span id="clock-hm">00:00</span><span class="sep">:</span><span id="clock-s">00</span></div>
-      <div class="clock-date" id="clock-date">-</div>
-    </div>
-
     <button class="hdr-fb-chip" id="hdr-fb-chip" type="button" title="눌러서 동기화 상태 보기">⚪ 로컬</button>
 
     <button class="icon-btn" id="app-refresh-btn" type="button"
@@ -1385,111 +1520,153 @@
   </header>
 
   <main>
-    <!-- ================= 출석 화면 ================= -->
+    <!-- ================= 출석 화면 (v45 · 출결 모니터) ================= -->
     <section class="view active" id="view-attendance">
+      <div class="att-monitor" id="att-monitor">
 
-      <div class="card cam-card">
-        <div class="card-head">
-          <div class="card-title"><span class="dot"></span>바코드 출석</div>
-          <div class="spacer"></div>
-          <span class="tiny-note" id="cam-head-note">리더기 연결 대기</span>
-          <span class="ai-chip ready" id="ai-state">바코드 인식 준비</span>
-        </div>
+        <!-- ---------------- 왼쪽 열 ---------------- -->
+        <div class="am-left" id="am-left">
 
-        <div class="mode-bar" id="mode-bar">
-          <span class="mode-note" id="mode-note">출석 카드 바코드를 비추면 등원 처리</span>
-        </div>
-
-        <div class="stage" id="camera-stage">
-          <video id="camera-video" autoplay muted playsinline></video>
-          <div class="stage-ph" id="stage-ph">
-            <div class="ph-icon">📷</div>
-            <p id="stage-ph-text">카메라를 연결하고 <b>출석 카드의 바코드</b>를<br>가이드 안에 비춰 주세요</p>
-            <div class="ph-sub" id="stage-ph-sub">카메라가 없으면 리더기로 찍거나 「📷 바코드 번호」에 넣어도 됩니다</div>
-          </div>
-          <div class="scanline"></div>
-          <div class="barcode-guide" id="barcode-guide" aria-hidden="true">
-            <div class="bg-frame"><div class="bg-line"></div></div>
-            <div class="bg-text">📷 바코드를 카메라에 비추거나 리더기로 찍어주세요</div>
-            <div class="bg-sub">카메라가 없어도 USB·블루투스 리더기나 「📷 바코드 번호」로 출석할 수 있어요</div>
-          </div>
-          <div class="barcode-last" id="barcode-last"></div>
-          <div class="stage-tip" id="stage-tip">BARCODE · READY</div>
-          <div class="stage-hud"><span class="hud-dot"></span><span id="cam-status">웹캠 대기</span></div>
-        </div>
-
-        <div class="cam-bar">
-          <div class="cam-status" id="cam-help">출석 카드의 <b>바코드</b>를 카메라에 비추면 자동으로 <b>등원</b> 처리합니다.</div>
-          <div class="spacer"></div>
-          <button class="btn" id="btn-com-reader" title="USB·시리얼(COM 포트) 바코드 리더기를 연결합니다">🔌 COM 리더기</button>
-          <button class="btn" id="btn-camera">📷 카메라 연결</button>
-        </div>
-      </div>
-
-      <div class="side">
-        <div class="card touch-card">
-          <div class="card-head">
-            <div class="card-title"><span class="dot" style="background:var(--navy)"></span>터치 출석 (백업)</div>
-            <div class="spacer"></div>
-            <span class="tiny-note">인식 실패 시 1초</span>
+          <div class="am-card am-clockcard">
+            <div class="am-clock-date" id="clock-date">-</div>
+            <div class="am-clock-time"><span id="clock-hm">00:00</span><span class="am-sep">:</span><span id="clock-s">00</span></div>
           </div>
 
-          <div class="touch-tabs">
-            <button class="touch-tab active" data-touch="pin" id="tt-pin">🔢 뒷번호 4자리</button>
-            <button class="touch-tab" data-touch="name" id="tt-name">🔍 이름·초성 검색</button>
-            <button class="touch-tab" data-touch="code" id="tt-code">📷 바코드 번호</button>
-          </div>
-
-          <div class="touch-body">
-            <div id="touch-pin">
-              <div class="pin-slots" id="pin-slots">
-                <div class="pin-slot">·</div><div class="pin-slot">·</div><div class="pin-slot">·</div><div class="pin-slot">·</div>
-              </div>
-              <div class="keypad" id="keypad">
-                <button class="key" data-key="1">1</button>
-                <button class="key" data-key="2">2</button>
-                <button class="key" data-key="3">3</button>
-                <button class="key" data-key="4">4</button>
-                <button class="key" data-key="5">5</button>
-                <button class="key" data-key="6">6</button>
-                <button class="key" data-key="7">7</button>
-                <button class="key" data-key="8">8</button>
-                <button class="key" data-key="9">9</button>
-                <button class="key fn" data-key="clear">전체지움</button>
-                <button class="key" data-key="0">0</button>
-                <button class="key fn del" data-key="del">← 지움</button>
-              </div>
-              <div class="pin-hint">보호자 휴대폰 번호 <b>뒷 4자리</b>를 누르면 바로 출석돼요</div>
-              <div class="cand-list" id="cand-list"></div>
-            </div>
-
-            <div id="touch-name" style="display:none">
-              <input class="search-input" id="name-search" placeholder="이름 또는 초성으로 검색 (예: ㄱㅁㅈ)" autocomplete="off">
-              <div class="stu-list" id="stu-list"></div>
-            </div>
-
-            <div id="touch-code" style="display:none">
-              <div class="code-input-row">
-                <input class="search-input" id="code-input" placeholder="바코드 번호 (예: 9879201808)" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="바코드 번호 직접입력">
-              </div>
-              <div class="form-actions" style="margin-top:8px">
-                <button class="btn btn-primary" id="btn-code-submit">출석 처리</button>
-                <button class="btn btn-sm" id="btn-code-clear">지우기</button>
-              </div>
-              <div class="cand-list" id="code-result"></div>
-              <div class="tiny-note" id="code-hint" style="margin-top:8px; line-height:1.5">카메라 인식이 안 될 때 출석 카드의 번호를 그대로 넣어도 됩니다. USB·블루투스 리더기로 찍으면 이 칸을 누르지 않아도 출석 화면 어디서나 바로 처리됩니다.</div>
+          <div class="am-card am-modewrap">
+            <div class="mode-toggle am-mode-toggle" role="group" aria-label="등원/하원 모드">
+              <button class="mode-btn active" data-mode="in" id="mode-in">등원</button>
+              <button class="mode-btn" data-mode="out" id="mode-out">하원</button>
             </div>
           </div>
+
+          <div class="am-notice">
+            <div class="am-notice-main">출결번호 또는 카드를 접촉 하세요.</div>
+            <div class="am-notice-sub" id="mode-note">출석 카드 바코드를 비추면 등원 처리</div>
+          </div>
+
+          <div class="am-connect">
+            <button class="btn am-connect-btn" id="btn-com-reader" title="USB·시리얼(COM 포트) 바코드 리더기를 연결합니다">🔌 COM 리더기</button>
+            <button class="btn am-connect-btn" id="btn-camera" title="카메라로 출석 카드 바코드를 읽습니다">📷 카메라</button>
+          </div>
+
+          <!-- 카메라 영역 — 📷 카메라를 눌렀을 때만 열린다 -->
+          <div class="card cam-card cam-drawer" id="cam-drawer">
+            <div class="card-head">
+              <div class="card-title"><span class="dot"></span>바코드 카메라</div>
+              <div class="spacer"></div>
+              <span class="tiny-note" id="cam-head-note">리더기 연결 대기</span>
+              <span class="ai-chip ready" id="ai-state">바코드 인식 준비</span>
+            </div>
+
+            <div class="mode-bar">
+              <span class="mode-note" id="mode-note2">출석 카드 바코드를 비추면 등원 처리</span>
+            </div>
+
+            <div class="stage" id="camera-stage">
+              <video id="camera-video" autoplay muted playsinline></video>
+              <div class="stage-ph" id="stage-ph">
+                <div class="ph-icon">📷</div>
+                <p id="stage-ph-text">카메라를 연결하고 <b>출석 카드의 바코드</b>를<br>가이드 안에 비춰 주세요</p>
+                <div class="ph-sub" id="stage-ph-sub">카메라가 없으면 리더기로 찍거나 「번호」 칸에 넣어도 됩니다</div>
+              </div>
+              <div class="scanline"></div>
+              <div class="barcode-guide" id="barcode-guide" aria-hidden="true">
+                <div class="bg-frame"><div class="bg-line"></div></div>
+                <div class="bg-text">📷 바코드를 카메라에 비추거나 리더기로 찍어주세요</div>
+                <div class="bg-sub">카메라가 없어도 USB·블루투스 리더기나 「번호」로 출석할 수 있어요</div>
+              </div>
+              <div class="barcode-last" id="barcode-last"></div>
+              <div class="stage-tip" id="stage-tip">BARCODE · READY</div>
+              <div class="stage-hud"><span class="hud-dot"></span><span id="cam-status">웹캠 대기</span></div>
+            </div>
+
+            <div class="cam-bar">
+              <div class="cam-status" id="cam-help">출석 카드의 <b>바코드</b>를 카메라에 비추면 자동으로 <b>등원</b> 처리합니다.</div>
+            </div>
+          </div>
+
+          <div class="am-card am-manual">
+            <div class="am-manual-title">수동 입력 · 검색</div>
+            <div class="am-row">
+              <label class="am-lbl" for="name-search">이름</label>
+              <input class="search-input am-input" id="name-search" placeholder="이름 또는 초성 (예: ㄱㅁㅈ)" autocomplete="off" aria-label="이름 검색">
+              <button type="button" class="btn btn-sm" id="btn-name-search">검색</button>
+            </div>
+            <div class="stu-list" id="stu-list"></div>
+            <div class="am-row">
+              <label class="am-lbl" for="code-input">번호</label>
+              <input class="search-input am-input" id="code-input" placeholder="바코드 또는 뒷번호 4자리" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="바코드 또는 뒷번호 수동출결">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-code-submit">수동출결</button>
+            </div>
+            <div class="cand-list" id="code-result"></div>
+            <div class="am-pinwrap">
+              <button type="button" class="am-pin-toggle" id="btn-pin-toggle" aria-expanded="false">🔢 뒷번호 키패드</button>
+              <div class="am-pin" id="touch-pin" style="display:none">
+                <div class="pin-slots" id="pin-slots">
+                  <div class="pin-slot">·</div><div class="pin-slot">·</div><div class="pin-slot">·</div><div class="pin-slot">·</div>
+                </div>
+                <div class="keypad" id="keypad">
+                  <button class="key" data-key="1">1</button>
+                  <button class="key" data-key="2">2</button>
+                  <button class="key" data-key="3">3</button>
+                  <button class="key" data-key="4">4</button>
+                  <button class="key" data-key="5">5</button>
+                  <button class="key" data-key="6">6</button>
+                  <button class="key" data-key="7">7</button>
+                  <button class="key" data-key="8">8</button>
+                  <button class="key" data-key="9">9</button>
+                  <button class="key fn" data-key="clear">전체지움</button>
+                  <button class="key" data-key="0">0</button>
+                  <button class="key fn del" data-key="del">← 지움</button>
+                </div>
+                <div class="pin-hint">보호자 휴대폰 번호 <b>뒷 4자리</b>를 누르면 바로 출석돼요</div>
+                <div class="cand-list" id="cand-list"></div>
+              </div>
+            </div>
+            <div class="tiny-note" id="code-hint" style="line-height:1.5">카메라 인식이 안 될 때 출석 카드의 번호를 그대로 넣어도 됩니다. USB·블루투스 리더기로 찍으면 이 칸을 누르지 않아도 바로 처리됩니다.</div>
+          </div>
+
+          <div class="card log-card">
+            <div class="card-head">
+              <div class="card-title"><span class="dot" style="background:var(--sms)"></span>문자 발송 로그</div>
+              <div class="spacer"></div>
+              <button type="button" class="sms-retryall" id="btn-sms-retry-kiosk" style="display:none" title="아직 도장폰으로 나가지 않은 문자만 다시 보냅니다">🔄 <span class="lbl-long">실패·미전송 </span>다시 보내기 (0건)</button>
+              <span class="log-count" id="log-count">0건</span>
+            </div>
+            <div class="log-scroll" id="log-scroll"></div>
+          </div>
+
         </div>
 
-        <div class="card log-card">
-          <div class="card-head">
-            <div class="card-title"><span class="dot" style="background:var(--sms)"></span>문자 발송 로그</div>
-            <div class="spacer"></div>
-            <button type="button" class="sms-retryall" id="btn-sms-retry-kiosk" style="display:none" title="아직 도장폰으로 나가지 않은 문자만 다시 보냅니다">🔄 <span class="lbl-long">실패·미전송 </span>다시 보내기 (0건)</button>
-            <span class="log-count" id="log-count">0건</span>
+        <!-- ---------------- 오른쪽 열 ---------------- -->
+        <div class="am-right" id="am-right">
+
+          <div class="am-card am-last idle" id="am-last">
+            <div class="am-last-kicker" id="am-last-kicker">방금 출석</div>
+            <div class="am-last-name idle" id="am-name">출결 대기 중</div>
+            <div class="am-last-meta">
+              <div class="am-last-cell"><span>바코드</span><b id="am-code">-</b></div>
+              <div class="am-last-cell"><span>구분</span><b id="am-kind">-</b></div>
+            </div>
+            <div class="am-last-sum" id="am-sum">카드를 접촉하거나 이름을 검색하면 방금 출석한 관원이 여기에 크게 표시됩니다.</div>
           </div>
-          <div class="log-scroll" id="log-scroll"></div>
+
+          <div class="card am-today">
+            <div class="am-today-head">
+              <label for="am-q">원생명</label>
+              <input class="input" id="am-q" placeholder="원생명" autocomplete="off" aria-label="오늘 출결 원생명 찾기">
+              <button type="button" class="btn btn-sm" id="am-find">찾기</button>
+              <div class="spacer"></div>
+              <span class="am-sms-count">문자건수 : <b id="am-sms-count">0</b>건</span>
+            </div>
+            <div class="tablewrap am-tablewrap">
+              <table class="tb am-tb">
+                <thead><tr><th>번호</th><th>원생명</th><th>구분</th><th>시간</th><th>문자발송여부</th></tr></thead>
+                <tbody id="am-table"></tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -1510,8 +1687,7 @@
           <button class="btn btn-sm btn-primary" id="btn-goto-account">관리자 계정 변경</button>
         </div>
         <div class="admin-tabs" role="tablist">
-          <button class="admin-tab active" id="atab-overview" data-atab="overview">📊 오늘 출석</button>
-          <button class="admin-tab" id="atab-students" data-atab="students">🥋 원생 관리</button>
+          <button class="admin-tab active" id="atab-students" data-atab="students">🥋 원생 관리</button>
           <button class="admin-tab" id="atab-paused" data-atab="paused">🛌 휴관생 관리</button>
           <button class="admin-tab" id="atab-promotion" data-atab="promotion">🎖️ 승급심사 관리</button>
           <button class="admin-tab" id="atab-gukgiwon" data-atab="gukgiwon">🏅 국기원 심사</button>
@@ -1525,90 +1701,13 @@
           <button class="admin-tab" id="atab-settings" data-atab="settings">🔐 관리자 계정</button>
         </div>
 
-        <div id="admin-overview" class="ov">
+        <div id="admin-students" class="ov" style="display:none">
           <div class="stats">
             <div class="stat in"><div class="stat-label">✅ 오늘 등원</div><div class="stat-val" id="st-in">0<small>명</small></div></div>
             <div class="stat out"><div class="stat-label">🏠 오늘 하원</div><div class="stat-val" id="st-out">0<small>명</small></div></div>
             <div class="stat absent"><div class="stat-label">⏳ 미등원</div><div class="stat-val" id="st-absent">0<small>명</small></div></div>
             <div class="stat"><div class="stat-label">👥 전체 관원</div><div class="stat-val" id="st-total">0<small>명</small></div></div>
           </div>
-
-          <div class="admin-grid">
-            <div class="admin-col">
-              <div class="panel">
-                <div class="panel-head">
-                  <h3>📋 오늘 출석 현황</h3><div class="spacer"></div>
-                  <span class="tiny-note" id="admin-today">-</span>
-                  <button class="btn btn-sm btn-danger" id="btn-reset-today">오늘 기록 초기화</button>
-                </div>
-                <div class="promo-filters att-filters" id="att-filters">
-                  <input class="input" id="att-q" placeholder="🔍 관원 이름 검색" autocomplete="off" aria-label="오늘 출석 관원 이름 검색">
-                  <button class="pchip active" data-afilter="all" id="af-all">전체</button>
-                  <button class="pchip" data-afilter="in" id="af-in">등원</button>
-                  <button class="pchip" data-afilter="out" id="af-out">하원</button>
-                  <button class="pchip" data-afilter="absent" id="af-absent">미등원</button>
-                  <div class="spacer"></div>
-                  <span class="tiny-note" id="att-filter-note"></span>
-                </div>
-                <div class="tablewrap">
-                  <table class="tb">
-                    <thead><tr><th>관원</th><th>부서 · 수업</th><th>등원</th><th>하원</th><th>문자</th></tr></thead>
-                    <tbody id="att-table"></tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div class="panel">
-                <div class="panel-head"><h3>💬 문자 발송 로그 (전체)</h3><div class="spacer"></div><button type="button" class="sms-retryall" id="btn-sms-retry-admin" style="display:none" title="아직 도장폰으로 나가지 않은 문자만 다시 보냅니다">🔄 <span class="lbl-long">실패·미전송 </span>다시 보내기 (0건)</button><span class="tiny-note" id="admin-log-count">0건</span></div>
-                <div class="tablewrap" style="max-height:300px; overflow:auto">
-                  <table class="tb">
-                    <thead><tr><th style="width:62px">시간</th><th style="min-width:66px">관원</th><th style="width:56px">구분</th><th>문구</th><th style="width:104px">발송 상태</th><th style="width:136px"></th></tr></thead>
-                    <tbody id="admin-log-table"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-            <div class="admin-col">
-              <div class="panel">
-                <div class="panel-head"><h3>📱 안드로이드 도장폰 무료문자 자동 발송</h3><div class="spacer"></div><span class="tiny-note">MacroDroid 웹훅</span><span class="chip" id="sms-state">미연동 · 시뮬레이션</span></div>
-                <div class="panel-body">
-                  <div class="field"><label>MacroDroid 웹훅 URL</label>
-                    <input class="input" id="s-webhook" placeholder="https://trigger.macrodroid.com/…/sms" autocomplete="off" spellcheck="false"></div>
-                  <div class="row2">
-                    <div class="field"><label>전송 방식</label>
-                      <select class="input" id="s-method">
-                        <option value="query">쿼리 파라미터 (MacroDroid 권장)</option>
-                        <option value="json">JSON POST (커스텀 게이트웨이)</option>
-                      </select>
-                    </div>
-                    <div class="field"><label>자동 발송</label>
-                      <select class="input" id="s-autosend">
-                        <option value="on">켜짐 — 출석·심사 때 바로 요청</option>
-                        <option value="off">꺼짐 — 기록만 하고 직접 보내기</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div class="field"><label>테스트 받을 번호</label>
-                    <input class="input" id="s-test-phone" placeholder="010-1234-5678 (본인 번호)" inputmode="tel"></div>
-                  <div class="form-actions">
-                    <button class="btn btn-primary" id="btn-save-sms">설정 저장</button>
-                    <button class="btn btn-mint" id="btn-test-sms">📨 테스트 문자 보내기</button>
-                    <button class="btn" id="btn-sms-templates">✍️ 문자 문구 설정</button>
-                  </div>
-                  <div class="sms-test-result" id="sms-test-result"></div>
-                  <div class="help">
-                    도장폰에 <b>MacroDroid</b>를 설치하고 <b>웹훅 트리거 → 문자 보내기</b> 매크로를 만들어 두면, 출석·승급·심사 안내가 <b>도장폰 요금제에 포함된 무료문자</b>로 자동으로 나갑니다. 사람이 문자 앱을 열 필요가 없어요.
-                    설치 순서는 <b>android_sms_setup_guide.md</b>에 5분 분량으로 정리했고, 통신사 하루 발송 한도·요금 주의사항도 그 문서에 있습니다.
-                    웹훅을 비우면 예전처럼 <b>로그에만 쌓고</b>, 로그 옆 <b>📲 문자앱으로</b> 버튼으로 직접 보낼 수 있어요.
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-
-        <div id="admin-students" class="ov" style="display:none">
           <!-- 재원생 전체 명단: 폼과 분리해 화면 가로 전체 폭 · 넉넉한 높이로 보여준다 -->
           <div class="panel stu-wide-panel" id="stu-roster-panel">
             <div class="panel-head">
@@ -1620,9 +1719,6 @@
             </div>
             <div class="panel-body">
               <div class="promo-filters" id="stu-filters" style="margin:-2px 0 9px">
-                <button class="pchip active" data-sfilter="active" id="sf-active">재원생</button>
-                <button class="pchip" data-sfilter="paused" id="sf-paused">휴관생</button>
-                <button class="pchip" data-sfilter="all" id="sf-all">전체</button>
                 <input class="input" id="stu-q" type="search" placeholder="🔍 이름·초성·전화·부모 성함·바코드" autocomplete="off" spellcheck="false" aria-label="재원생 명단 이름·초성·전화·부모 성함·바코드 번호 검색">
                 <div class="spacer"></div>
                 <select class="input mon-select" id="stu-sort" aria-label="원생 명단 정렬 방식" title="명단 정렬 — 띠는 「띠 체계 설정」 순서대로">
@@ -1703,7 +1799,12 @@
                   </div>
                   <div class="tiny-note" style="margin:-2px 0 10px; line-height:1.55">생년월일·티콘 ID는 국기원 심사접수에 쓰는 정보예요. <b>관리자 화면에만</b> 보이고 출석 키오스크·공개 안내에는 표시되지 않습니다.</div>
                   <div class="row2">
-                    <div class="field"><label>바코드 번호 <span style="font-weight:600;color:#8a94a6">(출석 카드 · 원생관리 「번호」)</span></label><input class="input" id="f-barcode" type="text" maxlength="40" placeholder="예: 9879201808" autocomplete="off" spellcheck="false" inputmode="numeric" aria-label="바코드 번호"></div>
+                    <div class="field"><label>바코드 번호 <span style="font-weight:600;color:#8a94a6">(출석 카드 · 원생관리 「번호」)</span></label>
+                      <div class="bc-input-row">
+                        <input class="input" id="f-barcode" type="text" maxlength="40" placeholder="예: 9879201808" autocomplete="off" spellcheck="false" inputmode="numeric" aria-label="바코드 번호">
+                        <button type="button" class="btn btn-sm" id="btn-f-barcode-scan" title="카메라로 출석 카드의 바코드를 읽어 이 칸에 넣습니다">📷 스캔</button>
+                      </div>
+                    </div>
                     <div class="field"><label>바코드로 출석 <span style="font-weight:600;color:#8a94a6">(출석 화면 → 📷 바코드)</span></label>
                       <div class="tiny-note" style="padding:9px 0 0; line-height:1.5">출석 화면 위쪽 <b>📷 바코드</b>를 고르면 카메라가 이 번호를 읽어 등원/하원 처리합니다.</div>
                     </div>
@@ -2608,6 +2709,51 @@
               </div>
             </div>
           </div>
+
+          <div class="panel" style="margin-top:13px">
+            <div class="panel-head"><h3>💬 문자 발송 로그 (전체)</h3><div class="spacer"></div><button type="button" class="sms-retryall" id="btn-sms-retry-admin" style="display:none" title="아직 도장폰으로 나가지 않은 문자만 다시 보냅니다">🔄 <span class="lbl-long">실패·미전송 </span>다시 보내기 (0건)</button><span class="tiny-note" id="admin-log-count">0건</span></div>
+            <div class="tablewrap" style="max-height:300px; overflow:auto">
+              <table class="tb">
+                <thead><tr><th style="width:62px">시간</th><th style="min-width:66px">관원</th><th style="width:56px">구분</th><th>문구</th><th style="width:104px">발송 상태</th><th style="width:136px"></th></tr></thead>
+                <tbody id="admin-log-table"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top:13px">
+            <div class="panel-head"><h3>📱 안드로이드 도장폰 무료문자 자동 발송</h3><div class="spacer"></div><span class="tiny-note">MacroDroid 웹훅</span><span class="chip" id="sms-state">미연동 · 시뮬레이션</span></div>
+            <div class="panel-body">
+              <div class="field"><label>MacroDroid 웹훅 URL</label>
+                <input class="input" id="s-webhook" placeholder="https://trigger.macrodroid.com/…/sms" autocomplete="off" spellcheck="false"></div>
+              <div class="row2">
+                <div class="field"><label>전송 방식</label>
+                  <select class="input" id="s-method">
+                    <option value="query">쿼리 파라미터 (MacroDroid 권장)</option>
+                    <option value="json">JSON POST (커스텀 게이트웨이)</option>
+                  </select>
+                </div>
+                <div class="field"><label>자동 발송</label>
+                  <select class="input" id="s-autosend">
+                    <option value="on">켜짐 — 출석·심사 때 바로 요청</option>
+                    <option value="off">꺼짐 — 기록만 하고 직접 보내기</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field"><label>테스트 받을 번호</label>
+                <input class="input" id="s-test-phone" placeholder="010-1234-5678 (본인 번호)" inputmode="tel"></div>
+              <div class="form-actions">
+                <button class="btn btn-primary" id="btn-save-sms">설정 저장</button>
+                <button class="btn btn-mint" id="btn-test-sms">📨 테스트 문자 보내기</button>
+                <button class="btn" id="btn-sms-templates">✍️ 문자 문구 설정</button>
+              </div>
+              <div class="sms-test-result" id="sms-test-result"></div>
+              <div class="help">
+                도장폰에 <b>MacroDroid</b>를 설치하고 <b>웹훅 트리거 → 문자 보내기</b> 매크로를 만들어 두면, 출석·승급·심사 안내가 <b>도장폰 요금제에 포함된 무료문자</b>로 자동으로 나갑니다. 사람이 문자 앱을 열 필요가 없어요.
+                설치 순서는 <b>android_sms_setup_guide.md</b>에 5분 분량으로 정리했고, 통신사 하루 발송 한도·요금 주의사항도 그 문서에 있습니다.
+                웹훅을 비우면 예전처럼 <b>로그에만 쌓고</b>, 로그 옆 <b>📲 문자앱으로</b> 버튼으로 직접 보낼 수 있어요.
+              </div>
+            </div>
+          </div>
         </div>
         <div id="admin-shuttle" style="display:none">
           <div class="sh-screen">
@@ -3383,6 +3529,7 @@
     logs: [],
     muted: false,
     touchTab: 'pin',
+    attMonQuery: '',
     editingId: '',
     pin: '',
     busy: false,
@@ -3391,7 +3538,7 @@
     beltPicker: null,
     promoSelected: {},
     promoFilter: 'all',
-    adminTab: 'overview',
+    adminTab: 'students',
     monthly: null,
     tuition: {},
     tuitionUI: null,
@@ -3837,6 +3984,7 @@
     app.bulkSms = null;
     app.pausedUI = null;
     app.stuFilter = 'active';   // 화면을 다시 열어도 재원생 명단이 휴관생과 섞이지 않게
+    loadLastAttend();
     app.smsTemplates = loadBulkTemplates();
     app.counsel = loadCounsel();
     app.counselUI = null;
@@ -4193,9 +4341,11 @@
   var clockTimer = null;
   function tickClock() {
     var now = new Date();
+    /* v45 — 출결 모니터: 2026-11-25 수 19:02:12 (1초마다) */
+    var days = ['일', '월', '화', '수', '목', '금', '토'];
     el('clock-hm').textContent = pad2(now.getHours()) + ':' + pad2(now.getMinutes());
     el('clock-s').textContent = pad2(now.getSeconds());
-    el('clock-date').textContent = fmtDateKorean(now) + ' · ' + (app.settings.mode === 'in' ? '등원 모드' : '하원 모드');
+    el('clock-date').textContent = todayKey(now) + ' ' + days[now.getDay()];
     if (todayKey() !== app._renderedDay) {
       app._renderedDay = todayKey();
       renderAll();
@@ -4490,6 +4640,7 @@
   function finishSmsEntry(entry) {
     saveLogs();
     renderLog();
+    renderAttendanceMonitor();
     renderAdminLog();
     if (entry && typeof entry.onStatus === 'function') { entry.onStatus(entry); }
   }
@@ -4757,6 +4908,147 @@
   }
 
   /* =========================================================
+     7-B. 출결 모니터 (v45) — 방금 출석 카드 · 오늘 실시간 출결 표
+     ---------------------------------------------------------
+     · 초기화면(출석 화면)에서 오늘 누가 언제 입실/하원했는지 최근 순으로 보여 준다.
+     · 문자발송여부는 출석 로그(app.logs)의 그 관원·그 구분 항목을 따라간다.
+     ========================================================= */
+  var LAST_ATTEND_KEY = 'tdk.lastAttend.v1';
+  var lastAttend = null;
+
+  function loadLastAttend() {
+    var v = readJSON(LAST_ATTEND_KEY, null);
+    lastAttend = (v && v.studentId && (!v.date || v.date === todayKey())) ? v : null;
+  }
+  function lastAttendSummary(s) {
+    if (!s) { return ''; }
+    var parts = [];
+    var lbl = studentLabel(s);
+    if (lbl) { parts.push(lbl); }
+    if (s.belt) { parts.push(s.belt); }
+    parts.push('누적 ' + (Number(s.attendCount) || 0) + '회');
+    return parts.join(' · ');
+  }
+  function rememberLastAttend(student, mode, timeStr) {
+    if (!student) { return; }
+    lastAttend = {
+      date: todayKey(), studentId: student.id, name: student.name,
+      barcode: barcodeOf(student), mode: mode === 'out' ? 'out' : 'in', time: timeStr || ''
+    };
+    writeJSON(LAST_ATTEND_KEY, lastAttend);
+    renderLastAttend();
+  }
+  function renderLastAttend() {
+    var card = el('am-last');
+    var nameEl = el('am-name'), codeEl = el('am-code'), kindEl = el('am-kind'), sumEl = el('am-sum');
+    if (!nameEl) { return; }
+    var active = !!(lastAttend && lastAttend.studentId && (!lastAttend.date || lastAttend.date === todayKey()));
+    var s = active ? app.students.filter(function (x) { return x.id === lastAttend.studentId; })[0] : null;
+    if (card) {
+      card.classList.toggle('idle', !active);
+      card.classList.toggle('has', active);
+      card.classList.toggle('mode-in', active && lastAttend.mode !== 'out');
+      card.classList.toggle('mode-out', active && lastAttend.mode === 'out');
+    }
+    if (!active) {
+      nameEl.textContent = '출결 대기 중';
+      classToggle(nameEl, 'idle', true);
+      if (codeEl) { codeEl.textContent = '-'; codeEl.className = ''; }
+      if (kindEl) { kindEl.textContent = '-'; kindEl.className = ''; }
+      if (sumEl) { sumEl.textContent = '카드를 접촉하거나 이름을 검색하면 방금 출석한 관원이 여기에 크게 표시됩니다.'; }
+      return;
+    }
+    nameEl.textContent = String((s ? s.name : lastAttend.name) || '');
+    classToggle(nameEl, 'idle', false);
+    if (codeEl) { codeEl.textContent = lastAttend.barcode || '-'; codeEl.className = ''; }
+    var isOut = lastAttend.mode === 'out';
+    if (kindEl) { kindEl.textContent = isOut ? '하원' : '입실'; kindEl.className = isOut ? 'kind-out' : 'kind-in'; }
+    if (sumEl) {
+      var sum = lastAttendSummary(s);
+      sumEl.textContent = sum || ('출석 ' + (lastAttend.time || '') + ' 처리');
+    }
+  }
+  function classToggle(node, cls, on) {
+    if (!node || !node.classList) { return; }
+    if (on) { node.classList.add(cls); } else { node.classList.remove(cls); }
+  }
+
+  /* 출석 로그에서 그 관원·그 구분(입실/하원)의 문자 상태 */
+  function attMonitorStatusOf(studentId, mode) {
+    var key = todayKey();
+    var entry = null;
+    for (var i = 0; i < app.logs.length; i++) {
+      var l = app.logs[i];
+      if (!l) { continue; }
+      if (l.date !== key || l.studentId !== studentId) { continue; }
+      if (l.mode !== mode) { continue; }
+      if (l.kind === 'test' || l.status === 'test') { continue; }
+      if (l.kind && l.kind !== 'attendance' && l.kind !== 'resume') { continue; }
+      entry = l;
+      break;
+    }
+    if (!entry) { return { label: '미발송', cls: 'none' }; }
+    switch (entry.status) {
+      case 'sent': return { label: '성공', cls: 'ok' };
+      case 'queued': return { label: '대기', cls: 'wait' };
+      case 'unverified': return { label: '확인필요', cls: 'wait' };
+      case 'error': return { label: '실패', cls: 'bad' };
+      case 'off': return { label: '자동꺼짐', cls: 'none' };
+      case 'sim': return { label: '미연동', cls: 'none' };
+      case 'relay': return { label: '다른기기', cls: 'wait' };
+      default: return { label: '미발송', cls: 'none' };
+    }
+  }
+
+  /* 오늘 출결 이벤트 — 가장 최근이 맨 위 */
+  function attMonitorRows() {
+    var day = todayRecords();
+    var rows = [];
+    activeStudents().forEach(function (s) {
+      var r = day[s.id] || {};
+      var tIn = recInText(r), tOut = recOutText(r);
+      if (tIn) { rows.push({ student: s, mode: 'in', time: String(tIn), sort: /^\d/.test(String(tIn)) ? String(tIn) : '00:00' }); }
+      if (tOut) { rows.push({ student: s, mode: 'out', time: String(tOut), sort: /^\d/.test(String(tOut)) ? String(tOut) : '00:00' }); }
+    });
+    rows.sort(function (a, b) {
+      if (a.sort !== b.sort) { return a.sort < b.sort ? 1 : -1; }
+      return String(a.student.name).localeCompare(String(b.student.name), 'ko');
+    });
+    return rows;
+  }
+  function attSmsCount() {
+    var key = todayKey();
+    return app.logs.filter(function (l) {
+      return l && l.date === key && l.kind !== 'test' && l.status !== 'test';
+    }).length;
+  }
+  function renderAttendanceMonitor() {
+    var tbody = el('am-table');
+    if (!tbody) { return; }
+    var q = String(app.attMonQuery || '').trim().toLowerCase();
+    if (el('am-q') && document.activeElement !== el('am-q')) { el('am-q').value = String(app.attMonQuery || ''); }
+    var all = attMonitorRows();
+    var rows = q ? all.filter(function (r) { return String(r.student.name || '').toLowerCase().indexOf(q) !== -1; }) : all;
+    if (el('am-sms-count')) { el('am-sms-count').textContent = attSmsCount(); }
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="am-empty">' +
+        (q ? '조건에 맞는 출결 기록이 없어요.' : '오늘 아직 출결 기록이 없어요.<br>카드를 접촉하거나 이름으로 출석해 주세요.') +
+        '</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function (r, i) {
+      var st = attMonitorStatusOf(r.student.id, r.mode);
+      return '<tr>' +
+        '<td class="am-no">' + (i + 1) + '</td>' +
+        '<td class="am-nm">' + esc(r.student.name) + '</td>' +
+        '<td><span class="am-kind ' + r.mode + '">' + (r.mode === 'out' ? '하원' : '입실') + '</span></td>' +
+        '<td class="am-time">' + esc(r.time) + '</td>' +
+        '<td><span class="am-sms ' + st.cls + '">' + st.label + '</span></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  /* =========================================================
      8. 키오스크: 관원 목록 / 검색 / 키패드
      ========================================================= */
   function statusBadge(student) {
@@ -4820,12 +5112,19 @@
     }
   }
 
+  /* 보호자 휴대폰 번호 뒷 4자리로 재원생 찾기 (키패드 · 번호 칸 공용) */
+  function findStudentsByPin(pin) {
+    var p4 = String(pin == null ? '' : pin);
+    if (!/^\d{4}$/.test(p4)) { return []; }
+    return activeStudents().filter(function (s) {
+      return studentPhonesAll(s).some(function (p) { return digitsOnly(p).slice(-4) === p4; });
+    }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); });
+  }
+
   function submitPin() {
     var pin = app.pin;
     if (pin.length !== 4) { return; }
-    var matches = activeStudents().filter(function (s) {
-      return studentPhonesAll(s).some(function (p) { return digitsOnly(p).slice(-4) === pin; });
-    }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'ko'); });
+    var matches = findStudentsByPin(pin);
     var listEl = el('cand-list');
 
     if (matches.length === 1) {
@@ -4901,6 +5200,7 @@
     var logEntry = addLog(student, mode, timeStr, { onStatus: refreshBanner });
     playSuccess();
     showBanner(student, mode, timeStr, logEntry);
+    rememberLastAttend(student, mode, timeStr);
     renderAll();
     return { ok: true, mode: mode, time: timeStr };
   }
@@ -4914,9 +5214,20 @@
     el('cam-status').textContent = text;
   }
 
+  function openCamDrawer() {
+    var d = el('cam-drawer');
+    if (d) { d.classList.add('open'); d.setAttribute('aria-hidden', 'false'); }
+  }
+  function closeCamDrawer() {
+    var d = el('cam-drawer');
+    if (d) { d.classList.remove('open'); d.setAttribute('aria-hidden', 'true'); }
+  }
+
   function startCamera() {
+    /* v45 — 카메라 영역은 📷 카메라를 눌렀을 때만 펼친다 */
+    openCamDrawer();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast('이 브라우저에서는 카메라를 열 수 없어요. 리더기나 「📷 바코드 번호」로 출석해 주세요.');
+      toast('이 브라우저에서는 카메라를 열 수 없어요. 리더기나 「번호」 칸으로 출석해 주세요.');
       return;
     }
     setCamStatus('카메라 연결 중…');
@@ -4927,8 +5238,10 @@
       app.cameraStream = stream;
       var video = el('camera-video');
       video.srcObject = stream;
-      var p = video.play();
-      if (p && p.catch) { p.catch(function () {}); }
+      if (video.play) {
+        var p = video.play();
+        if (p && p.catch) { p.catch(function () {}); }
+      }
       document.body.classList.add('cam-live');
       setCamStatus('웹캠 LIVE · 출석 카드 바코드를 비춰 주세요');
       el('cam-head-note').textContent = '웹캠 연결됨';
@@ -4941,9 +5254,9 @@
       document.body.classList.remove('cam-live');
       setCamStatus('웹캠 사용 불가 · 리더기로 출석');
       el('cam-head-note').textContent = '리더기 연결 대기';
-      el('btn-camera').textContent = '📷 카메라 연결';
+      el('btn-camera').textContent = '📷 카메라';
       var reason = (err && err.name) ? err.name : 'error';
-      toast('카메라를 열 수 없어요 (' + reason + '). 리더기나 「📷 바코드 번호」로 출석할 수 있습니다.');
+      toast('카메라를 열 수 없어요 (' + reason + '). 리더기나 「번호」 칸으로 출석할 수 있습니다.');
     });
   }
 
@@ -4955,9 +5268,10 @@
     var video = el('camera-video');
     video.srcObject = null;
     document.body.classList.remove('cam-live');
+    closeCamDrawer();
     setCamStatus('웹캠 대기');
     el('cam-head-note').textContent = '리더기 연결 대기';
-    el('btn-camera').textContent = '📷 카메라 연결';
+    el('btn-camera').textContent = '📷 카메라';
     el('stage-tip').textContent = 'BARCODE · READY';
     refreshAiHint();
   }
@@ -5000,6 +5314,8 @@
     if (document.body && document.body.classList) { document.body.classList.add('barcode-mode'); }
     var note = el('mode-note');
     if (note) { note.textContent = '출석 카드 바코드를 비추면 ' + modeTxt + ' 처리'; }
+    var note2 = el('mode-note2');
+    if (note2) { note2.textContent = '출석 카드 바코드를 비추면 ' + modeTxt + ' 처리'; }
     var ph = el('stage-ph-text'), phSub = el('stage-ph-sub');
     if (ph) { ph.innerHTML = '카메라를 연결하고 <b>출석 카드의 바코드</b>를<br>가이드 안에 비춰 주세요'; }
     if (phSub) { phSub.textContent = '카메라가 없으면 리더기로 찍거나 「📷 바코드 번호」에 넣어도 됩니다'; }
@@ -5240,6 +5556,109 @@
     barcode.lastStudentId = '';
   }
 
+  /* =========================================================
+     10-C-2. 원생관리 「바코드 번호」 옆 📷 스캔 (v45)
+     ---------------------------------------------------------
+     · 출석 화면과 같은 엔진(BarcodeDetector → vendor/zxing)으로 읽는다
+     · 읽으면 바로 #f-barcode 에 넣고 카메라를 끈다 (저장은 관장님이 누른다)
+     ========================================================= */
+  var formScan = { stream: null, timer: null, busy: false, active: false };
+
+  function formScanState() { return formScan; }
+  function formScanSetStatus(text) {
+    var box = el('fscan-status');
+    if (box) { box.textContent = text; }
+  }
+  function formScanStop() {
+    formScan.active = false;
+    if (formScan.timer) { clearInterval(formScan.timer); formScan.timer = null; }
+    if (formScan.stream) {
+      try { formScan.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+      formScan.stream = null;
+    }
+    var v = el('fscan-video');
+    if (v) { try { v.srcObject = null; } catch (e) {} }
+  }
+  function openBarcodeScanModal() {
+    if (formScan.active) { return; }
+    formScan.active = true;
+    openModal({
+      title: '📷 출석 카드 바코드 스캔',
+      sub: '카메라에 바코드를 비추면 번호가 바코드 번호 칸에 들어갑니다.',
+      body: '<div class="fscan"><video id="fscan-video" autoplay muted playsinline></video>' +
+        '<div class="fscan-guide"><div class="fscan-line"></div></div>' +
+        '<div class="fscan-status" id="fscan-status">카메라 준비 중…</div></div>',
+      actions: [{ label: '닫기', value: 'cancel', kind: 'btn-ghost' }],
+      onClose: function () { formScanStop(); }
+    });
+    formScanStart();
+  }
+  function formScanStart() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      formScanSetStatus('이 브라우저에서는 카메라를 열 수 없어요 · 번호를 직접 입력해 주세요');
+      toast('이 브라우저에서는 카메라를 열 수 없어요. 번호를 직접 입력해 주세요.');
+      return;
+    }
+    formScanSetStatus('카메라 연결 중…');
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    }).then(function (stream) {
+      if (!formScan.active) {
+        try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+        return;
+      }
+      formScan.stream = stream;
+      var v = el('fscan-video');
+      if (v) {
+        v.srcObject = stream;
+        if (v.play) {
+          var p = v.play();
+          if (p && p.catch) { p.catch(function () {}); }
+        }
+      }
+      formScanSetStatus('바코드를 가이드 안에 비춰 주세요');
+      initBarcodeEngine().then(function (eng) {
+        if (!formScan.active) { return; }
+        if (!eng) {
+          formScanSetStatus('이 브라우저는 바코드 인식을 지원하지 않아요 · 번호를 직접 입력해 주세요');
+          return;
+        }
+        if (formScan.timer) { clearInterval(formScan.timer); }
+        formScan.timer = setInterval(formScanTick, BARCODE_LOOP_MS);
+      });
+    }, function (err) {
+      var reason = (err && err.name) ? err.name : 'error';
+      formScanSetStatus('카메라를 열 수 없어요 (' + reason + ') · 번호를 직접 입력해 주세요');
+      toast('카메라를 열 수 없어요 (' + reason + '). 번호를 직접 입력해 주세요.');
+    });
+  }
+  function formScanTick() {
+    if (!formScan.active || formScan.busy) { return; }
+    var v = el('fscan-video');
+    if (!v || !v.videoWidth) { return; }
+    formScan.busy = true;
+    barcodeDetectFrom(v).then(function (codes) {
+      formScan.busy = false;
+      if (!formScan.active || !codes || !codes.length) { return; }
+      formScanApply(codes[0].raw);
+    }, function () { formScan.busy = false; });
+  }
+  function formScanApply(raw) {
+    var code = normalizeBarcode(raw);
+    if (!code || !formScan.active) { return null; }
+    if (el('f-barcode')) { el('f-barcode').value = code; }
+    formScanStop();
+    if (activeModalClose) { activeModalClose('scanned'); }
+    var owner = app.students.filter(function (x) { return barcodeOf(x) === code && x.id !== app.editingId; })[0];
+    if (owner) {
+      toast('읽었어요 · 이 번호는 ' + owner.name + ' 관원이 이미 쓰고 있어요');
+    } else {
+      toast('바코드 번호를 읽었어요 (' + code + ') · 저장을 눌러 주세요');
+    }
+    return code;
+  }
+
   /* 「📷 바코드 번호」 보조 입력 — 카메라 없이도 출석 */
   function submitBarcodeInput() {
     var input = el('code-input');
@@ -5252,6 +5671,10 @@
       if (out) { out.innerHTML = '<div class="tiny-note" style="color:#c0392b;text-align:center;margin-top:6px">바코드 번호를 입력해 주세요</div>'; }
       return null;
     }
+    /* v45 — 번호 칸 하나로 바코드와 보호자 뒷번호 4자리를 모두 받는다 */
+    if (!findStudentsByBarcode(code).length && /^\d{4}$/.test(code)) {
+      return submitPinCode(code);
+    }
     var res = handleBarcodeScan(code, { force: true });
     if (input) { input.value = ''; }
     if (out) {
@@ -5262,6 +5685,40 @@
           (res && res.reason === 'unknown' ? '등록되지 않은 바코드예요 (' + esc(code) + ')' : '출석 처리하지 못했어요') + '</div>';
     }
     return res;
+  }
+
+  /* 번호 칸에 넣은 보호자 뒷 4자리 → 바로 출석, 같은 번호가 여럿이면 후보를 보여 준다 */
+  function submitPinCode(pin) {
+    var input = el('code-input');
+    var out = el('code-result');
+    var matches = findStudentsByPin(pin);
+    if (input) { input.value = ''; }
+    if (matches.length === 1) {
+      var checked = checkIn(matches[0], 'touch');
+      if (out) {
+        out.innerHTML = (checked && checked.ok)
+          ? '<div class="tiny-note" style="color:#0b7a55;text-align:center;margin-top:6px">✅ ' + esc(matches[0].name) + ' · ' +
+            (checked.mode === 'out' ? '하원' : '등원') + ' 처리했어요</div>'
+          : '<div class="tiny-note" style="color:#c0392b;text-align:center;margin-top:6px">출석 처리하지 못했어요</div>';
+      }
+      if (input) { try { input.focus(); } catch (e) {} }
+      return checked;
+    }
+    if (matches.length > 1) {
+      if (out) {
+        out.innerHTML = '<div class="tiny-note" style="margin:4px 0 2px">같은 번호가 ' + matches.length + '명이에요. 관원을 선택하세요.</div>' +
+          matches.map(function (s) {
+            return '<button type="button" class="cand" data-student="' + esc(s.id) + '">🥋 ' + esc(s.name) +
+              ' <span class="sub">' + esc(studentLabel(s)) + '</span></button>';
+          }).join('');
+      }
+      playKey();
+      return { ok: false, reason: 'choose' };
+    }
+    playError();
+    toast('등록된 뒷 4자리가 아니에요. 이름 검색을 이용해 주세요.');
+    if (out) { out.innerHTML = '<div class="tiny-note" style="color:#c0392b;text-align:center;margin-top:6px">일치하는 번호가 없습니다</div>'; }
+    return { ok: false, reason: 'unknown' };
   }
 
   /* =========================================================
@@ -5866,10 +6323,9 @@
     el('st-absent').innerHTML = c.absent + '<small>명</small>';
     el('st-total').innerHTML = c.total + '<small>명</small>' +
       (c.paused ? ' <small style="color:#6b4fa8">+휴관' + c.paused + '</small>' : '');
-    el('admin-today').textContent = fmtDateKorean(new Date());
+    if (el('admin-today')) { el('admin-today').textContent = fmtDateKorean(new Date()); }
     el('pill-in').textContent = c.in;
     el('pill-out').textContent = c.out;
-    renderAttendanceTable();
     renderStudentsTable();
     renderFeeLabels();
     renderSmsState();
@@ -5909,61 +6365,6 @@
         '<td>' + smsRetryCell(l, true) + '</td>' +
         '</tr>';
     }).join('');
-  }
-
-  function renderAttendanceTable() {
-    var day = todayRecords();
-    var q = String(app.attQuery || '').trim().toLowerCase();
-    var flt = app.attFilter || 'all';
-    var active = activeStudents().slice().sort(function (a, b) {
-      return a.name.localeCompare(b.name, 'ko');
-    });
-    var nIn = 0, nOut = 0;
-    active.forEach(function (s) {
-      var r = day[s.id] || {};
-      if (recInText(r)) { nIn++; }
-      if (recOutText(r)) { nOut++; }
-    });
-    var rows = active.filter(function (s) {
-      if (q && String(s.name || '').toLowerCase().indexOf(q) === -1) { return false; }
-      var r = day[s.id] || {};
-      if (flt === 'in') { return !!recInText(r); }
-      if (flt === 'out') { return !!recOutText(r); }
-      if (flt === 'absent') { return !recInText(r); }
-      return true;
-    });
-    ['all', 'in', 'out', 'absent'].forEach(function (k) {
-      var b = el('af-' + k);
-      if (b) { b.classList.toggle('active', flt === k); }
-    });
-    if (el('att-filter-note')) {
-      el('att-filter-note').textContent = (rows.length === active.length && flt === 'all' && !q)
-        ? ('등원 ' + nIn + '명 · 하원 ' + nOut + '명')
-        : (rows.length + '명 표시 · 등원 ' + nIn + ' · 하원 ' + nOut);
-    }
-    var tbody = el('att-table');
-    if (!rows.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="5">' +
-        (app.students.length
-          ? (q || flt !== 'all' ? '조건에 맞는 관원이 없어요.' : '재원생이 없어요. 휴관생은 「🛌 휴관생 관리」에서 볼 수 있어요.')
-          : '등록된 관원이 없습니다') + '</td></tr>';
-      return;
-    }
-    tbody.innerHTML = rows.map(function (s) {
-      var r = day[s.id] || {};
-      var sent = todayLogsFor(s.id);
-      return '<tr>' +
-        '<td><div class="nm">' + esc(s.name) + '</div></td>' +
-        '<td><div class="sub">' + esc(studentLabel(s)) + (s.belt ? ' · ' + esc(s.belt) : '') + '</div></td>' +
-        '<td class="cell-time">' + (recInText(r) ? esc(recInText(r)) : '<span class="chip off">미등원</span>') + '</td>' +
-        '<td class="cell-time">' + (recOutText(r) ? esc(recOutText(r)) : '<span class="chip">-</span>') + '</td>' +
-        '<td>' + (sent ? '<span class="chip ok">' + sent + '건 발송</span>' : '<span class="chip wait">없음</span>') + '</td>' +
-        '</tr>';
-    }).join('');
-  }
-  function todayLogsFor(studentId) {
-    var key = todayKey();
-    return app.logs.filter(function (l) { return l.date === key && l.studentId === studentId; }).length;
   }
 
   /* 관원의 첫 등록일 (YYYY-MM-DD, 없으면 '') */
@@ -6994,7 +7395,7 @@
         }
         app.adminAuthed = true;
         setView('admin');
-        setAdminTab('overview');
+        setAdminTab('students');
         renderAdminAccountState();
         toast('관리자로 들어왔어요' + (r.mustChange ? ' · 초기 비밀번호를 꼭 바꿔 주세요' : ''));
       });
@@ -8036,14 +8437,14 @@
   }
 
   function setAdminTab(tab) {
-    var tabs = ['overview', 'students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'shuttle', 'coupons', 'counsel', 'report', 'settings'];
-    if (tabs.indexOf(tab) === -1) { tab = 'overview'; }
+    /* v45 — 「오늘 출석」 탭은 초기화면(출결 모니터)으로 옮겨 없앴다. 예전 값은 원생 관리로 보낸다. */
+    var tabs = ['students', 'paused', 'promotion', 'gukgiwon', 'monthly', 'tuition', 'sms', 'shuttle', 'coupons', 'counsel', 'report', 'settings'];
+    if (tab === 'overview' || tabs.indexOf(tab) === -1) { tab = 'students'; }
     app.adminTab = tab;
     tabs.forEach(function (t) {
       var btn = el('atab-' + t);
       if (btn) { btn.classList.toggle('active', t === tab); }
     });
-    el('admin-overview').style.display = tab === 'overview' ? 'block' : 'none';
     el('admin-students').style.display = tab === 'students' ? 'block' : 'none';
     el('view-admin').classList.toggle('promo-mode', tab === 'promotion');
     el('view-admin').classList.toggle('guk-mode', tab === 'gukgiwon');
@@ -15831,6 +16232,8 @@
   function renderAll() {
     renderStudentsList();
     renderLog();
+    renderAttendanceMonitor();
+    renderLastAttend();
     renderAdmin();
     renderBeltOptions(el('f-belt') ? el('f-belt').value : '');
     renderKioskInfo();
@@ -15907,10 +16310,12 @@
       });
     }
     // 키패드
-    el('keypad').addEventListener('click', function (e) {
-      var b = e.target.closest('[data-key]');
-      if (b) { pinPress(b.getAttribute('data-key')); }
-    });
+    if (el('keypad')) {
+      el('keypad').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-key]');
+        if (b) { pinPress(b.getAttribute('data-key')); }
+      });
+    }
     // 키보드 숫자 입력도 지원
     document.addEventListener('keydown', function (e) {
       if (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { return; }
@@ -15925,9 +16330,43 @@
     //   capture 단계에 먼저 걸어, 리더기의 빠른 글자가 뒷번호 키패드로 새지 않게 한다
     document.addEventListener('keydown', handleReaderKeydown, true);
 
-    // 터치 탭 전환
-    el('tt-pin').addEventListener('click', function () { switchTouch('pin'); });
-    el('tt-name').addEventListener('click', function () { switchTouch('name'); });
+    // v45 — 수동 입력: 이름 검색 · 번호(바코드/뒷번호) · 뒷번호 키패드 접기
+    if (el('btn-name-search')) {
+      el('btn-name-search').addEventListener('click', function () {
+        app.touchTab = 'name';
+        renderStudentsList();
+        if (el('name-search')) { el('name-search').focus(); }
+      });
+    }
+    if (el('btn-pin-toggle')) {
+      el('btn-pin-toggle').addEventListener('click', function () {
+        switchTouch(app.touchTab === 'pin' ? 'none' : 'pin');
+        if (app.touchTab === 'pin') { renderPin(); }
+      });
+    }
+    if (el('code-input')) {
+      el('code-input').addEventListener('click', function () {
+        app.touchTab = 'code';
+        try { el('code-input').focus(); } catch (e) {}
+      });
+    }
+    // 오늘 실시간 출결 표: 원생명 찾기
+    if (el('am-q')) {
+      el('am-q').addEventListener('input', function () {
+        app.attMonQuery = String(el('am-q').value || '');
+        renderAttendanceMonitor();
+      });
+      el('am-q').addEventListener('search', function () {
+        app.attMonQuery = String(el('am-q').value || '');
+        renderAttendanceMonitor();
+      });
+    }
+    if (el('am-find')) {
+      el('am-find').addEventListener('click', function () {
+        app.attMonQuery = String((el('am-q') ? el('am-q').value : '') || '');
+        renderAttendanceMonitor();
+      });
+    }
 
     // 관원 선택 (이름 검색 + 후보 목록)
     document.addEventListener('click', function (e) {
@@ -15940,10 +16379,13 @@
     });
 
     // 이름 검색
-    el('name-search').addEventListener('input', renderStudentsList);
+    if (el('name-search')) { el('name-search').addEventListener('input', renderStudentsList); }
 
     // 관리자: 관원
     el('btn-save-student').addEventListener('click', saveStudent);
+    if (el('btn-f-barcode-scan')) {
+      el('btn-f-barcode-scan').addEventListener('click', function () { openBarcodeScanModal(); });
+    }
     el('btn-cancel-edit').addEventListener('click', resetStudentForm);
     ['f-division', 'f-course'].forEach(function (fid) {
       if (!el(fid)) { return; }
@@ -16110,42 +16552,6 @@
     if (el('btn-stu-dedupe')) {
       el('btn-stu-dedupe').addEventListener('click', function () { openStudentDedupe(); });
     }
-    if (el('att-filters')) {
-      el('att-filters').addEventListener('click', function (e) {
-        var b = e.target.closest('[data-afilter]');
-        if (!b) { return; }
-        var v = b.getAttribute('data-afilter');
-        app.attFilter = (v === 'in' || v === 'out' || v === 'absent') ? v : 'all';
-        renderAttendanceTable();
-      });
-    }
-    if (el('att-q')) {
-      el('att-q').addEventListener('input', function () {
-        app.attQuery = String(el('att-q').value || '');
-        renderAttendanceTable();
-      });
-    }
-
-    // 관리자: 오늘 기록 초기화
-    el('btn-reset-today').addEventListener('click', function () {
-      openModal({
-        title: '오늘 출석 기록을 모두 지울까요?',
-        sub: '오늘 날짜의 등원·하원 기록과 문자 발송 로그가 삭제됩니다. 관원 명단은 그대로 남아요.',
-        actions: [
-          { label: '취소', value: false, kind: 'btn-ghost' },
-          { label: '초기화', value: true, kind: 'btn-danger' }
-        ]
-      }).then(function (ok) {
-        if (!ok) { return; }
-        var key = todayKey();
-        delete app.records[key];
-        app.logs = app.logs.filter(function (l) { return l.date !== key; });
-        saveRecords(); saveLogs();
-        renderAll();
-        toast('오늘 기록을 초기화했어요.');
-      });
-    });
-
     // 관리자: 업로드
     var drop = el('drop-zone');
     var fileInput = el('file-input');
@@ -16166,7 +16572,6 @@
     el('btn-sample-csv').addEventListener('click', downloadSampleCSV);
 
     // 관리자: 승급심사 관리
-    el('atab-overview').addEventListener('click', function () { setAdminTab('overview'); });
     el('atab-students').addEventListener('click', function () { setAdminTab('students'); });
     el('atab-settings').addEventListener('click', function () { setAdminTab('settings'); });
     el('atab-promotion').addEventListener('click', function () { setAdminTab('promotion'); });
@@ -16916,9 +17321,6 @@
       el('btn-sms-retry-admin').addEventListener('click', function () { retryVisibleSms('admin'); });
     }
 
-    if (el('tt-code')) {
-      el('tt-code').addEventListener('click', function () { switchTouch('code'); });
-    }
     if (el('btn-code-submit')) {
       el('btn-code-submit').addEventListener('click', function () { submitBarcodeInput(); });
     }
@@ -17085,16 +17487,20 @@
     });
   }
 
+  /* v45 — 수동 입력은 이름·번호 칸이 늘 보이고, 뒷번호 키패드만 접었다 편다 */
   function switchTouch(tab) {
-    app.touchTab = tab;
-    el('tt-pin').classList.toggle('active', tab === 'pin');
-    el('tt-name').classList.toggle('active', tab === 'name');
-    if (el('tt-code')) { el('tt-code').classList.toggle('active', tab === 'code'); }
-    el('touch-pin').style.display = tab === 'pin' ? 'block' : 'none';
-    el('touch-name').style.display = tab === 'name' ? 'block' : 'none';
-    if (el('touch-code')) { el('touch-code').style.display = tab === 'code' ? 'block' : 'none'; }
-    if (tab === 'name') { setTimeout(function () { el('name-search').focus(); }, 60); }
-    if (tab === 'code') { setTimeout(function () { if (el('code-input')) { el('code-input').focus(); } }, 60); }
+    app.touchTab = (tab === 'name' || tab === 'code' || tab === 'pin') ? tab : 'none';
+    var open = app.touchTab === 'pin';
+    var pinBox = el('touch-pin');
+    if (pinBox) { pinBox.style.display = open ? 'block' : 'none'; }
+    var btn = el('btn-pin-toggle');
+    if (btn) {
+      btn.classList.toggle('on', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.textContent = open ? '🔢 뒷번호 키패드 닫기' : '🔢 뒷번호 키패드';
+    }
+    if (app.touchTab === 'name') { setTimeout(function () { var n = el('name-search'); if (n) { n.focus(); } }, 60); }
+    if (app.touchTab === 'code') { setTimeout(function () { if (el('code-input')) { el('code-input').focus(); } }, 60); }
   }
 
   function init() {
@@ -17115,7 +17521,7 @@
     fillSmsForm();
     fillDriveForm();
     resetStudentForm();
-    switchTouch('pin');
+    switchTouch('none');
     el('p-exam-date').value = app.settings.examDate || defaultExamDate();
     el('p-exam-time').value = app.settings.examTime || '10:00';
     el('p-exam-place').value = app.settings.examPlace || DEFAULT_SETTINGS.examPlace;
@@ -17124,7 +17530,7 @@
     el('gk-place').value = app.settings.gukPlace || (app.settings.dojoName + ' 도장');
     renderBeltEditor(true);
     renderGradeList();
-    setAdminTab('overview');
+    setAdminTab(app.adminTab || 'students');
     renderPromotion();
     renderGukgiwon();
     renderMonthly();
@@ -17234,6 +17640,33 @@
       adminLog: renderAdminLog
     },
     checkIn: checkIn,
+    /* v45 — 출결 모니터(초기화면) */
+    monitor: {
+      rows: attMonitorRows,
+      render: renderAttendanceMonitor,
+      statusOf: attMonitorStatusOf,
+      smsCount: attSmsCount,
+      last: function () { return lastAttend; },
+      renderLast: renderLastAttend,
+      remember: rememberLastAttend,
+      clearLast: function () { lastAttend = null; writeJSON(LAST_ATTEND_KEY, null); renderLastAttend(); },
+      openCamera: openCamDrawer,
+      closeCamera: closeCamDrawer,
+      drawerOpen: function () { var d = el('cam-drawer'); return !!(d && d.classList.contains('open')); }
+    },
+    /* v45 — 원생관리 바코드 📷 스캔 */
+    formScan: {
+      open: openBarcodeScanModal,
+      start: formScanStart,
+      tick: formScanTick,
+      apply: formScanApply,
+      stop: formScanStop,
+      state: formScanState
+    },
+    pin: {
+      find: findStudentsByPin,
+      submitCode: submitPinCode
+    },
     /* v44 — 출석 인식 방식(바코드 전용) · 카메라 바코드 */
     isBarcodeMode: isBarcodeMode,
     barcode: {
