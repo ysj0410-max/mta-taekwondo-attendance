@@ -1461,11 +1461,12 @@
     .am-modewrap{order:2}
     .am-notice{order:3}
     .am-connect{order:4}
-    .cam-drawer{order:9}
-    .am-last{order:5}
-    .am-today{order:6; min-height:min(54vh,470px)}
-    .am-manual{order:7}
-    .am-left .log-card{order:8; min-height:230px; flex:0 0 auto}
+    /* 카메라 영역은 📷 카메라 바로 아래에 펼쳐져, 누른 자리에서 보인다 */
+    .cam-drawer{order:5}
+    .am-last{order:6}
+    .am-today{order:7; min-height:min(54vh,470px)}
+    .am-manual{order:8}
+    .am-left .log-card{order:9; min-height:230px; flex:0 0 auto}
     .am-last-name{font-size:clamp(32px,8.4vw,48px)}
     .am-last-meta{grid-template-columns:1fr 1fr}
     .am-last-cell b{font-size:22px}
