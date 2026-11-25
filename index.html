@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=49"></script>
-<script src="firebase-sync-ui.js?v=49"></script>
+<script src="firebase-sync.js?v=50"></script>
+<script src="firebase-sync-ui.js?v=50"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1549,7 +1549,7 @@
   .login-gate{position:fixed; inset:0; z-index:9000; display:flex; align-items:center; justify-content:center;
     padding:22px; background:radial-gradient(120% 90% at 50% 0%, #16294f 0%, #0d1b3e 55%, #08122b 100%);
     color:#eaf1ff; overflow:auto; -webkit-overflow-scrolling:touch}
-  .login-gate.off{display:none !important}
+  .login-gate.off{display:none !important; pointer-events:none !important}
   .gate-card{width:100%; max-width:392px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14);
     border-radius:20px; padding:26px 22px 20px; box-shadow:0 24px 60px rgba(0,0,0,.45); backdrop-filter:blur(6px)}
   .gate-brand{display:flex; align-items:center; gap:12px; margin-bottom:20px}
@@ -1657,7 +1657,7 @@
 
     <div class="gate-msg" id="gate-msg" style="display:none"></div>
     <div class="gate-note" id="gate-note" style="display:none"></div>
-    <div class="gate-ver">v49 · 2026-11-25 · Spark 무료 요금제</div>
+    <div class="gate-ver">v50 · 2026-11-26 · Spark 무료 요금제</div>
   </div>
 </div>
 
@@ -4566,7 +4566,7 @@ setTimeout(function () {
     el('view-admin').classList.toggle('active', view === 'admin');
     el('tab-att').classList.toggle('active', view === 'attendance');
     el('tab-admin').classList.toggle('active', view === 'admin');
-    if (view === 'admin') { renderAdmin(); syncStuTableHint(); }
+    if (view === 'admin') { renderAdmin(); scheduleStuTableHint(); }
   }
 
   function updateMuteBtn() {
@@ -6876,17 +6876,46 @@ setTimeout(function () {
           : '<button class="btn btn-sm" data-pause="' + esc(s.id) + '" title="휴관 처리">휴관</button> ') +
         '<button class="btn btn-sm btn-danger" data-del="' + esc(s.id) + '">삭제</button>' +
         '</td></tr>';
-    }, { key: 'stu-table' });
-    syncStuTableHint();
+    }, { key: 'stu-table', head: STU_HEAD_ROWS, step: STU_CHUNK_ROWS });
+    /* v50 — 표 폭 재기는 그림이 끝난 다음 프레임으로 미룬다(그리기 도중 레이아웃 강제 없음) */
+    scheduleStuTableHint();
   }
 
-  /* 명단 표가 화면보다 넓을 때만 "옆으로 밀기" 안내를 보이게 한다 */
+  /* 명단 표가 화면보다 넓을 때만 "옆으로 밀기" 안내를 보이게 한다.
+     v50 — 이 함수는 표 폭을 재려고 브라우저에 레이아웃을 강제로 시킨다(표 100줄 + 입력칸 3,000개면
+     한 번에 수십~수백 ms). 그래서 ① 원생 관리 탭이 보일 때만, ② 그림(render) 도중이 아니라
+     다음 프레임에 한 번만, ③ 휴대폰 폭에서는 재지 않고 바로 켠다(표 최소 폭 1280px 이라 늘 넘침). */
+  var stuHintTimer = 0;
+  var stuHintKey = '';
+  function stuHintTabOn() {
+    try {
+      if (!currentViewIsAdmin()) { return false; }
+      return normalizeAdminTab(app.adminTab || 'students') === 'students';
+    } catch (e) { return false; }
+  }
   function syncStuTableHint() {
     var hint = el('stu-tablehint');
-    if (!hint) { return; }
+    if (!hint || !hint.classList) { return; }
+    if (!stuHintTabOn()) { stuHintKey = ''; hint.classList.remove('on'); return; }
+    /* 휴대폰 폭: 표가 1280px 로 고정이라 늘 넘친다 — 재지 않고 켠다(레이아웃 강제 없음) */
+    var vw = (typeof window !== 'undefined' && window.innerWidth) ? Number(window.innerWidth) : 0;
+    if (vw && vw <= 760) { hint.classList.add('on'); return; }
     var wrap = document.querySelector ? document.querySelector('.stu-tablewrap') : null;
     if (!wrap) { hint.classList.remove('on'); return; }
+    /* 같은 폭·같은 줄 수면 지난번 판단을 그대로 둔다 — 다시 재지 않는다 */
+    var key = String(wrap.clientWidth || 0) + '|' + String((app.students || []).length);
+    if (stuHintKey === key) { return; }
+    stuHintKey = key;
     hint.classList.toggle('on', (wrap.scrollWidth - wrap.clientWidth) > 4);
+  }
+  /* 그림 도중에 부르면 다음 프레임으로 미뤄 한 번만 잰다 */
+  function scheduleStuTableHint() {
+    if (stuHintTimer) { return; }
+    var run = function () { stuHintTimer = 0; syncStuTableHint(); };
+    try {
+      if (typeof requestAnimationFrame === 'function') { stuHintTimer = requestAnimationFrame(run); }
+      else { stuHintTimer = setTimeout(run, 16); }
+    } catch (e) { stuHintTimer = 0; setTimeout(run, 16); }
   }
 
   function renderSmsState() {
@@ -8637,7 +8666,6 @@ setTimeout(function () {
       renderStudentsTable();
       renderGradeList();
       renderBeltOptions(el('f-belt') ? el('f-belt').value : '');
-      syncStuTableHint();
     },
     paused: function () { renderPaused(true); },
     promotion: function () { renderPromotion(); },
@@ -8702,7 +8730,12 @@ setTimeout(function () {
 
   /* ---------- 긴 표 나눠 그리기 ---------- */
   var LAZY_HEAD_ROWS = 80;        /* 탭을 열 때 바로 그리는 줄 수 */
-  var LAZY_CHUNK_ROWS = 240;      /* 다음 프레임부터 이어 붙이는 단위 */
+  var LAZY_CHUNK_ROWS = 120;      /* 다음 프레임부터 이어 붙이는 단위 (v50 — 240 은 한 번에 붙일 때 배치가 오래 걸렸다) */
+  /* v50 — 원생 관리 표는 한 줄에 입력칸·선택상자가 30개가 넘어, 100줄을 한 번에 그리면
+     브라우저 배치(layout)에만 수백 ms~수 초가 걸려 화면이 멈춘 것처럼 보인다.
+     스크롤 상자에 보이는 몇 줄만 먼저 그리고 나머지는 다음 프레임부터 이어 붙인다. */
+  var STU_HEAD_ROWS = 12;
+  var STU_CHUNK_ROWS = 30;
   var __lazyJobs = {};
 
   function appendRowsHtml(box, html) {
@@ -8848,7 +8881,7 @@ setTimeout(function () {
       view.classList.toggle('report-mode', tab === 'report');
       view.classList.toggle('cp-mode', tab === 'coupons');
     }
-    if (tab === 'students') { syncStuTableHint(); }
+    if (tab === 'students') { scheduleStuTableHint(); }
     if (tab === 'settings') { renderAdminAccountState(); renderDriveState(); renderVisibility(); }
     /* [Firebase] 동기화 패널 갱신 */
     if (window.TDKFB && typeof window.TDKFB.onAdminTab === 'function') { try { window.TDKFB.onAdminTab(tab); } catch (e) {} }

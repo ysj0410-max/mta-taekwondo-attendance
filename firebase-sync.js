@@ -42,6 +42,13 @@
   };
 
   var REFRESH_MS = 150;        /* 원격 변경을 모아서 한 번에 화면에 반영 */
+  /* v50 — 원격 변경이 계속 이어질 때 화면 다시 그리기를 기다리는 최대 시간(ms).
+     로그인 직후처럼 수백 건이 여러 번에 나뉘어 들어와도 이 시간마다 한 번씩만 그린다. */
+  var REFRESH_MAX_MS = 1200;
+  /* v50 — 한 번에 들어온 스냅샷을 몇 건씩 끊어 반영할지 (그 사이 화면·터치가 살아 있게) */
+  var SNAPSHOT_CHUNK = 120;
+  /* v50 — 읽기 사용량을 몇 건씩 모아서 저장할지 (문서마다 localStorage 쓰기를 하지 않게) */
+  var READ_FLUSH_EVERY = 40;
   var DUPLICATE_WINDOW_MS = 6000;  /* 같은 출결 이벤트 중복 차단 창(보조 안전장치) */
   var QUOTA_MESSAGE = '무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다. 지금 찍은 기록은 이 기기에 임시 보관 중이며, 한도가 풀리면(태평양 시간 자정) 자동으로 다시 보냅니다. 그동안 Google Drive 백업을 받아 두시길 권합니다.';
 
@@ -1181,6 +1188,21 @@
       /* 사용량이 늘었으면 잠시 뒤 한 번만 합산 문서에 올려 본다(60초 간격·최소 변화량은 pushUsageNow 가 판단) */
       scheduleUsagePush();
     };
+    /* v50 — 읽기 사용량은 모아서 한 번에 기록한다.
+       문서 1건마다 localStorage 를 다시 쓰면(JSON.stringify + setItem) 687건 스냅샷에서
+       그것만으로 수백 ms~수 초가 걸린다. 모아 두었다가 READ_FLUSH_EVERY 건마다 / 묶음이 끝날 때 기록. */
+    var pendingReads = 0;
+    function noteReads(n) {
+      pendingReads += Math.max(0, num(n) || 0);
+      if (pendingReads >= READ_FLUSH_EVERY) { flushReads(); }
+    }
+    function flushReads() {
+      if (!pendingReads) { return 0; }
+      var n = pendingReads;
+      pendingReads = 0;
+      try { usage.record('reads', n); } catch (e) {}
+      return n;
+    }
     var deviceId = opts.deviceId || 'dev_local';
     var dojangId = safeId(opts.dojangId || 'mta-tkd');
     /* 서버(dojangs/{도장}/roles/{uid})에서 확인한 역할
@@ -1357,6 +1379,8 @@
     /* ---------- 그림자(shadow) 상태 ----------
        정본은 인메모리 shadow · 사본은 IndexedDB. localStorage 는 부팅 때 옛 값을 옮기고 비운다. */
     var shadow = {};
+    var shadowCount = 0;          /* 그림자 항목 수 — trimShadow 가 매번 Object.keys 를 만들지 않게 */
+    var shadowSinceTrim = 0;      /* 마지막 정리 뒤 새로 늘어난 항목 수 */
     var shadowLoaded = false;
     var shadowSaveTimer = null;
     var shadowDirty = false;
@@ -1400,7 +1424,7 @@
     var listeners = [];
     var applying = false;
     var started = false;
-    var flushTimer = null, reloadTimer = null, reloadPending = false;
+    var flushTimer = null, reloadTimer = null, reloadPending = false, reloadFirstAt = 0;
     var lastEventAt = {};
     var lastError = '';
     var lastErrorKind = '';
@@ -1573,12 +1597,26 @@
        · 저장: 인메모리에 즉시, IndexedDB(tdk_fb_cache)에 비동기(300ms 모음)
        · localStorage 에는 절대 쓰지 않는다 — 5MB 한도를 잡아먹던 장본인이다  */
     function trimShadow() {
+      /* v50 — saveShadow() 는 문서 1건마다 불린다. 그때마다 Object.keys(그림자 6,000여 개)를
+         새로 만들면 그것만으로 수백 ms~수 초가 걸려 휴대폰 화면이 멈춘다.
+         그래서 항목 수를 세어 두고, 400건 새로 늘었거나 한도를 넘겼을 때만 정리한다. */
+      if (shadowCount <= SHADOW_MAX_ENTRIES && shadowSinceTrim < 400) { return; }
+      shadowSinceTrim = 0;
       var keys = Object.keys(shadow);
+      shadowCount = keys.length;
       if (keys.length <= SHADOW_MAX_ENTRIES) { return; }
       /* 너무 커지면 오래된 출결 문서부터 정리 (원격은 그대로 남아 있음) */
       keys.sort(function (a, b) {
         return String((shadow[a] && shadow[a].u) || '').localeCompare(String((shadow[b] && shadow[b].u) || ''));
       }).slice(0, keys.length - SHADOW_MAX_ENTRIES).forEach(function (k) { delete shadow[k]; });
+      shadowCount = SHADOW_MAX_ENTRIES;
+    }
+
+    /* 그림자에 문서 상태를 적는다 — 새 항목이면 항목 수를 센다(trimShadow 를 가볍게) */
+    function putShadowEntry(path, entry) {
+      if (!shadow[path]) { shadowCount++; shadowSinceTrim++; }
+      shadow[path] = entry;
+      return entry;
     }
 
     /* 버전(_ver)이 높은 쪽을 남긴다 — 인메모리에 이미 seedShadow 가 채운 값(v0)이 있을 수 있다 */
@@ -1592,6 +1630,8 @@
         if (!cur) { target[p] = e; taken++; return; }
         if (num(e.v) > num(cur.v)) { target[p] = e; taken++; }
       });
+      shadowCount += taken;
+      shadowSinceTrim += taken;
       return taken;
     }
 
@@ -1916,6 +1956,7 @@
     function endRemoteBatch() {
       if (remoteDepth > 0) { remoteDepth--; }
       if (remoteDepth > 0) { return 0; }
+      flushReads();
       var wrote = flushLocalWrites();
       /* 묶음 동안 모아 둔 화면 알림은 마지막에 딱 1번 — 2,500번 다시 그리지 않는다 */
       if (batchRemoteCount) {
@@ -2024,11 +2065,11 @@
         doc._updatedAt = isoOf(now());
         doc._updatedBy = deviceId;
         doc._fieldMeta = meta;
-        shadow[p] = {
+        putShadowEntry(p, {
           v: ver, m: meta, u: doc._updatedAt, by: deviceId, h: h, d: false,
           b: src.kind === 'events' ? null : mergeMetaBody(body, meta),
           t: body.time
-        };
+        });
         changes.push({ path: p, body: doc, entry: src.name });
       });
 
@@ -2051,7 +2092,7 @@
         if (!sh2 || sh2.d) { return; }
         var ver2 = num(sh2.v) + 1;
         var at2 = isoOf(now());
-        shadow[p] = { v: ver2, m: {}, u: at2, by: deviceId, h: '', d: true, b: null, t: undefined };
+        putShadowEntry(p, { v: ver2, m: {}, u: at2, by: deviceId, h: '', d: true, b: null, t: undefined });
         changes.push({
           path: p,
           body: { _deleted: true, _ver: ver2, _updatedAt: at2, _updatedBy: deviceId }
@@ -2086,17 +2127,28 @@
     /* 여러 문서가 한꺼번에 오면 localStorage 반영은 바로, 화면 갱신은 한 번만 */
     function scheduleReload() {
       reloadPending = true;
-      if (reloadTimer) { return; }
+      var t = now();
+      if (!reloadFirstAt) { reloadFirstAt = t; }
+      var wait = num(opts.refreshMs) || REFRESH_MS;
+      var maxWait = num(opts.refreshMaxMs) || REFRESH_MAX_MS;
+      /* v50 — 변경이 계속 들어오는 동안에는 조용해질 때까지 미루고(디바운스),
+         그래도 maxWait 를 넘기면 다음 작업에서 한 번 그린다(화면이 너무 오래 낡지 않게).
+         묶음 처리(remoteDepth) 도중에 바로 그리면 아직 저장 안 된 값을 읽으므로 항상 타이머로 미룬다. */
+      if (t - reloadFirstAt >= maxWait) { wait = 0; }
+      if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
       reloadTimer = setTimeout(function () {
         reloadTimer = null;
+        reloadFirstAt = 0;
         if (!reloadPending) { return; }
         reloadPending = false;
         reloadApp();
         emit('applied', {});
-      }, opts.refreshMs || REFRESH_MS);
+      }, wait);
     }
     function flushReload() {
       if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+      reloadFirstAt = 0;
+      flushReads();
       if (!reloadPending) { return false; }
       reloadPending = false;
       reloadApp();
@@ -2108,11 +2160,12 @@
     function onRemote(path, data, meta) {
       /* 기기별 사용량 합산 문서 — 화면 합산에만 쓰고, 이 수신 때문에 되쓰지 않는다(무한 쓰기 방지) */
       if (path === usageMetaPath()) { onRemoteUsage(data); return; }
-      if (!entryByPath(path)) { return; }
+      var remoteEntry = entryByPath(path);
+      if (!remoteEntry) { return; }
       /* 캐시에서 온 스냅샷(fromCache)은 서버 읽기가 아니다 — 계량기에 넣지 않는다.
          실제 서버에서 읽은 문서만 무료 한도(읽기 5만/일)를 쓴다. */
       var fromCache = !!(meta && meta.fromCache === true);
-      if (!fromCache) { usage.record('reads', 1); }
+      if (!fromCache) { noteReads(1); }
       var remoteDoc = {};
       if (isPlain(data)) {
         Object.keys(data).forEach(function (k) { remoteDoc[k] = data[k]; });
@@ -2121,6 +2174,24 @@
         remoteDoc._ver = num(meta && meta.ver) + 1;
       }
       var localSh = shadow[path];
+      /* v50 — 서버가 준 문서가 그림자와 같은 버전·같은 기기에서 온 그대로면 병합·직렬화를 하지 않고 넘어간다.
+         로그인 직후 687명 명단이 한꺼번에 도착할 때 이 비교가 없으면 문서마다 JSON 정렬·병합을 하느라
+         휴대폰 화면이 수십 초 굳는다. (같은 _ver·같은 _updatedBy 면 내용도 같다) */
+      if (localSh && !localSh.d && isPlain(data) && data._deleted !== true) {
+        var fastBy = String(data._updatedBy || '');
+        if (fastBy && fastBy === String(localSh.by || '') && num(data._ver) === num(localSh.v)) {
+          /* 내용까지 한 번 더 맞춰 본다 — 콘솔에서 직접 고친 문서처럼
+             버전·기기는 그대로인데 내용만 다른 경우도 놓치지 않게(문서 1건당 해시 1회) */
+          if (!localSh.h || bodyHash(remoteEntry.kind, docBody(data)) === localSh.h) {
+            lastSyncAt = isoOf(now());
+            if (!fromCache) {
+              var fastColl = pathColl(path);
+              if (fastColl) { markSynced(fastColl); }
+            }
+            return;
+          }
+        }
+      }
       var localDoc = null;
       if (localSh) {
         localDoc = {
@@ -2134,7 +2205,7 @@
           localDoc.time = localSh.t;
         }
       }
-      var entry = entryByPath(path);
+      var entry = remoteEntry;
       var merged = mergeDocs(localDoc, remoteDoc, { arrayUnion: !!entry.union });
       var kind = entry.kind;
       var mergedBody = merged.deleted ? {} : (merged.body || {});
@@ -2158,7 +2229,7 @@
         /* 역할 미확인 기기는 서버로 되돌려 보내지 않는다 — 큐에 쌓아 두면 영원히 실패로 남는다 */
         if (!isEffectiveAdmin()) {
           emit('blocked-local', { key: entry.name, reason: 'role-unverified' });
-          updateShadowFromMerged(path, merged, kind, null);
+          updateShadowFromMerged(path, merged, kind, null, remoteDoc);
         } else {
           /* 내 쪽이 더 최신인 필드가 있어 합친 결과를 되돌려 보낸다 → 양쪽이 같은 값으로 수렴 */
           var body = bodyWithMeta(mergedBody, merged.meta);
@@ -2166,12 +2237,12 @@
           body._updatedAt = isoOf(now());
           body._updatedBy = deviceId;
           if (merged.deleted) { body = { _deleted: true, _ver: body._ver, _updatedAt: body._updatedAt, _updatedBy: deviceId }; }
-          updateShadowFromMerged(path, merged, kind, body);
+          updateShadowFromMerged(path, merged, kind, body, remoteDoc);
           outbox.enqueue({ path: path, body: body });
           scheduleFlush();
         }
       } else {
-        updateShadowFromMerged(path, merged, kind, null);
+        updateShadowFromMerged(path, merged, kind, null, remoteDoc);
       }
       /* 다른 기기가 찍은 출결이 도착하면 알린다 — 관리자 PC가 보호자 문자를 대신 보내는 데 쓴다 */
       if (kind === 'events' && !merged.deleted) {
@@ -2205,19 +2276,23 @@
       return out;
     }
 
-    function updateShadowFromMerged(path, merged, kind, sentBody) {
+    function updateShadowFromMerged(path, merged, kind, sentBody, remoteDoc) {
       var body = merged.deleted ? {} : (merged.body || {});
-      var flat = flatten(sentBody || body);
-      shadow[path] = {
-        v: num(merged.ver) + (sentBody ? 1 : 0),
+      /* v50 — 서버가 준 문서를 그대로 받아들인 경우에는 서버의 버전·작성 기기를 그대로 적는다.
+         (그래야 같은 문서가 다시 와도 [같은 버전·같은 기기]로 알아보고 merge·직렬화 없이 넘어간다) */
+      var rv = remoteDoc ? num(remoteDoc._ver) : null;
+      var by = (sentBody && sentBody._updatedBy) ||
+        (remoteDoc && remoteDoc._updatedBy) || merged.updatedBy || deviceId;
+      putShadowEntry(path, {
+        v: sentBody ? (num(merged.ver) + 1) : (rv != null && rv > 0 ? Math.max(rv, num(merged.ver)) : num(merged.ver)),
         m: merged.meta || {},
-        u: (sentBody && sentBody._updatedAt) || merged.updatedAt || isoOf(now()),
-        by: (sentBody && sentBody._updatedBy) || merged.updatedBy || deviceId,
+        u: (sentBody && sentBody._updatedAt) || (remoteDoc && remoteDoc._updatedAt) || merged.updatedAt || isoOf(now()),
+        by: by,
         d: merged.deleted === true,
         h: bodyHash(kind, body),
         b: merged.deleted ? null : (kind === 'events' ? null : mergeMetaBody(body, merged.meta)),
         t: merged.deleted ? undefined : body.time
-      };
+      });
       saveShadow();
     }
 
@@ -2650,14 +2725,14 @@
           Object.keys(map).forEach(function (p) {
             if (shadow[p]) { return; }
             var b = map[p].body;
-            shadow[p] = { v: 0, m: {}, u: '', by: '', d: false, h: eventHash(b), b: null, t: b.time };
+            putShadowEntry(p, { v: 0, m: {}, u: '', by: '', d: false, h: eventHash(b), b: null, t: b.time });
           });
           return;
         }
         docsForEntry(e, readValue(e.name), base, { deviceId: deviceId }).forEach(function (d) {
           if (shadow[d.path]) { return; }
           var body = d.body;
-          shadow[d.path] = { v: 0, m: {}, u: '', by: '', d: false, h: contentHash(body), b: mergeMetaBody(body, {}), t: body.time };
+          putShadowEntry(d.path, { v: 0, m: {}, u: '', by: '', d: false, h: contentHash(body), b: mergeMetaBody(body, {}), t: body.time });
         });
       });
       saveShadow();
@@ -2721,6 +2796,7 @@
 
     function stop() {
       started = false;
+      flushReads();
       stopUsageSync();
       saveLastSync();
       if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
@@ -2787,6 +2863,7 @@
          (어댑터가 setBatchHooks 로 자동으로 감싸지만, 테스트·진단에서 직접 쓸 수도 있다) */
       beginRemoteBatch: beginRemoteBatch,
       endRemoteBatch: endRemoteBatch,
+      flushReads: flushReads,
       flushLocalWrites: flushLocalWrites,
       simulateRemoteBatch: function (list) {
         var arr = Array.isArray(list) ? list : [];
@@ -3272,16 +3349,33 @@
             /* 캐시에서 온 스냅샷은 서버 읽기가 아니다 — 계량기에 넣지 않고 마지막 시각도 안 새긴다 */
             var fromCache = !!(snap && snap.metadata && snap.metadata.fromCache === true);
             var meta = { ver: 0, fromCache: fromCache, coll: spec.coll };
-            if (typeof batchHooks.begin === 'function') { try { batchHooks.begin(); } catch (e) {} }
+            /* v50 — 한 스냅샷에 수백 건이 들어 있어도(로그인 직후 첫 전체 스냅샷) 한 번에 처리하지 않고
+               SNAPSHOT_CHUNK 건씩 끊어 반영한다. 그 사이 브라우저가 화면을 그리고 터치를 받는다. */
+            var changes = [];
             try {
               snap.docChanges().forEach(function (ch) {
-                if (ch.type === 'removed') { fn(ch.doc.ref.path, null, meta); }
-                else { fn(ch.doc.ref.path, ch.doc.data(), meta); }
+                if (ch.type === 'removed') { changes.push({ path: ch.doc.ref.path, data: null }); }
+                else { changes.push({ path: ch.doc.ref.path, data: ch.doc.data() }); }
               });
-            } finally {
-              if (typeof batchHooks.end === 'function') { try { batchHooks.end(); } catch (e) {} }
+            } catch (e) { changes = []; }
+            var applied = 0;
+            function runChunk() {
+              var end = Math.min(changes.length, applied + SNAPSHOT_CHUNK);
+              if (typeof batchHooks.begin === 'function') { try { batchHooks.begin(); } catch (e) {} }
+              try {
+                for (; applied < end; applied++) {
+                  try { fn(changes[applied].path, changes[applied].data, meta); } catch (e) {}
+                }
+              } finally {
+                if (typeof batchHooks.end === 'function') { try { batchHooks.end(); } catch (e) {} }
+              }
+              if (applied < changes.length) {
+                try { root.setTimeout(runChunk, 0); } catch (e) { runChunk(); }
+                return;
+              }
+              if (!fromCache) { noteSync(spec.coll); }
             }
-            if (!fromCache) { noteSync(spec.coll); }
+            runChunk();
           }, function (err) {
             if (typeof opts.onError === 'function') { opts.onError(err); }
           });
@@ -3377,6 +3471,7 @@
     createEngine: createEngine,
     createUsage: createUsage,
     DELTA: DELTA,
+    SNAPSHOT_CHUNK: SNAPSHOT_CHUNK,
     LASTSYNC_KEY: LASTSYNC_KEY,
     readLastSync: readLastSync,
     writeLastSync: writeLastSync,
