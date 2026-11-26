@@ -159,6 +159,12 @@
           S.msg = '🔒 서버에서 이 계정의 관리자 역할(roles 문서)을 확인하기 전에는 아무것도 올리지 않습니다 — 관리자 계정으로 로그인해 주세요.';
           S.msgKind = 'warn';
         }
+        /* v51 — 한 번에 너무 많은 기록을 지우려 할 때(원비·원생 대량 삭제 사고 방지) */
+        if (type === 'bulk-delete-blocked' && payload) {
+          S.msg = '🛡️ ' + String(payload.message || '대량 삭제를 막았습니다.') +
+            ' 서버의 기록은 그대로 두었습니다 — 원생·원비 목록이 비어 보이면 「🔄 전체 다시 불러오기」로 서버에서 다시 받아 주세요.';
+          S.msgKind = 'warn';
+        }
         if (type === 'role') {
           S.msg = roleLockText();
           S.msgKind = (payload && payload.role === 'none') ? 'warn' : 'ok';

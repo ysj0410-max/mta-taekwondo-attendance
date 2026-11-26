@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.5.0';   /* v43 — 태블릿 역할·kioskStudents 이중 쓰기 제거, 관리자 단일 구조 */
+  var VERSION = '1.6.0';   /* v51 — 원비 문서 ID 해석 수정 · 대량 툼스톤 방지 · 복원 중 업로드 차단 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -50,6 +50,12 @@
   /* v50 — 읽기 사용량을 몇 건씩 모아서 저장할지 (문서마다 localStorage 쓰기를 하지 않게) */
   var READ_FLUSH_EVERY = 40;
   var DUPLICATE_WINDOW_MS = 6000;  /* 같은 출결 이벤트 중복 차단 창(보조 안전장치) */
+  /* v51 — 대량 삭제(툼스톤) 방지 안전장치
+     · 한 컬렉션 그림자 문서의 20% 이상을 한 번에 삭제 표시하려 하면 그 컬렉션의 삭제를 막는다.
+     · 그림자가 10건 미만인 작은 컬렉션에는 적용하지 않는다(정상적인 소규모 정리가 막히지 않게).
+     · 원생 1~2명 정리·중복 정리처럼 작은 삭제는 그대로 지나간다. */
+  var BULK_DELETE_RATIO = 0.2;
+  var BULK_DELETE_MIN_DOCS = 10;
   var QUOTA_MESSAGE = '무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다. 지금 찍은 기록은 이 기기에 임시 보관 중이며, 한도가 풀리면(태평양 시간 자정) 자동으로 다시 보냅니다. 그동안 Google Drive 백업을 받아 두시길 권합니다.';
 
   /* =========================================================================
@@ -748,7 +754,9 @@
   var LOCAL_KEYS = {
     'tdk.fbConfig.v1': 1, 'tdk.fbDevice.v1': 1, 'tdk.fbUsage.v1': 1,
     'tdk.fbOutbox.v1': 1, 'tdk.fbShadow.v1': 1, 'tdk.fbMock.v1': 1,
-    'tdk.fbState.v1': 1
+    'tdk.fbState.v1': 1,
+    /* v51 — 드라이브 "이 기기 마지막 수정" 시각을 동기화되는 설정에서 떼어낸 기기 키 */
+    'tdk.driveLocalAt.v1': 1
   };
 
   function buildRegistry(extraKeys) {
@@ -781,6 +789,66 @@
     var m = /^(.+?)_(.+)_(in|out)$/.exec(s);
     if (!m) { return null; }
     return { date: m[1], studentId: m[2], kind: m[3] };
+  }
+
+  /* ---------- v51 — 원비 문서 ID 해석 `YYYY-MM_{원생ID}` ----------
+     예전에는 마지막 '_' 로 잘라(`firebase-sync.js` applyRemoteDoc) `2026-11_stu_xxx` 를
+     월 `2026-11_stu` · 원생 `xxx` 로 나눴다. 앱(loadTuition)은 `^\d{4}-\d{2}$` 가 아닌 월 키를
+     버리므로 원비가 다른 기기·화면에 절대 나타나지 않았고, 그 상태에서 원비를 한 번 고치면
+     서버 원비가 대량 삭제 표시되는 위험까지 있었다.
+     · 월은 항상 앞 7자(`YYYY-MM`) — 8번째 글자가 '_' 인지 함께 확인한다
+     · 형태가 다르면 null 을 돌려주고 쓰지 않는다(잘못된 키를 새로 만들지 않는다) */
+  var TUITION_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+  var TUITION_DOC_RE = /^(\d{4}-(0[1-9]|1[0-2]))_(.+)$/;
+  function isTuitionMonthKey(v) { return TUITION_MONTH_RE.test(String(v == null ? '' : v)); }
+  function parseTuitionDocId(docId) {
+    var m = TUITION_DOC_RE.exec(String(docId == null ? '' : docId));
+    if (!m) { return null; }
+    var sid = String(m[3]).replace(/^\s+|\s+$/g, '');
+    if (!sid) { return null; }
+    return { month: m[1], studentId: sid };
+  }
+  /* 기기에 잘못된 월 키가 하나라도 있는지 — 대부분의 기기는 없으므로 빠르게 건너뛴다 */
+  function tuitionNeedsRepair(value) {
+    if (!isPlain(value)) { return false; }
+    var keys = Object.keys(value);
+    for (var i = 0; i < keys.length; i++) {
+      if (!isTuitionMonthKey(keys[i])) { return true; }
+    }
+    return false;
+  }
+  /* 예전 버그가 남긴 잘못된 월 키(`2026-11_stu` + 원생 `mwp7…`)를 제자리로 돌린다.
+         { '2026-11_stu': { 'mwp7…': 기록 } }  →  { '2026-11': { 'stu_mwp7…': 기록 } }
+     · 제대로 된 월 키에 이미 있는 기록이 이긴다(정상 경로 우선)
+     · 해석할 수 없는 키는 버린다 */
+  function normalizeTuitionMap(value) {
+    var months = isPlain(value) ? value : {};
+    var out = {};
+    var repaired = [];
+    var changed = false;
+    Object.keys(months).forEach(function (mk) {
+      var month = months[mk];
+      if (!isPlain(month)) { changed = true; return; }
+      if (isTuitionMonthKey(mk)) {
+        if (!out[mk]) { out[mk] = {}; }
+        Object.keys(month).forEach(function (sid) {
+          if (isPlain(month[sid])) { out[mk][sid] = month[sid]; }
+        });
+        return;
+      }
+      changed = true;
+      var m = /^(\d{4}-(0[1-9]|1[0-2]))_(.+)$/.exec(mk);
+      if (m) { repaired.push({ month: m[1], prefix: String(m[3]) + '_', recs: month }); }
+    });
+    repaired.forEach(function (r) {
+      if (!out[r.month]) { out[r.month] = {}; }
+      Object.keys(r.recs).forEach(function (sid) {
+        if (!isPlain(r.recs[sid])) { return; }
+        var id = r.prefix + sid;
+        if (!hasOwn(out[r.month], id)) { out[r.month][id] = r.recs[sid]; }
+      });
+    });
+    return { months: out, changed: changed };
   }
 
   function docsForEntry(entry, value, base, ctx) {
@@ -844,7 +912,9 @@
     }
 
     if (entry.kind === 'tuition') {
-      var months = isPlain(value) ? value : {};
+      /* v51 — 잘못된 월 키(`2026-11_stu` 같은 것)는 올바른 자리로 돌려서 문서를 만든다.
+         그대로 두면 정상 문서가 "사라진 것"으로 보여 대량 툼스톤이 만들어질 수 있다. */
+      var months = tuitionNeedsRepair(value) ? normalizeTuitionMap(value).months : (isPlain(value) ? value : {});
       Object.keys(months).forEach(function (mk) {
         var month = months[mk];
         if (!isPlain(month)) { return; }
@@ -1428,6 +1498,14 @@
     var lastEventAt = {};
     var lastError = '';
     var lastErrorKind = '';
+    /* v51 — 드라이브 복원 중 업로드 차단 플래그 (applyBackup 이 켜고 끈다) */
+    var suppressCapture = false;
+    var suppressedKeys = {};
+    var restoreAt = '';
+    /* v51 — 해석하지 못한 원비 문서 ID(잘못된 형태) 진단용 · 대량 삭제 차단 상태 */
+    var skippedTuitionIds = 0;
+    var lastSkippedTuitionId = '';
+    var bulkDeleteBlocked = null;
     var lastSyncAt = '';
     var lastSyncMark = null;      /* 컬렉션별 마지막 동기화 시각(tdk.fbLastSync.v1) — 인메모리 사본 */
     var lastSyncTimer = null;
@@ -1569,6 +1647,42 @@
       resubscribe();
       emit('full-sync', { at: fullSyncAt, queued: outbox.count(), role: effectiveRole() });
       return { ok: !!adapter, at: fullSyncAt, queued: outbox.count(), role: effectiveRole() };
+    }
+    /* ---------- v51 — 드라이브 복원 중 업로드 차단 · 복원 뒤 서버와 다시 맞추기 ----------
+       drive(applyBackup) 복원은 로컬 키를 통째로 다시 쓴다. 그 쓰기를 그대로 올리면
+       복원본이 `_ver+1` 로 서버·다른 기기를 덮어썼다(역류).
+       · setSuppressCapture(true)  → 복원 중: 로컬 쓰기를 올리지 않고 키 이름만 모아 둔다
+       · setSuppressCapture(false, { since }) → 복원 끝: 올리지 않은 대신 델타 기준을
+         복원본의 시각(백업 exportedAt)으로 당겨, 서버에서 그 뒤 바뀐 문서만 다시 받아
+         서버 쪽 최신 값과 필드 단위로 안전하게 맞춘다(로컬 떠밀기 없음). */
+    function rewindDelta(sinceIsoRaw) {
+      var t = Date.parse(String(sinceIsoRaw || ''));
+      if (isNaN(t) || t <= 0) { return null; }
+      if (lastSyncTimer) { try { clearTimeout(lastSyncTimer); } catch (e) {} lastSyncTimer = null; }
+      var disk = readLastSync(storage);
+      var next = {};
+      Object.keys(disk).forEach(function (k) { next[k] = Math.min(num(disk[k]), t); });
+      lastSyncMark = next;
+      writeLastSync(storage, next);      /* 구독기는 이 값을 읽어 델타를 만든다 */
+      return next;
+    }
+    function setSuppressCapture(on, options) {
+      var o = options || {};
+      if (on) {
+        suppressCapture = true;
+        restoreAt = isoOf(now());
+        return { ok: true, suppressed: true, at: restoreAt };
+      }
+      var was = suppressCapture;
+      suppressCapture = false;
+      var keys = Object.keys(suppressedKeys);
+      suppressedKeys = {};
+      if (!was) { return { ok: true, suppressed: false, keys: [] }; }
+      var since = String(o.since || restoreAt || '');
+      var rewound = rewindDelta(since);
+      if (rewound) { resubscribe(); }
+      emit('restore-done', { at: isoOf(now()), since: since, keys: keys, rewound: !!rewound });
+      return { ok: true, suppressed: false, keys: keys, since: since, rewound: rewound };
     }
     function entryByName(n) {
       for (var i = 0; i < registry.length; i++) { if (registry[i].name === n) { return registry[i]; } }
@@ -2014,6 +2128,12 @@
       var value = null;
       if (rawValue != null) { try { value = JSON.parse(rawValue); } catch (e) { value = null; } }
       prevValues[entry.name] = value;
+      /* v51 — 드라이브 복원 중(applyBackup)에는 로컬 전량 쓰기를 서버로 올리지 않는다.
+         올리면 복원본이 `_ver+1` 로 서버·다른 기기를 덮어썼다(역류). */
+      if (suppressCapture) {
+        suppressedKeys[entry.name] = 1;
+        return;
+      }
       if (!shadowLoaded) {
         /* 그림자를 읽어 오기 전이면 잠시 모아 두었다가 읽은 뒤 차례로 처리한다 */
         queuedCaptures[entry.name] = 1;
@@ -2032,6 +2152,11 @@
     }
 
     function capture(entry) {
+      /* v51 — 복원 중이면 아무것도 올리지 않는다 */
+      if (suppressCapture) {
+        if (entry && entry.name) { suppressedKeys[entry.name] = 1; }
+        return;
+      }
       /* 역할 미확인 기기는 아무것도 올리지 않는다 (그림자를 앞지르지도 않는다) */
       if (effectiveRole() !== 'admin') {
         emit('blocked-local', { key: entry.name, reason: 'role-unverified' });
@@ -2079,17 +2204,57 @@
         return base + '/' + e.coll;
       };
       var prefixes = sources.map(prefixOf);
-      var underAny = function (p) {
+      /* 한 경로가 어느 컬렉션(또는 meta 문서) 아래인지 — 가장 긴 접두사 */
+      var prefixFor = function (p) {
+        var hit = '';
         for (var i = 0; i < prefixes.length; i++) {
-          if (p === prefixes[i] || p.indexOf(prefixes[i] + '/') === 0) { return true; }
+          if (p === prefixes[i] || p.indexOf(prefixes[i] + '/') === 0) {
+            if (!hit || prefixes[i].length > hit.length) { hit = prefixes[i]; }
+          }
         }
-        return false;
+        return hit;
       };
+      var underAny = function (p) { return !!prefixFor(p); };
+      /* ---------- v51 대량 삭제 방지 ----------
+         그림자가 10건 이상인 컬렉션에서 한 번에 20% 이상을 삭제 표시하려 하면 그 컬렉션의
+         삭제만 막는다(값 변경은 그대로 보낸다). 원비 ID 해석 버그·빈 명단 같은 사고가
+         서버의 원비·원생을 통째로 지우는 것을 막는 마지막 안전장치다. */
+      var totals = {}, doomed = {};
+      Object.keys(shadow).forEach(function (p) {
+        var pr = prefixFor(p);
+        if (!pr) { return; }
+        var sh0 = shadow[p];
+        if (!sh0 || sh0.d) { return; }
+        totals[pr] = (totals[pr] || 0) + 1;
+        if (!live[p]) { doomed[pr] = (doomed[pr] || 0) + 1; }
+      });
+      var blockedAt = {};
+      Object.keys(doomed).forEach(function (pr) {
+        var total = totals[pr] || 0;
+        var want = doomed[pr] || 0;
+        if (total >= BULK_DELETE_MIN_DOCS && want >= Math.ceil(total * BULK_DELETE_RATIO)) {
+          blockedAt[pr] = { total: total, deletes: want };
+        }
+      });
+      var heldPaths = 0;
+      var heldDetail = [];
+      if (Object.keys(blockedAt).length) {
+        Object.keys(blockedAt).forEach(function (pr) {
+          heldPaths += blockedAt[pr].deletes;
+          heldDetail.push({
+            collection: pr.replace(base + '/', ''),
+            deletes: blockedAt[pr].deletes,
+            total: blockedAt[pr].total,
+            ratio: Math.round((blockedAt[pr].deletes / blockedAt[pr].total) * 1000) / 1000
+          });
+        });
+      }
       Object.keys(shadow).forEach(function (p) {
         if (!underAny(p)) { return; }
         if (live[p]) { return; }
         var sh2 = shadow[p];
         if (!sh2 || sh2.d) { return; }
+        if (blockedAt[prefixFor(p)]) { return; }      /* v51 — 대량 삭제는 보류한다 */
         var ver2 = num(sh2.v) + 1;
         var at2 = isoOf(now());
         putShadowEntry(p, { v: ver2, m: {}, u: at2, by: deviceId, h: '', d: true, b: null, t: undefined });
@@ -2098,6 +2263,15 @@
           body: { _deleted: true, _ver: ver2, _updatedAt: at2, _updatedBy: deviceId }
         });
       });
+      if (Object.keys(blockedAt).length) {
+        /* 경고 상태를 남긴다 — 화면(상태 문구)과 진단(engine.bulkDeleteState())에서 보인다 */
+        bulkDeleteBlocked = {
+          at: isoOf(now()), key: entry.name, held: heldPaths, collections: heldDetail,
+          message: '한 번에 너무 많은 기록을 삭제하려 해 막았습니다 — ' +
+            heldDetail.map(function (d) { return d.collection + ' ' + d.deletes + '/' + d.total + '건'; }).join(', ')
+        };
+        emit('bulk-delete-blocked', bulkDeleteBlocked);
+      }
 
       if (changes.length) {
         saveShadow();
@@ -2364,9 +2538,21 @@
       if (entry.kind === 'tuition') {
         var tui = readValue('tuition');
         if (!isPlain(tui)) { tui = {}; }
-        var us = docKey.lastIndexOf('_');
-        if (us <= 0) { return; }
-        var mk = docKey.slice(0, us), sid = docKey.slice(us + 1);
+        /* v51 — 예전에 잘못 쌓인 월 키(`2026-11_stu`)를 먼저 제자리로 돌려 둔다 */
+        if (tuitionNeedsRepair(tui)) {
+          tui = normalizeTuitionMap(tui).months;
+          writeValue('tuition', tui);
+        }
+        /* v51 — 월은 항상 앞 7자(YYYY-MM), 원생은 8번째 '_' 뒤 전부.
+           예전의 "마지막 '_' 기준" 분해는 `2026-11_stu_xxx` 를 월 `2026-11_stu` 로 만들어
+           원비가 화면·다른 기기에 반영되지 않았다. */
+        var tid = parseTuitionDocId(docKey);
+        if (!tid) {
+          skippedTuitionIds++;
+          lastSkippedTuitionId = String(docKey);
+          return;
+        }
+        var mk = tid.month, sid = tid.studentId;
         var month = isPlain(tui[mk]) ? tui[mk] : {};
         if (deleted) {
           delete month[sid];
@@ -2714,6 +2900,20 @@
     }
 
     /* ---------- 시작/정지 ---------- */
+    /* v51 — 예전 버그가 남긴 잘못된 원비 월 키(`2026-11_stu` + 원생 `mwp7…`)를
+       올바른 자리(`2026-11` + `stu_mwp7…`)로 옮겨 적는다.
+       이걸 먼저 하지 않으면 앱이 그 기록을 못 보는 상태에서 원비를 한 번 저장할 때
+       서버의 정상 문서가 "사라진 것"으로 보여 삭제 표시될 수 있다.
+       writeValue 는 스스로를 업로드로 잡지 않는다(applying). */
+    function healTuitionKeys() {
+      var cur = readValue('tuition');
+      var fixed = normalizeTuitionMap(cur);
+      if (!fixed.changed) { return false; }
+      var ok = writeValue('tuition', fixed.months);
+      prevValues['tuition'] = fixed.months;
+      if (ok) { emit('tuition-keys-healed', { keys: Object.keys(fixed.months) }); }
+      return !!ok;
+    }
     /* 지금 기기에 있는 데이터를 "이미 아는 상태"로 그림자에 올린다.
        → 아무것도 바꾸지 않았는데 처음 열었다는 이유로 전부 다시 보내는 일이 없다. */
     function seedShadow() {
@@ -2760,6 +2960,8 @@
     function start() {
       if (started) { return api; }
       started = true;
+      /* v51 — 원비 월 키를 먼저 바로잡고 그림자를 채운다 */
+      try { healTuitionKeys(); } catch (e) { lastError = errorText(e); }
       registry.forEach(function (e) {
         if (e.kind === 'local') { return; }
         prevValues[e.name] = readValue(e.name);
@@ -2875,6 +3077,15 @@
       },
       /* 🔄 전체 다시 불러오기 — 델타 기준 시각을 지우고 전체 구독으로 되돌린다 */
       forceFullSync: forceFullSync,
+      /* v51 — 드라이브 복원 중에는 로컬 전량 쓰기를 올리지 않는다(역류 차단) */
+      setSuppressCapture: setSuppressCapture,
+      restoring: function () { return { suppressed: suppressCapture, at: restoreAt, keys: Object.keys(suppressedKeys) }; },
+      /* v51 — 대량 삭제 차단 상태 (화면·진단용) */
+      bulkDeleteState: function () { return clone(bulkDeleteBlocked); },
+      /* v51 — 원비 문서 ID 해석 결과 (진단용) */
+      tuitionState: function () {
+        return { skipped: skippedTuitionIds, lastSkippedId: lastSkippedTuitionId };
+      },
       /* 델타 구독 상태 (화면·진단용) */
       syncInfo: function () {
         var map = readLastSync(storage);
@@ -3499,6 +3710,12 @@
     eventHash: eventHash,
     bodyHash: bodyHash,
     docsForEntry: docsForEntry,
+    parseTuitionDocId: parseTuitionDocId,
+    normalizeTuitionMap: normalizeTuitionMap,
+    tuitionNeedsRepair: tuitionNeedsRepair,
+    isTuitionMonthKey: isTuitionMonthKey,
+    BULK_DELETE_RATIO: BULK_DELETE_RATIO,
+    BULK_DELETE_MIN_DOCS: BULK_DELETE_MIN_DOCS,
     docBody: docBody,
     unionEventDocs: unionEventDocs,
     unionArrays: unionArrays,

@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=50"></script>
-<script src="firebase-sync-ui.js?v=50"></script>
+<script src="firebase-sync.js?v=51"></script>
+<script src="firebase-sync-ui.js?v=51"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1657,7 +1657,7 @@
 
     <div class="gate-msg" id="gate-msg" style="display:none"></div>
     <div class="gate-note" id="gate-note" style="display:none"></div>
-    <div class="gate-ver">v50 · 2026-11-26 · Spark 무료 요금제</div>
+    <div class="gate-ver">v51 · 2026-11-26 · Spark 무료 요금제</div>
   </div>
 </div>
 
@@ -4155,13 +4155,16 @@ setTimeout(function () {
     // 수업별 원비 단가표 (수업·입시반 부서별 기본 원비 · 형제할인 금액)
     app.feeTable = loadFeeTable();
 
-    // 구글 드라이브 백업 설정 (Apps Script 웹 앱 URL · 매일 자동 백업 · 앱 열 때 자동 동기화 · 이 기기 마지막 수정 · 마지막 백업 시각)
+    // 구글 드라이브 백업 설정 (Apps Script 웹 앱 URL · 매일 자동 백업 · 앱 열 때 자동 동기화 · 마지막 백업 시각)
+    // v51 — "이 기기 마지막 수정"(localUpdatedAt)은 기기 키(tdk.driveLocalAt.v1)로 옮겼다.
+    //        예전 설정에 남아 있던 값은 한 번만 옮겨 온다.
     var rawDrive = (settings && settings.drive && typeof settings.drive === 'object' && !Array.isArray(settings.drive)) ? settings.drive : {};
+    driveLegacyLocalAt = /^\d{4}-\d{2}-\d{2}T/.test(String(rawDrive.localUpdatedAt || '')) ? String(rawDrive.localUpdatedAt) : '';
     app.settings.drive = {
       webhookUrl: String(rawDrive.webhookUrl || '').trim().slice(0, 500),
       autoBackup: rawDrive.autoBackup === true,
       autoSyncOnBoot: rawDrive.autoSyncOnBoot !== false,
-      localUpdatedAt: /^\d{4}-\d{2}-\d{2}T/.test(String(rawDrive.localUpdatedAt || '')) ? String(rawDrive.localUpdatedAt) : '',
+      localUpdatedAt: '',
       lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(String(rawDrive.lastBackupAt || '')) ? String(rawDrive.lastBackupAt) : ''
     };
 
@@ -9932,17 +9935,33 @@ setTimeout(function () {
     var raw = readJSON(LS.tuition, {});
     var out = {};
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { return out; }
-    Object.keys(raw).forEach(function (mk) {
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mk)) { return; }
-      var month = raw[mk];
+    /* v51 — 예전 버그가 남긴 월 키(`2026-11_stu` + 원생 `mwp7…`)를 제자리로 돌린다.
+       앱이 그 기록을 못 보는 상태로 원비를 저장하면, 그림자에만 있던 정상 문서가
+       "지워진 것"으로 보여 서버 원비가 삭제 표시될 수 있었다. */
+    var addMonth = function (mk, month, sidFix) {
       if (!month || typeof month !== 'object' || Array.isArray(month)) { return; }
-      var clean = {};
+      if (!out[mk]) { out[mk] = {}; }
       Object.keys(month).forEach(function (sid) {
+        var id = sidFix ? sidFix + sid : sid;
+        if (out[mk][id]) { return; }                 /* 정상 월 키의 기록이 먼저 */
         var rec = sanitizeTuitionRecord(month[sid]);
-        if (rec) { clean[sid] = rec; }
+        if (rec) { out[mk][id] = rec; }
       });
-      if (Object.keys(clean).length) { out[mk] = clean; }
+    };
+    var monthRe = /^\d{4}-(0[1-9]|1[0-2])$/;
+    /* 1) 제대로 된 월 키 */
+    Object.keys(raw).forEach(function (mk) {
+      if (monthRe.test(mk)) { addMonth(mk, raw[mk], ''); }
     });
+    /* 2) 잘못 쌓인 월 키 — `YYYY-MM_<잃은 접두사>` + 원생 ID */
+    Object.keys(raw).forEach(function (mk) {
+      if (monthRe.test(mk)) { return; }
+      var m = /^(\d{4}-(0[1-9]|1[0-2]))_(.+)$/.exec(mk);
+      if (!m) { return; }
+      addMonth(m[1], raw[mk], m[3] + '_');
+    });
+    /* 기록이 하나도 없는 달은 예전처럼 두지 않는다 */
+    Object.keys(out).forEach(function (mk) { if (!Object.keys(out[mk]).length) { delete out[mk]; } });
     return out;
   }
 
@@ -16030,18 +16049,36 @@ setTimeout(function () {
     return { ok: true };
   }
 
+  /* v51 — 드라이브 복원이 Firestore 로 역류하지 않게 동기화 엔진에 "복원 중"을 알린다.
+     · 복원 중: 앱이 로컬 키를 통째로 다시 써도 엔진이 서버로 올리지 않는다
+     · 복원 끝: 복원본 시각(exportedAt)부터 서버 변경만 다시 받아 최신 값과 안전하게 맞춘다 */
+  function syncRestoring(on, sinceIso) {
+    try {
+      var eng = (window.TDKFB && typeof window.TDKFB.engine === 'function') ? window.TDKFB.engine() : null;
+      if (eng && typeof eng.setSuppressCapture === 'function') {
+        return eng.setSuppressCapture(!!on, { since: sinceIso });
+      }
+    } catch (e) {}
+    return null;
+  }
+
   function applyBackup(data) {
     // 복원 중에는 저장 함수가 '이 기기 데이터 수정'으로 기록하지 않게 막는다
     driveApplying = true;
+    // 방금 복원한 백업 시각으로 이 기기 수정 시각을 맞춘다 (복원 직후 드라이브로 다시 올리지 않게)
+    var stamp = /^\d{4}-\d{2}-\d{2}T/.test(String((data && data.exportedAt) || ''))
+      ? String(data.exportedAt) : new Date().toISOString();
+    syncRestoring(true);
     try {
       applyBackupData(data);
-      // 방금 복원한 백업 시각으로 이 기기 수정 시각을 맞춘다 (복원 직후 드라이브로 다시 올리지 않게)
-      var stamp = /^\d{4}-\d{2}-\d{2}T/.test(String((data && data.exportedAt) || ''))
-        ? String(data.exportedAt) : new Date().toISOString();
-      driveConf().localUpdatedAt = stamp;
-      saveSettings();
+      /* v51 — 이 기기 수정 시각은 동기화되는 설정(meta/settings)이 아니라 기기 키에 둔다 */
+      driveLocalAtPut(stamp);
+      /* 복원으로 내용이 통째로 바뀌었으니 관리자 탭은 다음에 열 때 다시 그린다 */
+      markAdminDirty();
     } finally {
       driveApplying = false;
+      /* 복원본을 서버로 밀어 올리지 않고, 백업 시각 이후 서버 변경만 다시 받아 맞춘다 */
+      syncRestoring(false, stamp);
     }
   }
 
@@ -16099,7 +16136,8 @@ setTimeout(function () {
         webhookUrl: inUrl || String(prevDrive.webhookUrl || '').trim(),
         autoBackup: inAuto,
         autoSyncOnBoot: inSync,
-        localUpdatedAt: /^\d{4}-\d{2}-\d{2}T/.test(String(inDrive.localUpdatedAt || '')) ? String(inDrive.localUpdatedAt) : '',
+        // v51 — "이 기기 마지막 수정"은 기기별 값(tdk.driveLocalAt.v1)이다. 남의 기기 시각을 설정에 심지 않는다.
+        localUpdatedAt: '',
         lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(String(inLast)) ? inLast : String(prevDrive.lastBackupAt || '')
       };
       writeJSON(LS.settings, inSettings);
@@ -16224,7 +16262,7 @@ setTimeout(function () {
   }
   /* 이 기기 데이터의 마지막 수정 시각 (기록이 없으면 마지막 백업 시각으로 대신) */
   function driveLocalAt() {
-    var t = driveParseAt(driveConf().localUpdatedAt);
+    var t = driveParseAt(driveLocalAtGet());
     if (!t) { t = driveParseAt(driveConf().lastBackupAt); }
     return t;
   }
@@ -16247,12 +16285,45 @@ setTimeout(function () {
     if (driveLocalEmpty()) { return false; }
     return !!(app.students && app.students.length) || Object.keys(app.attendance || {}).length > 0;
   }
-  /* 이 기기 데이터가 바뀐 시각을 기록 (자동 동기화의 비교 기준) */
+  /* 이 기기 데이터가 바뀐 시각을 기록 (자동 동기화의 비교 기준)
+     v51 — 기기 로컬 키에만 적는다. 설정(meta/settings)을 저장하지 않으므로 출석할 때마다
+     Firestore 쓰기가 생기지 않고, 기기끼리 이 시각을 덮어쓰지도 않는다. */
   function driveMarkLocalChange() {
-    if (driveApplying) { return; }
-    driveConf().localUpdatedAt = new Date().toISOString();
-    saveSettings();
+    if (driveApplying) { return false; }
+    driveLocalAtPut(new Date().toISOString());
+    /* 화면(설정 탭의 「이 기기 마지막 수정」)이 다음에 열 때 다시 그려지게 한다 —
+       예전에는 saveSettings() 가 하던 일을 설정 쓰기 없이 그대로 유지한다. */
+    markAdminDirty();
+    return true;
   }
+  /* ---------- v51 — "이 기기 마지막 수정" 시각을 기기 로컬 키로 분리 ----------
+     예전에는 settings.drive.localUpdatedAt 으로 동기화되는 meta/settings 안에 있어
+     ① 출석할 때마다 Firestore 쓰기가 1건씩 생겼고 ② 기기끼리 서로 덮어썼다.
+     이제는 이 브라우저(localStorage)에만 두고, 예전 설정에 있던 값은 한 번만 옮겨 온다. */
+  var DRIVE_LOCAL_AT_KEY = 'tdk.driveLocalAt.v1';
+  var driveLocalAtCache = null;
+  var driveLegacyLocalAt = '';   /* 예전 설정(meta/settings)에 있던 값 — 처음 한 번만 옮긴다 */
+  function driveLocalAtGet() {
+    if (driveLocalAtCache) { return driveLocalAtCache; }
+    var v = '';
+    try { v = String(localStorage.getItem(DRIVE_LOCAL_AT_KEY) || ''); } catch (e) { v = ''; }
+    if (!/^\d{4}-\d{2}-\d{2}T/.test(v)) {
+      v = /^\d{4}-\d{2}-\d{2}T/.test(String(driveLegacyLocalAt || '')) ? String(driveLegacyLocalAt) : '';
+      if (v) { driveLocalAtPut(v); }
+    }
+    driveLocalAtCache = v;
+    return v;
+  }
+  function driveLocalAtPut(v) {
+    var s = /^\d{4}-\d{2}-\d{2}T/.test(String(v || '')) ? String(v) : '';
+    driveLocalAtCache = s || null;
+    try {
+      if (s) { localStorage.setItem(DRIVE_LOCAL_AT_KEY, s); }
+      else { localStorage.removeItem(DRIVE_LOCAL_AT_KEY); }
+    } catch (e) {}
+    return s;
+  }
+
   function driveEndpoint(action) {
     var base = String(driveConf().webhookUrl || '').trim();
     if (!base) { return ''; }
@@ -16279,7 +16350,7 @@ setTimeout(function () {
     var last = el('drive-last');
     if (last) { last.textContent = '마지막 드라이브 백업: ' + driveFmtAt(c.lastBackupAt); }
     var local = el('drive-local');
-    if (local) { local.textContent = '이 기기 마지막 수정: ' + driveFmtAt(c.localUpdatedAt); }
+    if (local) { local.textContent = '이 기기 마지막 수정: ' + driveFmtAt(driveLocalAtGet()); }
     var btn = el('btn-drive-auto');
     if (btn) {
       btn.textContent = '매일 자동 백업: ' + (c.autoBackup ? '켜짐' : '꺼짐');
@@ -16370,8 +16441,8 @@ setTimeout(function () {
         driveConf().lastBackupAt = at;
         // 올린 백업의 시각과 이 기기 수정 시각을 맞춰, 다음에 열 때 같은 내용을 또 올리지 않게 한다
         var exp = String(payload.exportedAt || '');
-        if (!driveConf().localUpdatedAt || String(driveConf().localUpdatedAt) <= exp) {
-          driveConf().localUpdatedAt = exp || at;
+        if (!driveLocalAtGet() || String(driveLocalAtGet()) <= exp) {
+          driveLocalAtPut(exp || at);
         }
         driveDirty = false;
         saveSettings();
@@ -16555,10 +16626,9 @@ setTimeout(function () {
   function driveSyncApply(data, driveAt, why) {
     var count = Array.isArray(data.students) ? data.students.length : 0;
     applyBackup(data);
-    var c = driveConf();
-    if (driveAt) { c.localUpdatedAt = new Date(driveAt).toISOString(); }
-    else if (!c.localUpdatedAt) { c.localUpdatedAt = new Date().toISOString(); }
-    saveSettings();
+    /* v51 — 적용한 드라이브 시각을 이 기기의 비교 기준으로 둔다 (기기 키) */
+    if (driveAt) { driveLocalAtPut(new Date(driveAt).toISOString()); }
+    else if (!driveLocalAtGet()) { driveLocalAtPut(new Date().toISOString()); }
     renderDriveState();
     toast('☁️ 드라이브 최신 백업을 자동 적용했어요 · 관원 ' + count + '명');
     return { ok: true, action: 'restore', why: why, students: app.students.length };
@@ -18294,6 +18364,11 @@ setTimeout(function () {
       syncEnabled: driveSyncEnabled,
       mark: driveMarkLocalChange,
       localAt: driveLocalAt,
+      /* v51 — 기기별 "마지막 수정" 시각(기기 키) 점검·검증용 */
+      localAtKey: DRIVE_LOCAL_AT_KEY,
+      localAtText: driveLocalAtGet,
+      setLocalAt: driveLocalAtPut,
+      restoring: syncRestoring,
       render: renderDriveState,
       fill: fillDriveForm,
       code: appsScriptCode,
