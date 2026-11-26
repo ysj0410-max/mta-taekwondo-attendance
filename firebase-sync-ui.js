@@ -218,6 +218,10 @@
             S.msg = '🕒 오늘 쓸 수 있는 Firebase 쓰기를 다 써서 과거 출결 업로드를 잠시 멈췄습니다 — 한도가 풀리면(한국 오후 4~5시) 남은 ' +
               numText(payload.remaining) + '건을 이어서 올립니다. 지금 찍는 출결은 이 기기에 저장되고 내일 올라갑니다.';
             S.msgKind = 'warn';
+          } else if (payload.result === 'stopped' || payload.result === 'cleared') {
+            /* v57 — 사용자가 멈췄거나 🧹 로 비웠다 — 다음에 다시 누를 때 이어서 올린다 */
+            S.msg = '⏸ 과거 출결 올리기를 멈췄습니다 — 남은 기록은 「🕒 과거 출결 올리기」를 다시 누를 때 이어서 올립니다.';
+            S.msgKind = '';
           }
         }
         if (type === 'role') {
@@ -867,7 +871,7 @@
     setHtml('fb-mig-result', '이전 대상: ' + S.plan.keys.filter(function (k) { return !k.localOnly && k.count; })
       .map(function (k) { return k.label + ' ' + numText(k.count) + '건'; }).join(' · '));
     S.msg = '현재 기기의 데이터 ' + numText(S.plan.total) + '건을 확인했습니다. 아래 표를 보고 「이전 실행」을 눌러 주세요.' +
-      (S.plan.deferred ? ' (과거 수동·CSV 출결 ' + numText(S.plan.deferred) + '건은 무료 한도를 지키려고 「이전」 대신 「자동 분할 업로드」가 차례로 올립니다)' : '');
+      (S.plan.deferred ? ' (과거 수동·CSV 출결 ' + numText(S.plan.deferred) + '건은 무료 한도를 지키려고 「이전」에서 빼 두었습니다 — 필요할 때 「🕒 과거 출결 올리기」로 직접 올릴 수 있습니다)' : '');
     S.msgKind = 'ok';
     renderAll();
   }
@@ -1150,13 +1154,21 @@
   }
   function backlogText() {
     var bl = backlogState();
-    if (!bl || !bl.total) { return ''; }
+    var off = '<div class="tiny-note" style="margin:2px 0 8px">🕒 과거 출결(수동·CSV)은 <b>자동으로 올리지 않습니다</b>(v57 기본 꺼짐) — 필요할 때 아래 「🕒 과거 출결 올리기」를 눌러 주세요. 오늘 찍는 출결은 그대로 바로 올라갑니다.</div>';
+    if (!bl || !bl.total) { return off; }
     if (bl.remaining > 0) {
       return '<div class="tiny-note" style="margin:2px 0 8px">🕒 과거 출결 <b>' + numText(bl.doneCount) + '</b> / ' + numText(bl.total) +
         '건 서버에 저장됨 · 남은 ' + numText(bl.remaining) + '건은 무료 한도 여유를 보며 ' + numText(bl.chunk) + '건씩 이어서 올립니다' +
-        (bl.result === 'reserve' ? ' — 오늘 쓸 수 있는 쓰기를 다 써서 다음 초기화 뒤에 이어집니다' : '') + '</div>';
+        (bl.result === 'reserve' ? ' — 오늘 쓸 수 있는 쓰기를 다 써서 다음 초기화 뒤에 이어집니다' : '') +
+        ' · 멈추려면 아래 「⏸ 과거 출결 올리기 중지」</div>';
     }
     return '<div class="tiny-note" style="margin:2px 0 8px">🕒 과거 출결 ' + numText(bl.total) + '건 모두 서버에 저장됨</div>';
+  }
+
+  /* v57 — 지금 과거 출결 올리기가 돌고 있는지(버튼 문구 전환) */
+  function backlogRunning() {
+    var bl = backlogState();
+    return !!(bl && (bl.running || (Number(bl.remaining) || 0) > 0));
   }
 
   function renderSyncModal() {
@@ -1189,6 +1201,7 @@
       syncInfoText() +
       '<div class="form-actions" style="margin-top:10px">' +
       '<button class="btn btn-sm" id="fb-sync-modal-clear" type="button"' + ((Number(h.queued) || 0) + (Number(h.dead) || 0) ? '' : ' disabled') + '>🧹 막힌 대기 비우기 (' + numText((Number(h.queued) || 0) + (Number(h.dead) || 0)) + ')</button>' +
+      '<button class="btn btn-sm" id="fb-sync-modal-backlog" type="button">' + (backlogRunning() ? '⏸ 과거 출결 올리기 중지' : '🕒 과거 출결 올리기') + '</button>' +
       '</div>';
   }
 
@@ -1226,6 +1239,7 @@
       if (t.closest && t.closest('[data-fbclose]')) { closeSyncStatus(); return; }
       if (t.closest && t.closest('#fb-sync-modal-full')) { onFullSync(); return; }
       if (t.closest && t.closest('#fb-sync-modal-clear')) { onClearStuck(); return; }
+      if (t.closest && t.closest('#fb-sync-modal-backlog')) { onBacklogRun(); return; }
       if (t.closest && t.closest('#fb-sync-modal-refresh')) { appRefresh(); }
     };
     renderSyncModal();
@@ -1236,6 +1250,60 @@
   }
 
   /* 🔄 전체 다시 불러오기 — 확인을 한 번 받고 델타 기준 시각을 지워 전체 구독 */
+  /* v57 — 「🕒 과거 출결 올리기」 — 사용자가 누를 때만 시작한다(자동 업로드 꺼짐).
+     도중에는 같은 버튼이 「⏸ 과거 출결 올리기 중지」가 된다. */
+  function onBacklogRun() {
+    var eng = S.engine;
+    if (!eng || typeof eng.pumpEventBacklog !== 'function') {
+      S.msg = '지금은 동기화가 꺼져 있어 과거 출결을 올릴 수 없습니다.';
+      S.msgKind = 'warn';
+      renderAll();
+      renderSyncModal();
+      return;
+    }
+    if (backlogRunning()) {
+      try { eng.stopEventPump('stopped'); } catch (e) {}
+      S.msg = '⏸ 과거 출결 올리기를 멈췄습니다 — 남은 기록은 다시 누를 때 이어서 올립니다.';
+      S.msgKind = '';
+      renderAll();
+      renderSyncModal();
+      return;
+    }
+    var ask = '과거 수동·CSV 출결 기록을 서버(Firestore)에 나눠 올립니다.\n\n' +
+      '· 최근 날짜부터 ' + '240건씩, 무료 쓰기 한도 여유를 보며 올립니다.\n' +
+      '· 이미 서버에 있는 기록은 다시 올리지 않습니다(쓰기 0건).\n' +
+      '· 도중에 멈추려면 같은 자리의 「⏸ 과거 출결 올리기 중지」를 누르면 됩니다.\n\n시작할까요?';
+    if (typeof window.confirm === 'function' && !window.confirm(ask)) {
+      S.msg = '과거 출결 올리기를 시작하지 않았습니다.';
+      S.msgKind = '';
+      renderAll();
+      renderSyncModal();
+      return;
+    }
+    var p = null;
+    try { p = eng.pumpEventBacklog(); } catch (e) { p = null; }
+    S.msg = '🕒 과거 출결 올리기를 시작했습니다 — 진행 상황은 이 창과 위 상태 줄에 나옵니다.';
+    S.msgKind = 'ok';
+    renderAll();
+    renderSyncModal();
+    if (p && typeof p.then === 'function') {
+      p.then(function (res) {
+        if (res && res.ok === false) {
+          var why = res.reason === 'quota' ? '무료 한도를 다 썼습니다'
+            : res.reason === 'offline' ? '인터넷 연결이 없습니다'
+            : res.reason === 'role-unverified' ? '관리자 확인 중입니다'
+            : res.reason === 'no-adapter' ? '동기화가 연결되지 않았습니다'
+            : res.reason === 'busy' ? '이미 올리는 중입니다'
+            : (res.error || res.reason || '알 수 없는 이유');
+          S.msg = '🕒 과거 출결 올리기를 시작하지 못했습니다 — ' + why;
+          S.msgKind = 'warn';
+          renderAll();
+          renderSyncModal();
+        }
+      }, function () {});
+    }
+  }
+
   function onFullSync() {
     var msg = '기기 간 누락이 의심될 때만 쓰세요.\n서버에서 전체를 다시 받아 오며, 무료 읽기를 한 번 크게 씁니다(원생·원비 등 약 2,500건).\n지금 전체 다시 불러올까요?';
     if (typeof window.confirm === 'function' && !window.confirm(msg)) { return; }
@@ -1976,6 +2044,9 @@
     /* v56 — 🧹 막힌 대기 비우기(헤더·관리자·상태 창의 버튼과 같은 함수) */
     clearStuck: onClearStuck,
     queueHealth: queueHealth,
+    /* v57 — 🕒 과거 출결 올리기(수동 시작·중지) — 상태 창 버튼과 같은 함수 */
+    backlogRun: onBacklogRun,
+    backlogRunning: backlogRunning,
     /* v55 — 데이터 안전 통로(화면 버튼과 같은 함수) */
     allowBulkOnce: onBulkAllow,
     deadRetry: onDeadRetry,

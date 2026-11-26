@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=56"></script>
-<script src="firebase-sync-ui.js?v=56"></script>
+<script src="firebase-sync.js?v=57"></script>
+<script src="firebase-sync-ui.js?v=57"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1660,7 +1660,7 @@
 
     <div class="gate-msg" id="gate-msg" style="display:none"></div>
     <div class="gate-note" id="gate-note" style="display:none"></div>
-    <div class="gate-ver">v56 · 2026-11-26 · Spark 무료 요금제</div>
+    <div class="gate-ver">v57 · 2026-11-27 · Spark 무료 요금제</div>
   </div>
 </div>
 
@@ -3728,6 +3728,7 @@ setTimeout(function () {
     cameraStream: null,
     beltDraft: null,
     beltPicker: null,
+    beltsDefaulted: false,   /* v57 — 띠 체계를 아직 못 받아 기본 10단계로 보이는 상태(그 기본값은 저장·업로드하지 않는다) */
     promoSelected: {},
     promoFilter: 'all',
     adminTab: 'students',
@@ -4268,6 +4269,12 @@ setTimeout(function () {
     }
     if (!rawBelts || !app.settings.belts || !app.settings.belts.length) {
       app.settings.belts = defaultBelts();
+      /* v57 — 띠 체계를 아직 받지 못해 '기본 10단계'로 보이는 상태.
+         이 기본값을 저장(업로드)해 서버의 진짜 띠 체계를 덮어쓰지 않게 표시해 둔다.
+         (11-26 띠 체계가 사라진 뒤 드라이브 백업으로 되살린 일이 있었다) */
+      app.beltsDefaulted = true;
+    } else {
+      app.beltsDefaulted = false;
     }
     app.settings.visibility = Object.assign(
       { beltSystem: true, promotion: true, gukgiwon: false },
@@ -4348,7 +4355,23 @@ setTimeout(function () {
      화면·문자·동기화는 메모리(app.*)를 바로 보므로 늦게 느껴지지 않고,
      읽는 쪽은 installWriteReadThrough 가 묶인 값을 먼저 저장하고 읽는다. */
   function saveStudents() { queueWrite(LS.students, function () { return app.students; }, 'students'); driveTouchData(); markAdminDirty(); }
-  function saveSettings() { writeJSON(LS.settings, app.settings); markAdminDirty(); }
+  function saveSettings() {
+    /* v57 — 띠 체계를 아직 받지 못해 기본 10단계로 보이는 상태라면, 그 기본값을 저장하지 않는다.
+       (메모리에는 그대로 두어 화면은 정상으로 보이고, 저장·업로드만 띠 칸을 빼고 한다.
+        merge 저장이므로 서버에 있던 띠 체계가 지워지지 않는다. 띠를 직접 저장하면 해제된다.) */
+    if (app.beltsDefaulted && app.settings && Array.isArray(app.settings.belts)) {
+      var keepBelts = app.settings.belts;
+      try {
+        delete app.settings.belts;
+        writeJSON(LS.settings, app.settings);
+      } finally {
+        app.settings.belts = keepBelts;
+      }
+      markAdminDirty();
+      return;
+    }
+    writeJSON(LS.settings, app.settings); markAdminDirty();
+  }
   function saveRecords() { queueWrite(LS.records, function () { return app.records; }, 'records'); driveTouchData(); markAdminDirty(); }
   function saveLogs() { writeJSON(LS.logs, app.logs.slice(0, 200)); markAdminDirty(); }
   function saveAttendance() { queueWrite(LS.attendance, function () { return app.attendance; }, 'attendance'); driveTouchData(); markAdminDirty(); }
@@ -8112,6 +8135,7 @@ setTimeout(function () {
       seen[list[i].name] = true;
     }
     app.settings.belts = list;
+    app.beltsDefaulted = false;   /* v57 — 직접 저장한 띠 체계는 그대로 올라간다 */
     saveSettings();
     driveTouchData();
     app.beltDraft = null;

@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '2.0.0';   /* v56 — 막힌 대기(933건) 부팅 정리 · 배치 소량화·양보 · 응답 없음 기한 · 「🧹 막힌 대기 비우기」 */
+  var VERSION = '2.1.0';   /* v57 — 과거 출결 자동 업로드 기본 끔(수동만) · 쓰기 롱폴링 자동 감지 · 🧹 뒤 재적재·오류 초기화 · 띠체계(belts) 보호 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -102,6 +102,13 @@
        · 오늘 날짜의 수동 출결은 이 큐를 거치지 않고 곧바로 올라간다(capture)
        · 시작 직후 delayMs 는 다른 기기가 이미 올려 둔 기록을 받아 보고(델타·meta/usage) 중복 업로드를 피하는 시간이다 */
   var EVENT_UPLOAD = {
+    /* v57 — 자동 실행 스위치. 기본은 꺼짐(autoBacklog: false)이다.
+       예전(v52~v56)에는 앱을 켜면 45초 뒤, 그리고 큐가 빌 때마다 과거 수동·CSV 출결을
+       스스로 큐에 넣었다. 그 결과 사용자가 「🧹 막힌 대기 비우기」로 큐를 비워도
+       부팅·유휴 때 같은 과거 기록(2026-09-14 등) 480건이 다시 쌓여 대기가 마르지 않았다.
+       이제 과거 출결은 사용자가 「동기화 상태 → 🕒 과거 출결 올리기」를 눌렀을 때만 올린다.
+       (오늘 찍는 출결·직접 고친 기록은 capture 가 예전처럼 곧바로 올린다) */
+    auto: false,
     /* v55 — 한 번에 큐에 넣는 양을 1,500 → 240 으로 줄였다.
        도장 PC 에서 "대기 900여 건"이 쌓이며 화면이 버벅이던 원인은, 1,500건을 한꺼번에
        아웃박스에 넣으면서 (a) 큐 전체를 localStorage 에 다시 쓰고 (b) 상태 표시·flush 가
@@ -2757,8 +2764,10 @@
        merge:true 쓰기만으로는 "필드가 없어졌다"는 사실이 서버에 전달되지 않아 다음 수신에서
        옛 값이 되살아났다("번호를 지웠는데 다시 생겨요"). 앱은 이제 지우기 대신 '' 을 쓰지만
        (index.html), 예전 버전·다른 코드 경로가 필드를 지운 경우도 여기서 빈 값으로 바꾼다.
-       · 문자열·숫자·참·거짓 → '' (앱이 쓰는 "비어 있음" 규칙과 같다)
-       · 객체·배열 → null   (빈 문자열로 바꾸면 모양이 깨진다) */
+       v57 — 문자열·숫자·참·거짓만 빈 값('')으로 지운다.
+       목록·묶음(배열·객체)은 지우지 않고 그대로 둔다. 예전(v55~v56)에는 이들을 null 로 적어,
+       설정(meta/settings)의 띠 체계 belts 처럼 앱이 잠시 싣지 못한 목록이 서버에서 지워지고
+       모든 기기에서 사라지는 사고가 있었다(11-26 띠 체계 소실). */
     function applyClearedFields(prevBody, body) {
       var pf = flatten(prevBody || {});
       var nf = flatten(body || {});
@@ -2766,11 +2775,34 @@
       Object.keys(pf).forEach(function (f) {
         if (hasOwn(nf, f)) { return; }
         var v = pf[f];
-        nf[f] = (v != null && typeof v === 'object') ? null : '';
+        if (v != null && typeof v === 'object') { return; }   /* v57 — 목록·묶음은 지우지 않는다 */
+        nf[f] = '';
         cleared.push(f);
       });
       if (!cleared.length) { return { body: body, cleared: cleared }; }
       return { body: unflatten(nf), cleared: cleared };
+    }
+
+    /* v57 — 설정(meta/settings)의 목록 보호.
+       서버 문서의 belts 가 비었거나(null·[]) 빠졌더라도, 이 기기에 이미 있는 띠 목록을
+       빈 값으로 덮어쓰지 않는다. 받은 결과에서 로컬 목록을 되살리면
+       needRemote 가 켜져 같은 내용이 서버로 되돌아가므로(수렴) 서버 쪽도 스스로 낫는다. */
+    var SETTINGS_KEEP_LISTS = ['belts'];
+    function keepSettingsLists(merged, localDoc) {
+      if (!merged || merged.deleted || !isPlain(merged.body)) { return ''; }
+      var lb = docBody(localDoc || {});
+      var lm = metaOf(localDoc || {});
+      var kept = '';
+      SETTINGS_KEEP_LISTS.forEach(function (k) {
+        var lv = lb[k];
+        var mv = merged.body[k];
+        if (!Array.isArray(lv) || !lv.length) { return; }
+        if (Array.isArray(mv) && mv.length) { return; }
+        merged.body[k] = clone(lv);
+        if (lm && lm[k]) { merged.meta = merged.meta || {}; merged.meta[k] = clone(lm[k]); }
+        kept = k;
+      });
+      return kept;
     }
 
     /* v55 — 출결 삭제 표시(툼스톤). 라이브 규칙 validEvent() 의 필수칸(date·studentId·kind·time)을
@@ -3085,6 +3117,7 @@
        ========================================================================= */
     var eventPump = {
       timer: null, running: false, marker: null,
+      gen: 0,                /* v57 — 중지·비우기로 세대를 올려, 진행 중이던 회차가 뒤늦게 큐에 넣는 것을 막는다 */
       lastAt: '', result: '', reason: '',
       uploaded: 0, total: 0, remaining: 0, done: false,
       queue: null            /* v55 — 한 번 만든 대기 목록(240건씩 꺼내 쓴다) */
@@ -3106,6 +3139,7 @@
         chunk: EVENT_UPLOAD.chunk,
         maxQueued: EVENT_UPLOAD.maxQueued,
         reserveWrites: EVENT_UPLOAD.reserveWrites,
+        auto: !!opts.autoBacklog,      /* v57 — 자동 업로드가 켜져 있는지(기본 꺼짐) */
         pending: outbox.count(),
         running: !!eventPump.running
       };
@@ -3175,6 +3209,25 @@
       return eventPump.timer;
     }
 
+    /* v57 — 과거 출결 업로드를 멈춘다.
+       · 사용자가 「중지」를 눌렀거나 「🧹 막힌 대기 비우기」로 큐를 비웠을 때
+       · 예약된 다음 회차(타이머)를 지우고 대기 목록도 버린다
+       · 세대(gen)를 올려, 이미 시작된 회차가 뒤늦게 큐에 다시 넣지 못하게 한다
+         (예전에는 비운 직후 진행 중이던 회차가 480건을 다시 넣었다) */
+    function stopEventPump(reason) {
+      eventPump.gen = num(eventPump.gen) + 1;
+      if (eventPump.timer) { try { clearTimeout(eventPump.timer); } catch (e) {} eventPump.timer = null; }
+      eventPump.queue = null;
+      eventPump.remaining = 0;
+      eventPump.uploaded = 0;
+      eventPump.done = false;
+      eventPump.result = String(reason || 'stopped');
+      eventPump.reason = String(reason || 'stopped');
+      eventPump.lastAt = isoOf(now());
+      emit('event-backlog', eventBacklogState());
+      return eventBacklogState();
+    }
+
     function pumpEventBacklog() {
       if (eventPump.running) { return Promise.resolve({ ok: false, reason: 'busy', state: eventBacklogState() }); }
       var blocked = !adapter ? 'no-adapter'
@@ -3186,6 +3239,7 @@
         eventPump.reason = blocked;
         return Promise.resolve({ ok: false, reason: blocked, state: eventBacklogState() });
       }
+      var gen = num(eventPump.gen);    /* v57 — 이 회차의 세대(중지·비우기로 바뀌면 결과를 버린다) */
       var base = basePath();
       /* v55 — 스캔 결과(11,800건)를 매번 다시 만들지 않는다. 한 번 만들어 두고 240건씩 꺼내 쓴다.
          (예전에는 90초마다 전체 출결을 다시 훑어 PC 가 버벅였다) */
@@ -3222,6 +3276,10 @@
         return Promise.resolve({ ok: true, already: true, uploaded: 0, remaining: 0, total: scan.total, shared: shared, state: eventBacklogState() });
       }
       return Promise.resolve(true).then(function () {
+        /* v57 — 스캔·대기 중에 사용자가 비우기/중지를 눌렀으면 큐에 넣지 않는다 */
+        if (num(eventPump.gen) !== gen) {
+          return { ok: true, uploaded: 0, remaining: 0, cancelled: true, total: scan.total, state: eventBacklogState() };
+        }
         /* v55 — 큐가 이미 차 있으면 다음 묶음을 넣지 않는다(대기 900건 → 화면 버벅임 방지) */
         var queued = 0;
         try { queued = outbox.pending().length; } catch (e) { queued = 0; }
@@ -3273,7 +3331,7 @@
         return { ok: true, uploaded: take.length, remaining: eventPump.remaining, total: scan.total, state: eventBacklogState() };
       }).then(function (res) {
         eventPump.running = false;
-        if (res && res.remaining > 0) {
+        if (num(eventPump.gen) === gen && res && res.remaining > 0) {
           var wait = res.blocked ? EVENT_UPLOAD.retryMs
             : (outbox.count() === 0 ? EVENT_UPLOAD.stepMs : EVENT_UPLOAD.intervalMs);
           scheduleEventPump(wait);
@@ -3371,6 +3429,12 @@
       }
       var entry = remoteEntry;
       var merged = mergeDocs(localDoc, remoteDoc, { arrayUnion: !!entry.union });
+      /* v57 — 설정(meta/settings)의 띠 체계 보호: 서버 문서가 belts 를 비웠거나 빼먹어도
+         이 기기에 있던 목록을 그대로 지킨다(되살린 내용은 아래 needRemote 로 서버에 되돌려 보낸다) */
+      if (entry.name === 'settings') {
+        var keptList = keepSettingsLists(merged, localDoc);
+        if (keptList) { emit('settings-kept', { field: keptList, path: path }); }
+      }
       var kind = entry.kind;
       var mergedBody = merged.deleted ? {} : (merged.body || {});
       var remoteBody = remoteDoc._deleted ? {} : docBody(remoteDoc);
@@ -4151,13 +4215,21 @@
       flushStat.batches = 0;
       nextAttemptAt = 0;
       timeoutBackoff = 0;
+      /* v57 — 오류 표시도 지운다. 예전에는 「🟠 서버 응답이 …」·lastErrorKind='slow' 가 남아
+         대기가 0이 돼도 상태 배지가 오류색으로 굳어 있었다. */
+      lastError = '';
+      lastErrorKind = '';
+      /* v57 — 비운 직후 과거 출결 분할 업로드가 같은 기록을 다시 큐에 밀어 넣지 않게 멈춘다
+         (진행 중인 회차는 세대(gen)가 바뀌어 enqueue 전에 그대로 종료된다) */
+      try { stopEventPump('cleared'); } catch (e) {}
       queueWatch.count = outbox.count();
       queueWatch.since = now();
       queueWatch.stuck = false;
       /* stalledEmitted 는 그대로 둔다 — 다음 감시(20초)가 queue-ok 를 한 번 알린다 */
       var payload = {
         removed: removed, was: was, serverKept: true, at: isoOf(now()),
-        before: before, collections: stats ? stats.collections : null
+        before: before, collections: stats ? stats.collections : null,
+        backlogStopped: true, errorsCleared: true
       };
       emit('queue-cleared', payload);
       emit('status', status());
@@ -4443,8 +4515,11 @@
         } catch (e) {}
       }
       startRetryLoop();
-      /* v52 — 과거 수동·CSV 출결 분할 업로드 시작 (다른 기기가 이미 올려 둔 기록을 받아 본 뒤) */
-      scheduleEventPump(EVENT_UPLOAD.delayMs);
+      /* v52 — 과거 수동·CSV 출결 분할 업로드 시작 (다른 기기가 이미 올려 둔 기록을 받아 본 뒤)
+         v57 — 기본은 꺼져 있다. 예전에는 부팅 45초 뒤 스스로 시작해, 큐를 비워도 과거 출결
+         480건을 다시 밀어 넣었다(대기 480건이 마르지 않음). 지금은 사용자가 「🕒 과거 출결 올리기」를
+         눌렀을 때만(또는 autoBacklog: true 로 만든 테스트·진단에서만) 시작한다. */
+      if (opts.autoBacklog === true) { scheduleEventPump(EVENT_UPLOAD.delayMs); }
       attachBatchHooks(adapter);
       if (adapter && typeof adapter.subscribe === 'function') {
         unsub = adapter.subscribe(function (path, data, meta) {
@@ -4523,6 +4598,7 @@
       clearFailed: clearFailed,
       /* v56 — 「🧹 막힌 대기 비우기」 · 대기열 건강 상태 */
       clearStuckQueue: clearStuckQueue,
+      stopEventPump: stopEventPump,
       queueHealth: queueHealth,
       checkQueueHealth: checkQueueHealth,
       flushState: function () { return clone(flushStat) || {}; },
@@ -4681,6 +4757,9 @@
       applyRemoteNow: flushReload,
       simulateRemote: function (path, data) { onRemote(path, data, null); },
       mergeDocs: mergeDocs,
+      /* v57 — 설정 목록 보호 belts · 빈 필드 정리(테스트·진단용) */
+      keepSettingsLists: keepSettingsLists,
+      applyClearedFields: applyClearedFields,
       errors: function () { return { lastError: lastError, lastSyncAt: lastSyncAt }; }
     };
     /* 옛 localStorage 그림자를 IndexedDB·인메모리로 옮기고 localStorage 를 비운다 */
@@ -4896,7 +4975,11 @@
            "already been called with different options" 로 실패하므로 기존 인스턴스를 쓴다. */
         try {
           db = fs.initializeFirestore(app, {
-            localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() })
+            localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }),
+            /* v57 — KT 모바일·일부 PC 네트워크에서 읽기(getDoc·onSnapshot)는 되는데
+               쓰기 스트림(batch.commit)만 12초 넘게 응답 없이 멈추는 문제(「쓰기 0」)를 고친다.
+               WebChannel 이 막힌 환경에서는 SDK 가 자동으로 롱폴링으로 내려간다. */
+            experimentalAutoDetectLongPolling: true
           });
         } catch (e) {
           db = fs.getFirestore(app);
