@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '2.3.0';   /* v59 — 서버에는 출결·원비 최근 3개월만(읽기·쓰기·삭제 모두) · 그 이전은 드라이브 백업 조회 · v58 메모리 캐시 유지 */
+  var VERSION = '2.3.1';   /* v60 — 대량 삭제 집계에서 3개월 밖 기록 제외(원비 1,171/1,500 오탐) · v59 3개월 서버 범위 유지 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -2974,11 +2974,15 @@
          그림자가 10건 이상인 컬렉션에서 한 번에 20% 이상을 삭제 표시하려 하면 그 컬렉션의
          삭제만 막는다(값 변경은 그대로 보낸다). 원비 ID 해석 버그·빈 명단 같은 사고가
          서버의 원비·원생을 통째로 지우는 것을 막는 마지막 안전장치다.
-         v55 — 사용자가 화면에서 "1회 허용"을 확인했으면 그 컬렉션은 이번 한 번 통과한다. */
+         v55 — 사용자가 화면에서 "1회 허용"을 확인했으면 그 컬렉션은 이번 한 번 통과한다.
+         v60 — 서버에 두는 범위(3개월) 밖 기록은 집계에서 뺀다. 그 기록은 아래 tombPaths 에서
+               어차피 삭제 표시를 만들지 않으므로(서버 보존), 넣어 두면 그림자에만 남은
+               과거 원비가 매 저장마다 "대량 삭제"로 오인된다(원비 1,171/1,500 오탐). */
       var totals = {}, doomed = {};
       Object.keys(shadow).forEach(function (p) {
         var pr = prefixFor(p);
         if (!pr) { return; }
+        if (!pathInServerWindow(p, now())) { return; }
         var sh0 = shadow[p];
         if (!sh0 || sh0.d) { return; }
         totals[pr] = (totals[pr] || 0) + 1;
@@ -3088,6 +3092,11 @@
             heldDetail.map(function (d) { return d.collection + ' ' + d.deletes + '/' + d.total + '건'; }).join(', ')
         };
         emit('bulk-delete-blocked', bulkDeleteBlocked);
+      } else if (bulkDeleteBlocked) {
+        /* v60 — 막을 것이 없어졌다(삭제 취소·오탐 해소). 지난 경고 상태를 내린다
+           — 화면의 「🛡️ 대량 삭제 1회 허용」 버튼도 함께 사라진다(payload 없이 알림). */
+        bulkDeleteBlocked = null;
+        emit('bulk-delete-blocked', null);
       }
       if (heldOutOfRange.length && !afterLoad && typeof ensureLoaded === 'function') {
         /* 받아 두지 않은 범위 — 그 묶음을 지금 열고, 첫 스냅샷이 오면 이 키를 한 번 더 처리한다 */
