@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.7.0';   /* v52 — 시각 없는 수동·CSV 출결 서버 저장 · 과거분 분할 업로드 · v51 안전장치 유지 */
+  var VERSION = '1.8.0';   /* v53 — 문자 로그 묶음 저장 · 사용량 합산 5분 · roles 1회 · 지연 구독 · 서버 _updatedAt 델타 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -170,6 +170,26 @@
       ('00' + d.getMilliseconds()).slice(-3) + 'Z';
   }
   function dayOf(ms) { return isoOf(ms).slice(0, 10); }
+  /* v53 — 문서의 `_updatedAt`(isoOf 형식: 기기 지역 시각 + 'Z')을 ms 로 읽는다.
+     new Date()/Date.parse() 는 이 값을 UTC 로 해석해 시차만큼 어긋난다(한국이면 9시간).
+     앱은 같은 눈금(기기의 지역 시각)으로 비교하므로 여기서도 그 눈금으로 맞춘다. */
+  function docTimeMs(iso) {
+    var s = String(iso == null ? '' : iso);
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z?$/.exec(s);
+    if (!m) { return 0; }
+    var t = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6], +(m[7] || 0)).getTime();
+    return isFinite(t) ? t : 0;
+  }
+  /* v53 — 새 기기가 처음 받을 원비의 시작 월(지난 달) — 'YYYY-MM'
+     (원비 문서 ID 가 `YYYY-MM_원생ID` 라 documentId 범위로 최근 몇 달만 읽을 수 있다) */
+  function tuitionRecentFrom(nowMs) {
+    var d = new Date(nowMs == null ? Date.now() : nowMs);
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1);
+  }
+  /* v53 — 지연 묶음(상담·차량·쿠폰·전체 원비)을 열고 첫 스냅샷을 기다리는 한도 */
+  var LAZY_READY_TIMEOUT_MS = 9000;
   /* Spark 무료 한도는 "미국 태평양 시간 자정"에 초기화된다 — 서머타임이 없을 때 한국 17:00,
      서머타임 기간(3~11월)에는 한국 16:00 이다.
      그 기준 날짜를 'pt:YYYY-MM-DD' 로 돌려준다.
@@ -217,12 +237,16 @@
      ========================================================================= */
   var USAGE_SYNC = {
     doc: 'usage',
+    /* v53 — 하루 150~300건씩 나가던 부수 쓰기/읽기를 줄인다.
+       1분 → 5분, 임계값 20건. 한도에 닿았을 때(blocked)·날짜가 바뀌었을 때는
+       임계값과 무관하게 바로 올리므로 다른 기기가 한도 초과를 늦게 아는 일은 없다. */
     minReads: 20,          /* 이만큼 쌓였을 때만 서버에 올린다 (쓰기 한도 보호) */
-    minWrites: 5,
-    minDeletes: 5,
-    intervalMs: 60000,     /* 두 번 올리는 사이 최소 간격 */
-    tickMs: 30000,         /* 간격이 차면 스스로 한 번 확인하는 주기 */
-    debounceMs: 3000       /* 사용량이 늘어난 직후 몰아서 한 번 */
+    minWrites: 20,
+    minDeletes: 20,
+    intervalMs: 300000,    /* 두 번 올리는 사이 최소 간격 — 5분 */
+    tickMs: 60000,         /* 간격이 차면 스스로 한 번 확인하는 주기 */
+    debounceMs: 3000,      /* 사용량이 늘어난 직후 몰아서 한 번 */
+    logDeferMs: 2500       /* (참고) 문자 로그 묶음 저장 간격 — 문자 로그 절감 항목에서 쓴다 */
   };
 
   /* 문서에 담긴 기기 항목 중 "오늘" 것만 골라낸다 (지난 날짜·모양이 깨진 항목은 버린다) */
@@ -290,8 +314,9 @@
     var throttled = lastAt > 0 && (at - lastAt) < USAGE_SYNC.intervalMs;
     if (!isPlain(lastSent)) { return { push: !throttled, reason: throttled ? 'throttle' : 'first' }; }
     var changed = '';
+    /* 한도 초과(blocked)는 드물고 중요하므로 5분 간격을 기다리지 않고 바로 알린다 */
+    if (!!l.blocked !== !!lastSent.blocked) { return { push: true, reason: 'blocked' }; }
     if (String(l.date || '') !== String(lastSent.date || '')) { changed = 'new-day'; }
-    else if (!!l.blocked !== !!lastSent.blocked) { changed = 'blocked'; }
     else {
       var dr = num(l.reads) - num(lastSent.reads);
       var dw = num(l.writes) - num(lastSent.writes);
@@ -1559,6 +1584,18 @@
     var listeners = [];
     var applying = false;
     var started = false;
+    /* v53 — 문자 로그(meta/logs) 묶음 저장
+       ------------------------------------------------------------------
+       출석 1건이면 문자 로그 문서가 queued → sent(또는 error) 로 2~3번 바뀌고,
+       지금까지는 그때마다 최근 200건 배열 전체를 meta/logs 에 다시 썼다(하루 출석 100명이면
+       쓰기 200~300건이 이것만으로 나간다). 로그는 "보기용 기록"이라 조금 늦게 올라가도
+       되므로, 마지막 변경에서 2.5초 모았다가 한 번만 쓴다.
+         · 문자 발송·재전송·화면 로그 표시는 그대로 (로컬 배열은 즉시 바뀐다)
+         · 묶음을 기다리는 사이 다른 저장(출석 등)이 먼저 나가면 flush 가 함께 실어 보낸다
+         · 앱을 닫으면(stop) 남은 묶음을 즉시 반영한다 */
+    var deferredEntries = null;      /* { [이름]: true } — 곧 올릴 항목 */
+    var deferredTimer = null;
+    var deferredCaptured = 0;        /* 진단용: 묶어서 처리한 횟수 */
     var flushTimer = null, reloadTimer = null, reloadPending = false, reloadFirstAt = 0;
     var lastEventAt = {};
     var lastError = '';
@@ -1670,8 +1707,49 @@
       if (outbox.count()) { scheduleFlush(); }
     }
 
-    /* 로그인한 계정의 roles/{uid} 문서를 서버에서 직접 읽어 유효 권한을 잠근다 */
-    function verifyRole() {
+    /* 로그인한 계정의 roles/{uid} 문서를 서버에서 직접 읽어 유효 권한을 잠근다
+       ----------------------------------------------------------------
+       v53 — 부팅 때 엔진(start → verifyOnStart)과 첫 화면 로그인 관문(firebase-sync-ui 의
+       verifyAdminNow)이 같은 roles/{uid} 를 두 번 읽던 것을 한 번으로 합쳤다.
+         · 읽는 중이면 그 약속을 같이 쓴다 (같은 순간 두 곳이 불러도 getDoc 1회)
+         · 방금 admin 으로 확인된 결과는 10분 동안 다시 읽지 않는다
+         · verifyRole(true) 로 강제 재확인할 수 있다 */
+    var ROLE_CHECK_TTL_MS = 10 * 60 * 1000;
+    var roleCheckState = { uid: '', at: 0, promise: null, result: null, reads: 0 };
+    function currentAuthUid() {
+      try {
+        var cu = (adapter && typeof adapter.currentUser === 'function') ? adapter.currentUser() : null;
+        return cu && cu.uid ? String(cu.uid) : '';
+      } catch (e) { return ''; }
+    }
+    function verifyRole(force) {
+      var uid = currentAuthUid();
+      var st = roleCheckState;
+      if (!force) {
+        if (st.promise && st.uid === uid) { return st.promise; }          /* 진행 중 — 같은 읽기를 함께 씀 */
+        var age = now() - num(st.at);
+        if (uid && st.uid === uid && st.result && st.result.verified === 'admin' &&
+            age >= 0 && age < ROLE_CHECK_TTL_MS) {
+          /* 방금 확인한 관리자 — 서버를 다시 읽지 않는다 */
+          var cached = clone(st.result);
+          cached.reused = true;
+          return Promise.resolve(cached);
+        }
+      }
+      var p = verifyRoleOnce();
+      roleCheckState = { uid: uid, at: 0, promise: p, result: null, reads: num(st.reads) };
+      p.then(function (r) {
+        if (roleCheckState.promise !== p) { return; }
+        roleCheckState.promise = null;
+        roleCheckState.at = now();
+        roleCheckState.result = (r && r.verified === 'admin') ? clone(r) : null;
+        roleCheckState.uid = String((r && r.uid) || uid || '');
+      }, function () {
+        if (roleCheckState.promise === p) { roleCheckState.promise = null; }
+      });
+      return p;
+    }
+    function verifyRoleOnce() {
       if (!adapter || typeof adapter.getDoc !== 'function') {
         return Promise.resolve({ role: effectiveRole(), verified: verifiedRole, reason: 'no-adapter' });
       }
@@ -1682,6 +1760,7 @@
         return Promise.resolve({ role: r0, verified: '', reason: 'no-sign-in' });
       }
       var path = basePath() + '/roles/' + String(cu.uid);
+      roleCheckState.reads = num(roleCheckState.reads) + 1;
       return adapter.getDoc(path).then(function (res) {
         var v = (res && res.exists && res.data) ? String(res.data.role || '') : '';
         var role = applyVerifiedRole(v);
@@ -2204,6 +2283,8 @@
         queuedCaptures[entry.name] = 1;
         return;
       }
+      /* v53 — 문자 로그는 마지막 변경에서 2.5초 모아 한 번만 올린다 */
+      if (scheduleDeferredCapture(entry)) { return; }
       capture(entry);
       scheduleFlush();
     }
@@ -2217,6 +2298,113 @@
         return Object.keys(map).map(function (p) { return map[p]; });
       }
       return docsForEntry(entry, prevValues[entry.name], base, { deviceId: deviceId });
+    }
+
+    /* ---------- v53 — 문자 로그 묶음 저장 ----------
+       로그(또는 deferMs 가 정해진 항목)는 곧바로 capture 하지 않고 잠깐 모아 둔다.
+       테스트·진단에서는 engine.flushDeferred() 로 바로 반영할 수 있다. */
+    function deferMsOf(entry) {
+      if (!entry) { return 0; }
+      if (entry.deferMs > 0) { return num(entry.deferMs); }
+      return entry.name === 'logs' ? USAGE_SYNC.logDeferMs : 0;
+    }
+    function scheduleDeferredCapture(entry) {
+      var ms = deferMsOf(entry);
+      if (!(ms > 0)) { return false; }
+      if (!deferredEntries) { deferredEntries = {}; }
+      deferredEntries[entry.name] = 1;
+      if (deferredTimer) { return true; }
+      deferredTimer = setTimeout(function () {
+        deferredTimer = null;
+        flushDeferred();
+        scheduleFlush();
+      }, ms);
+      if (deferredTimer && typeof deferredTimer.unref === 'function') { try { deferredTimer.unref(); } catch (e) {} }
+      return true;
+    }
+    /* 모아 둔 항목을 지금 capture 한다(한 번만). flush() 가 먼저 불러 같은 배치에 실어 보낸다. */
+    function flushDeferred() {
+      if (deferredTimer) { try { clearTimeout(deferredTimer); } catch (e) {} deferredTimer = null; }
+      var names = deferredEntries ? Object.keys(deferredEntries) : [];
+      deferredEntries = null;
+      for (var i = 0; i < names.length; i++) {
+        var e = entryByName(names[i]);
+        if (!e) { continue; }
+        prevValues[names[i]] = readValue(names[i]);
+        try { capture(e); deferredCaptured++; } catch (err) { lastError = errorText(err); }
+      }
+      return names.length;
+    }
+    function deferredState() {
+      return { pending: deferredEntries ? Object.keys(deferredEntries) : [], ms: USAGE_SYNC.logDeferMs, captured: deferredCaptured };
+    }
+
+    /* ---------- v53 — 지연 구독(상담·차량·쿠폰·전체 원비) ----------
+       화면이 그 탭/기능을 열 때 ensureLoaded(['counsel']) 로 부른다.
+       전체가 필요한 순간(수납 리포트·1년 조회·드라이브 백업)에는 lazyPending() 이 비었는지 보고
+       다 받은 뒤에 진행하면 된다. */
+    var lazyMissed = {};      /* 열기를 시도했지만 첫 스냅샷을 못 받은 묶음 */
+    function adapterCoverage() {
+      if (!adapter || typeof adapter.coverage !== 'function') { return null; }
+      try { return adapter.coverage(); } catch (e) { return null; }
+    }
+    function ensureLoaded(names) {
+      var list = Array.isArray(names) ? names.slice() : [names];
+      list = list.filter(function (n) { return !!n; });
+      if (!adapter || typeof adapter.openGroup !== 'function') {
+        return Promise.resolve({ ok: true, skipped: true, reason: 'no-lazy', loaded: list, results: [] });
+      }
+      if (effectiveRole() !== 'admin') {
+        return Promise.resolve({ ok: false, skipped: true, reason: 'role-unverified', loaded: [], results: [] });
+      }
+      var ps = list.map(function (n) {
+        var call;
+        try { call = adapter.openGroup(n); } catch (e) { call = Promise.reject(e); }
+        return Promise.resolve(call).then(function (r) {
+          if (r && r.loaded) { delete lazyMissed[n]; } else { lazyMissed[n] = 1; }
+          emit('lazy-group', { group: n, loaded: !!(r && r.loaded), partial: !!(r && r.partial), result: r || null });
+          return r || { ok: false, group: n };
+        }, function (err) {
+          lazyMissed[n] = 1;
+          return { ok: false, group: n, error: errorText(err) };
+        });
+      });
+      return Promise.all(ps).then(function (results) {
+        var allOk = true;
+        results.forEach(function (r) { if (!r || !r.loaded) { allOk = false; } });
+        return { ok: allOk, partial: !allOk, loaded: list, results: results };
+      });
+    }
+    /* 아직 받지 않은 묶음 — 비어 있으면 “전체 데이터가 갖춰졌다” */
+    function lazyPending() {
+      var cov = adapterCoverage();
+      var out = [];
+      if (!cov || !cov.lazy) { return out; }
+      ['counsel', 'shuttle', 'coupons'].forEach(function (n) { if (!cov[n]) { out.push(n); } });
+      if (cov.tuition !== 'full') { out.push('tuition'); }
+      return out;
+    }
+    function lazyState() {
+      var cov = adapterCoverage();
+      return {
+        coverage: cov,
+        pending: lazyPending(),
+        missed: Object.keys(lazyMissed),
+        timeoutMs: LAZY_READY_TIMEOUT_MS
+      };
+    }
+    /* 이 문서의 삭제 표시(툼스톤)를 보내도 되는가 — 받아 둔 범위인지 */
+    function deletablePath(p, cov) {
+      if (!cov || !cov.lazy) { return true; }
+      var seg = String(p || '').split('/');
+      var coll = seg.length >= 4 ? seg[2] : '';
+      if (coll === 'tuition') {
+        if (cov.tuition === 'full') { return true; }
+        var mk = String(seg[3] || '').slice(0, 7);
+        return mk >= tuitionRecentFrom(now());
+      }
+      if (coll === 'counsel' || coll === 'shuttle' || coll === 'coupons') { return !!cov[coll]; }
+      return true;
     }
 
     function capture(entry) {
@@ -2326,12 +2514,17 @@
           });
         });
       }
+      /* v53 — 지연 구독한 컬렉션은 "받아 둔 범위" 안에서만 삭제 표시한다.
+         상담·차량·쿠폰을 아직 안 받았거나 원비는 최근 몇 달만 받은 상태에서,
+         그림자에 없던 문서를 지우면 서버만 사라질 수 있기 때문이다. */
+      var covNow = adapterCoverage();
       Object.keys(shadow).forEach(function (p) {
         if (!underAny(p)) { return; }
         if (live[p]) { return; }
         var sh2 = shadow[p];
         if (!sh2 || sh2.d) { return; }
         if (blockedAt[prefixFor(p)]) { return; }      /* v51 — 대량 삭제는 보류한다 */
+        if (!deletablePath(p, covNow)) { return; }    /* v53 — 아직 받지 않은 범위는 건드리지 않는다 */
         var ver2 = num(sh2.v) + 1;
         var at2 = isoOf(now());
         putShadowEntry(p, { v: ver2, m: {}, u: at2, by: deviceId, h: '', d: true, b: null, t: undefined });
@@ -2440,8 +2633,16 @@
     function eventUploadRoom() {
       var snap = usage.snapshot();
       var limit = num(snap.limits && snap.limits.writes) || SPARK.writes;
-      var used = num(snap.total && snap.total.writes);
-      if (!used) { used = num(snap.writes); }      /* 다른 기기 합산을 아직 못 받았을 때 */
+      /* v53 — 이 기기 쓰기(항상 정확) + 다른 기기가 올린 쓰기(meta/usage, 5분까지 늦을 수 있음).
+         합산 문서 간격을 5분으로 늘렸으니 로컬 증가분을 반드시 더해야 한도에 닿기 전에 멈춘다. */
+      var used = num(snap.writes);
+      var others = 0;
+      try {
+        var totals = usageTotals(usageSync.remote, rawUsageSnapshot().date, deviceId);
+        others = num(totals && totals.others && totals.others.writes);
+      } catch (e) { others = 0; }
+      if (!(used > 0)) { used = num(snap.total && snap.total.writes); }
+      used += others;
       var pending = 0;
       try { outbox.pending().forEach(function (it) { if (it.del !== true) { pending++; } }); } catch (e) { pending = 0; }
       var room = limit - used - pending - EVENT_UPLOAD.reserveWrites;
@@ -2915,6 +3116,8 @@
         emit('quota-blocked', snap);
         return Promise.resolve({ ok: false, reason: 'quota', blocked: true, queued: outbox.count(), usage: snap });
       }
+      /* v53 — 모아 둔 문자 로그가 있으면 먼저 반영해 이번 배치에 함께 보낸다 */
+      if (deferredEntries) { try { flushDeferred(); } catch (e) { lastError = errorText(e); } }
       var items = outbox.pending();
       if (!items.length) { return Promise.resolve({ ok: true, sent: 0 }); }
 
@@ -3111,6 +3314,36 @@
       return Object.keys(map).map(function (p) { return map[p]; });
     }
 
+    /* ---------- v53 — 「이전(마이그레이션)」 사전 확인 ----------
+       서버에 이미 자료가 있는데도 로컬 데이터를 한 번 더 올리면
+       (이전은 문서마다 읽어 보므로 2,234건이면 읽기 2,234 + 쓰기 2,234)
+       무료 한도를 한 번에 태운다. 먼저 서버에 자료가 있는지 몇 건만 읽어 보고 알려 준다. */
+    function migrationGuard() {
+      var base = basePath();
+      var probePaths = [base + '/meta/settings', base + '/meta/feeTable', base + '/meta/logs'];
+      if (!adapter || typeof adapter.getDocs !== 'function') {
+        return Promise.resolve({ ok: false, checked: false, hasServerData: false, reason: 'no-adapter', paths: probePaths });
+      }
+      if (effectiveRole() !== 'admin') {
+        return Promise.resolve({ ok: false, checked: false, hasServerData: false, reason: 'role-unverified', paths: probePaths });
+      }
+      var call;
+      try { call = adapter.getDocs(probePaths); } catch (err) { call = Promise.reject(err); }
+      return Promise.resolve(call).then(function (list) {
+        usage.record('reads', probePaths.length);
+        var hits = [];
+        (list || []).forEach(function (r) {
+          if (r && r.exists) { hits.push(String(r.path || '').replace(base + '/', '')); }
+        });
+        return {
+          ok: true, checked: true, hasServerData: hits.length > 0, hits: hits,
+          readPaths: probePaths.length, paths: probePaths, at: isoOf(now())
+        };
+      }, function (err) {
+        return { ok: false, checked: false, hasServerData: false, error: errorText(err), paths: probePaths };
+      });
+    }
+
     function runMigration(opts2) {
       opts2 = opts2 || {};
       /* 이전은 관리자로 확인된 기기에서만 */
@@ -3290,6 +3523,8 @@
 
     function stop() {
       started = false;
+      /* v53 — 닫기 전에 모아 둔 문자 로그를 반영해 둔다(다음 실행에서 빠지지 않게) */
+      try { if (deferredEntries) { flushDeferred(); } } catch (e) {}
       flushReads();
       stopUsageSync();
       saveLastSync();
@@ -3339,6 +3574,26 @@
       verifiedRole: function () { return verifiedRole; },
       setVerifiedRole: applyVerifiedRole,
       verifyRole: verifyRole,
+      /* v53 — roles/{uid} 확인 횟수·마지막 결과 (부팅 1회 공유 확인용 진단) */
+      roleCheck: function () {
+        return {
+          reads: num(roleCheckState.reads),
+          uid: roleCheckState.uid,
+          verified: roleCheckState.result ? String(roleCheckState.result.verified || '') : '',
+          at: roleCheckState.at ? isoOf(roleCheckState.at) : '',
+          pending: !!roleCheckState.promise,
+          ttlMs: ROLE_CHECK_TTL_MS
+        };
+      },
+      /* v53 — 문자 로그 묶음 저장 */
+      flushDeferred: flushDeferred,
+      deferredState: deferredState,
+      /* v53 — 지연 구독 */
+      ensureLoaded: ensureLoaded,
+      lazyPending: lazyPending,
+      lazyState: lazyState,
+      /* v53 — 「이전」 사전 확인 */
+      migrationGuard: migrationGuard,
       rescanLocal: rescanLocal,
       device: function () { return deviceId; },
       setDojang: function (d) { dojangId = safeId(d || 'mta-tkd'); },
@@ -3606,6 +3861,26 @@
        (v43: 태블릿 구독은 없어졌다 — 모든 기기가 관리자 계정 하나를 쓴다) */
     var role = (opts.role === 'admin') ? 'admin' : 'none';
     var unsubs = [];
+    /* =========================================================================
+       v53 — 지연(묶음) 구독
+       -------------------------------------------------------------------------
+       새 기기에서 앱을 열면 지금까지 상담·차량·쿠폰·과거 원비까지 한꺼번에 읽었다.
+       첫 화면에 필요한 것은 원생·최근 출결·최근 원비·설정(meta)뿐이므로,
+         · core   : students · meta · attendanceEvents · tuition(최근 몇 달)
+         · counsel / shuttle / coupons : 그 탭을 열 때
+         · tuition: 「원비 관리」·수납 리포트·1년 조회·백업처럼 전체가 필요할 때
+       로 나눠 연다. 한 번 연 묶음은 다시 구독해도 그대로 다시 연다.
+         · 기존 기기(이미 자료가 있거나 델타 기준 시각이 있는 기기)는 예전처럼
+           tuition 델타 구독을 쓴다 — 다른 기기의 지난달 수정도 놓치지 않는다
+         · 새 기기만 최근 몇 달(documentId 범위)으로 시작한다
+         · 규칙(firestore.rules)은 그대로 — 같은 컬렉션을 조건만 달리 읽는다
+       ========================================================================= */
+    var lazyEnabled = opts.lazy !== false;
+    var openedGroups = {};        /* 이 세션에서 사용자가 연 지연 묶음 */
+    var groupState = {};          /* 묶음별 구독 상태(현재 subscribe 호출 기준) */
+    var coverageState = { tuition: 'full' };   /* tuition: 'full' | 'recent' */
+    var openGroupApi = null;      /* 현재 subscribe 가 만든 openGroup — 엔진이 부른다 */
+    var groupWaiters = {};        /* 구독이 열리기 전에 온 openGroup 요청 */
     /* 엔진이 넣어 주는 묶음 훅 — 한 스냅샷에 여러 문서가 올 때
        메모리에서 모아 수정하고 저장은 키당 1회만 하게 한다 */
     var batchHooks = { begin: null, end: null };
@@ -3801,6 +4076,43 @@
         var fs = mods.firestore;
         return typeof fs.waitForPendingWrites === 'function' ? fs.waitForPendingWrites(db) : Promise.resolve(true);
       },
+      /* v53 — 지연 묶음 열기. 엔진(ensureLoaded)이 부르고, 화면은 그 탭을 열 때 부른다. */
+      openGroup: function (name) {
+        var key = String(name == null ? '' : name);
+        if (role !== 'admin') {
+          /* 로그인 확인 전 — 이때는 아무것도 읽지 않는다(로그인 뒤 탭을 다시 열면 열린다) */
+          return Promise.resolve({ ok: false, group: key, loaded: false, reason: 'role-unverified' });
+        }
+        if (typeof openGroupApi === 'function') { return openGroupApi(key); }
+        /* 아직 구독 전 — 요청만 기억해 두고, 구독이 열릴 때 함께 연다 */
+        openedGroups[key] = true;
+        if (!groupWaiters[key]) { groupWaiters[key] = []; }
+        return new Promise(function (resolve) {
+          groupWaiters[key].push(resolve);
+          setTimeout(function () {
+            var list = groupWaiters[key] || [];
+            groupWaiters[key] = [];
+            list.forEach(function (fn) { try { fn({ ok: false, group: key, loaded: false, reason: 'not-connected' }); } catch (e) {} });
+          }, LAZY_READY_TIMEOUT_MS);
+        });
+      },
+      /* 지금 어떤 묶음이 열려 있는지 (진단·테스트) */
+      coverage: function () {
+        var groups = {};
+        Object.keys(groupState).forEach(function (k) {
+          groups[k] = { started: !!groupState[k].started, done: !!groupState[k].done, subs: (groupState[k].unsubs || []).length };
+        });
+        return {
+          lazy: !!lazyEnabled,
+          tuition: coverageState.tuition,
+          core: groups.core ? groups.core.done : false,
+          counsel: !!(groups.counsel && groups.counsel.done),
+          shuttle: !!(groups.shuttle && groups.shuttle.done),
+          coupons: !!(groups.coupons && groups.coupons.done),
+          tuitionFull: coverageState.tuition === 'full',
+          groups: groups
+        };
+      },
       subscribe: function (fn) {
         var fs = mods.firestore;
         var basePath = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
@@ -3810,22 +4122,13 @@
            → 로그인 전·비관리자 계정으로는 읽기 자체를 쓰지 않는다 */
         if (role !== 'admin') { return function () {}; }
         /* 출결은 첫 전체 구독에서 최근 7일만 — 오래된 기록까지 매번 읽지 않아 무료 한도를 아낀다 */
-        var eventSpec = { path: basePath + '/attendanceEvents', coll: 'attendanceEvents', where: { field: 'date', op: '>=', value: sinceIso } };
-        /* 관리자 계정 하나로 전체 컬렉션을 구독한다 (v43 — kioskStudents 사본은 쓰지 않는다) */
-        var specs = [
-          { path: basePath + '/students', coll: 'students' },
-          { path: basePath + '/counsel', coll: 'counsel' },
-          { path: basePath + '/shuttle', coll: 'shuttle' },
-          { path: basePath + '/coupons', coll: 'coupons' },
-          /* meta 는 문서가 몇 개 안 되니 전체 구독 그대로(델타 대상 아님) */
-          { path: basePath + '/meta', coll: 'meta', delta: false },
-          { path: basePath + '/tuition', coll: 'tuition' },
-          eventSpec
-        ];
+        var eventSpec = { path: basePath + '/attendanceEvents', coll: 'attendanceEvents', group: 'core', where: { field: 'date', op: '>=', value: sinceIso } };
         var store = lastSyncStore(opts.lastSyncStorage);
         var lastMap = opts.fullSync === true ? {} : readLastSync(store);
         var nowMs = Date.now();
         var log = (opts.snapshotLog && typeof opts.snapshotLog.push === 'function') ? opts.snapshotLog : null;
+        var base = basePath;
+        groupState = {};
         /* 이 기기에 그 컬렉션 자료가 없으면(새 기기·초기화) 델타를 쓰지 않는다 */
         function deltaAllowed(coll) {
           if (typeof opts.hasLocalData === 'function') {
@@ -3834,26 +4137,83 @@
           if (opts.hasLocalData === false) { return true; }
           return localDataHas(store, coll);
         }
-        function noteSync(coll) {
+        /* v53 — 델타 기준 시각은 기기 시계(Date.now)가 아니라 서버 문서의 `_updatedAt` 최댓값.
+           기기 시계가 앞서 있으면 그 뒤에 다른 기기가 쓴 변경이 델타에서 영영 빠질 수 있었다(7-5).
+           문서 시각이 없는 스냅샷(0건)으로는 기준을 올리지 않는다. */
+        function noteSync(coll, atIso) {
           if (!coll) { return; }
+          var t = docTimeMs(atIso);
+          if (!(t > 0)) { return; }
           var m = readLastSync(store);
-          m[coll] = Date.now();
+          if (num(m[coll]) >= t) { return; }
+          m[coll] = t;
           writeLastSync(store, m);
         }
-        specs.forEach(function (spec) {
+
+        function newGroup(name) {
+          return { name: name, specs: {}, unsubs: [], started: false, done: false, waiters: [], timer: null };
+        }
+        function groupOf(name) {
+          if (!groupState[name]) { groupState[name] = newGroup(name); }
+          return groupState[name];
+        }
+        function finishGroup(name, payload) {
+          var g = groupState[name];
+          if (!g || g.done) { return; }
+          g.done = true;
+          if (g.timer) { try { clearTimeout(g.timer); } catch (e) {} g.timer = null; }
+          var list = g.waiters || [];
+          g.waiters = [];
+          list.forEach(function (wait) {
+            try {
+              wait({ ok: true, group: name, loaded: payload.loaded !== false,
+                     ready: true, partial: !!payload.partial, specs: Object.keys(g.specs).length });
+            } catch (e) {}
+          });
+        }
+        function waitGroup(name) {
+          var g = groupOf(name);
+          if (g.done) { return Promise.resolve({ ok: true, group: name, loaded: true, ready: true }); }
+          return new Promise(function (resolve) {
+            g.waiters.push(resolve);
+            if (g.timer) { return; }
+            /* 한도 초과·오프라인으로 스냅샷이 끝내 오지 않아도 화면이 멈추지 않게 */
+            g.timer = setTimeout(function () {
+              g.timer = null;
+              if (g.done) { return; }
+              finishGroup(name, { loaded: false, partial: true });
+            }, LAZY_READY_TIMEOUT_MS);
+          });
+        }
+        /* 스펙 하나를 실제로 구독한다 (같은 묶음 안에서 이미 연 스펙은 건너뛴다) */
+        function openSpec(spec) {
+          var gname = spec.group || 'core';
+          var g = groupOf(gname);
+          var key = String(spec.coll) + '|' + String(spec.mode || 'all');
+          if (g.specs[key]) { return false; }
+          g.specs[key] = 1;
           var coll = fs.collection(db, spec.path);
           var q = coll;
           var sinceVal = '';
-          if (spec.delta !== false) {
-            if (deltaAllowed(spec.coll)) { sinceVal = deltaSinceIso(lastMap[spec.coll], nowMs); }
+          var whereField = '';
+          if (spec.range && spec.range.from && typeof fs.documentId === 'function') {
+            /* 새 기기 — 원비는 최근 몇 달(documentId 가 YYYY-MM_원생ID)만 먼저 */
+            q = fs.query(coll, fs.where(fs.documentId(), '>=', spec.range.from));
+            whereField = 'documentId';
+          } else if (spec.delta !== false && deltaAllowed(spec.coll)) {
+            sinceVal = deltaSinceIso(lastMap[spec.coll], nowMs);
           }
-          if (sinceVal) {
-            /* 단일 필드 where → 자동 인덱스. 확장 필드가 아니라 _updatedAt 이라 규칙 수정도 불필요 */
-            q = fs.query(coll, fs.where('_updatedAt', '>', sinceVal));
-          } else if (spec.where) {
-            q = fs.query(coll, fs.where(spec.where.field, spec.where.op, spec.where.value));
+          if (!whereField) {
+            if (sinceVal) {
+              /* 단일 필드 where → 자동 인덱스. 확장 필드가 아니라 _updatedAt 이라 규칙 수정도 불필요 */
+              q = fs.query(coll, fs.where('_updatedAt', '>', sinceVal));
+              whereField = '_updatedAt';
+            } else if (spec.where) {
+              q = fs.query(coll, fs.where(spec.where.field, spec.where.op, spec.where.value));
+              whereField = spec.where.field;
+            }
           }
-          if (log) { log.push({ coll: spec.coll, path: spec.path, since: sinceVal, where: sinceVal ? '_updatedAt' : (spec.where ? spec.where.field : '') }); }
+          if (log) { log.push({ coll: spec.coll, path: spec.path, group: gname, mode: spec.mode || 'all', since: sinceVal, where: whereField }); }
           var un = fs.onSnapshot(q, { includeMetadataChanges: false }, function (snap) {
             /* 캐시에서 온 스냅샷은 서버 읽기가 아니다 — 계량기에 넣지 않고 마지막 시각도 안 새긴다 */
             var fromCache = !!(snap && snap.metadata && snap.metadata.fromCache === true);
@@ -3867,6 +4227,12 @@
                 else { changes.push({ path: ch.doc.ref.path, data: ch.doc.data() }); }
               });
             } catch (e) { changes = []; }
+            /* v53 — 이번 스냅샷 문서들의 `_updatedAt` 최댓값 = 다음 델타의 기준 */
+            var maxAt = '';
+            changes.forEach(function (c) {
+              var u = (c && c.data) ? c.data._updatedAt : '';
+              if (u && String(u) > maxAt) { maxAt = String(u); }
+            });
             var applied = 0;
             function runChunk() {
               var end = Math.min(changes.length, applied + SNAPSHOT_CHUNK);
@@ -3882,15 +4248,115 @@
                 try { root.setTimeout(runChunk, 0); } catch (e) { runChunk(); }
                 return;
               }
-              if (!fromCache) { noteSync(spec.coll); }
+              if (!fromCache) { noteSync(spec.coll, maxAt); }
+              finishGroup(gname, { loaded: true });
             }
             runChunk();
           }, function (err) {
             if (typeof opts.onError === 'function') { opts.onError(err); }
           });
+          g.unsubs.push({ coll: spec.coll, fn: un });
           unsubs.push(un);
+          return true;
+        }
+        /* 묶음 안의 한 컬렉션 구독을 닫는다 (원비 최근 몇 달 → 전체로 바꿀 때) */
+        function closeSpecsOf(groupName, coll) {
+          var g = groupState[groupName];
+          if (!g) { return 0; }
+          var closed = 0;
+          g.unsubs = (g.unsubs || []).filter(function (it) {
+            if (it && it.coll === coll) {
+              try { if (typeof it.fn === 'function') { it.fn(); } } catch (e) {}
+              closed++;
+              return false;
+            }
+            return true;
+          });
+          Object.keys(g.specs).forEach(function (k) { if (String(k).split('|')[0] === coll) { delete g.specs[k]; } });
+          return closed;
+        }
+        function startGroup(name) {
+          var g = groupOf(name);
+          if (g.started) { return; }
+          g.started = true;
+          if (name === 'tuition') {
+            /* 최근 몇 달만 보던 구독을 닫고 전체 원비로 바꾼다 */
+            if (coverageState.tuition !== 'full') { closeSpecsOf('core', 'tuition'); }
+            coverageState.tuition = 'full';
+            openSpec({ path: base + '/tuition', coll: 'tuition', group: 'tuition', mode: 'full' });
+          } else {
+            (LAZY_SPECS[name] || []).forEach(openSpec);
+          }
+          if (!Object.keys(g.specs).length) { finishGroup(name, { loaded: true }); }
+        }
+        /* ---------- 열 묶음 정의 (core 는 지금, 나머지는 필요할 때) ---------- */
+        var tuitionHasLocal = deltaAllowed('tuition') || !!deltaSinceIso(lastMap.tuition, nowMs);
+        coverageState.tuition = (lazyEnabled && !tuitionHasLocal) ? 'recent' : 'full';
+        var coreSpecs = [
+          { path: base + '/students', coll: 'students', group: 'core', mode: 'all' },
+          /* meta 는 문서가 몇 개 안 되니 전체 구독 그대로(델타 대상 아님) */
+          { path: base + '/meta', coll: 'meta', group: 'core', delta: false, mode: 'all' },
+          { path: base + '/tuition', coll: 'tuition', group: 'core',
+            mode: coverageState.tuition,
+            range: coverageState.tuition === 'recent' ? { from: tuitionRecentFrom(Date.now()) } : null },
+          eventSpec
+        ];
+        var LAZY_SPECS = {
+          counsel: [{ path: base + '/counsel', coll: 'counsel', group: 'counsel', mode: 'all' }],
+          shuttle: [{ path: base + '/shuttle', coll: 'shuttle', group: 'shuttle', mode: 'all' }],
+          coupons: [{ path: base + '/coupons', coll: 'coupons', group: 'coupons', mode: 'all' }]
+        };
+        coreSpecs.forEach(openSpec);
+        finishGroup('core', { loaded: true });      /* core 는 기다리지 않는다 */
+        openGroupApi = function (name) {
+          name = String(name == null ? '' : name);
+          if (name === 'all') {
+            var list = ['counsel', 'shuttle', 'coupons', 'tuition'];
+            return Promise.all(list.map(function (n) { return openGroupApi(n); })).then(function (rs) {
+              return {
+                ok: true, group: 'all',
+                loaded: rs.every(function (r) { return !!(r && r.loaded); }),
+                results: rs
+              };
+            });
+          }
+          if (name === 'core') { return Promise.resolve({ ok: true, group: 'core', loaded: true }); }
+          if (!LAZY_SPECS[name] && name !== 'tuition') {
+            return Promise.resolve({ ok: false, group: name, reason: 'unknown-group' });
+          }
+          openedGroups[name] = true;
+          if (name === 'tuition' && coverageState.tuition === 'full' && !groupState.tuition) {
+            return Promise.resolve({ ok: true, group: 'tuition', loaded: true, already: true });
+          }
+          var waited = waitGroup(name);
+          startGroup(name);
+          return waited;
+        };
+        /* 구독이 열리기 전에 와 있던 요청을 처리한다 */
+        Object.keys(groupWaiters).forEach(function (k) {
+          var list = groupWaiters[k] || [];
+          groupWaiters[k] = [];
+          openGroupApi(k).then(function (r) {
+            list.forEach(function (wait) { try { wait(r); } catch (e) {} });
+          }, function (e) {
+            list.forEach(function (wait) { try { wait({ ok: false, group: k, loaded: false, error: errorText(e) }); } catch (e2) {} });
+          });
         });
-        return function () { unsubs.forEach(function (u) { try { u(); } catch (e) {} }); unsubs = []; };
+        /* 다시 구독할 때 이미 열었던 지연 묶음은 그대로 다시 연다 */
+        Object.keys(openedGroups).forEach(function (k) {
+          if (openedGroups[k] && k !== 'all') { try { openGroupApi(k); } catch (e) {} }
+        });
+        return function () {
+          Object.keys(groupState).forEach(function (k) {
+            (groupState[k].unsubs || []).forEach(function (it) {
+              try { if (it && typeof it.fn === 'function') { it.fn(); } } catch (e) {}
+            });
+          });
+          groupState = {};
+          openGroupApi = null;
+          unsubs.forEach(function (u) { try { u(); } catch (e) {} });
+          unsubs = [];
+        };
       },
       /* 엔진이 넣는 묶음 처리 훅 — 문서 여러 건을 한 번에 저장하게 */
       setBatchHooks: function (beginFn, endFn) {
@@ -4025,6 +4491,10 @@
     safeId: safeId,
     isoOf: isoOf,
     dayOf: dayOf,
+    /* v53 — 문서 시각(isoOf 형식) → ms · 최근 원비 시작 월 · 지연 묶음 준비 한도 */
+    docTimeMs: docTimeMs,
+    tuitionRecentFrom: tuitionRecentFrom,
+    LAZY_READY_TIMEOUT_MS: LAZY_READY_TIMEOUT_MS,
     sparkDayOf: sparkDayOf,
     errorText: errorText,
     isQuotaError: isQuotaError

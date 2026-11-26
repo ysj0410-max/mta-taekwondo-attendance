@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=52"></script>
-<script src="firebase-sync-ui.js?v=52"></script>
+<script src="firebase-sync.js?v=53"></script>
+<script src="firebase-sync-ui.js?v=53"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1657,7 +1657,7 @@
 
     <div class="gate-msg" id="gate-msg" style="display:none"></div>
     <div class="gate-note" id="gate-note" style="display:none"></div>
-    <div class="gate-ver">v52 · 2026-11-26 · Spark 무료 요금제</div>
+    <div class="gate-ver">v53 · 2026-11-26 · Spark 무료 요금제</div>
   </div>
 </div>
 
@@ -8851,12 +8851,82 @@ setTimeout(function () {
     box.style.color = ok ? '#0b7a55' : '#a35b00';
   }
 
+  /* =========================================================
+     v53 — 지연 로드 (상담·차량·쿠폰·과거 원비)
+     ---------------------------------------------------------
+     부팅에는 원생·최근 출결·최근 원비·설정만 받고,
+     아래 탭을 처음 열 때 그 묶음을 받아 와서 그 탭을 다시 그린다.
+     백업·수납 리포트·1년 조회처럼 전체가 필요한 일은 whenAllData 로 다 받은 뒤에 한다.
+     ========================================================= */
+  var LAZY_TAB_DATA = {
+    counsel: ['counsel'],
+    shuttle: ['shuttle'],
+    coupons: ['coupons'],
+    tuition: ['tuition'],      /* 원비 관리 — 1년 조회·엑셀 동기화 때문에 전체 */
+    report: ['tuition']        /* 수납 리포트 — 모든 달의 원비 */
+  };
+
+  function tdkEngineNow() {
+    try { return (window.TDKFB && typeof window.TDKFB.engine === 'function') ? window.TDKFB.engine() : null; } catch (e) { return null; }
+  }
+  /* 아직 받지 않은 지연 묶음 — 없으면 빈 배열 */
+  function tdkLazyPending() {
+    var eng = tdkEngineNow();
+    if (!eng || typeof eng.lazyPending !== 'function') { return []; }
+    try {
+      var p = eng.lazyPending();
+      return Array.isArray(p) ? p : [];
+    } catch (e) { return []; }
+  }
+  /* 전체 데이터가 필요한 일은 다 받은 뒤에 — 받을 것이 없으면 지금 바로 fn() (동기 경로 그대로) */
+  function whenAllData(fn, opts) {
+    opts = opts || {};
+    var eng = tdkEngineNow();
+    if (!eng || typeof eng.ensureLoaded !== 'function') { return fn(); }
+    var need = tdkLazyPending();
+    if (!need.length) { return fn(); }
+    var call = null;
+    try { call = eng.ensureLoaded(need); } catch (e) { call = null; }
+    if (!call || typeof call.then !== 'function') { return fn(); }
+    return call.then(function (r) {
+      if (opts.requireAll && r && r.partial) {
+        var left = tdkLazyPending();
+        return { ok: false, reason: 'lazy-partial', pending: left };
+      }
+      return fn();
+    }, function () {
+      return opts.requireAll ? { ok: false, reason: 'lazy-error' } : fn();
+    });
+  }
+  /* 탭을 열면 그 탭에 필요한 묶음을 받아 오고, 다 받으면 그 탭만 다시 그린다 */
+  function ensureTabData(tab) {
+    var need = LAZY_TAB_DATA[tab];
+    if (!need || !need.length) { return null; }
+    var eng = tdkEngineNow();
+    if (!eng || typeof eng.ensureLoaded !== 'function') { return null; }
+    var pending = tdkLazyPending();
+    var todo = need.filter(function (n) { return pending.indexOf(n) !== -1; });
+    if (!todo.length) { return null; }
+    var call = null;
+    try { call = eng.ensureLoaded(todo); } catch (e) { call = null; }
+    if (!call || typeof call.then !== 'function') { return null; }
+    return call.then(function (r) {
+      if (!r || !r.ok) { return r; }
+      /* 받아 온 자료로 그 탭을 다시 그린다 (지금 그 탭을 보고 있을 때만) */
+      markAdminDirty(normalizeAdminTab(tab));
+      if (app.adminTab === normalizeAdminTab(tab)) { renderAdminTabNow(tab, true); }
+      return r;
+    }, function (e) { return { ok: false, error: String(e && e.message || e) }; });
+  }
+
   function setAdminTab(tab, force) {
     /* v45 — 「오늘 출석」 탭은 초기화면(출결 모니터)으로 옮겨 없앴다. 예전 값은 원생 관리로 보낸다. */
     /* v46 — 탭을 바꾸면 그 탭 하나만(필요할 때만) 그린다. 나머지 탭은 건드리지 않는다. */
     tab = normalizeAdminTab(tab);
     app.adminTab = tab;
     applyAdminTabStyles(tab);
+    /* v53 — 이 탭에 필요한 지연 묶음(상담·차량·쿠폰·전체 원비)을 받아 온다 */
+    try { ensureTabData(tab); } catch (e) {}
     return renderAdminTabNow(tab, force === true);
   }
 
@@ -10761,6 +10831,8 @@ setTimeout(function () {
       box.addEventListener('input', studentYearInputHandler);
     }
     syRender();
+    /* v53 — 과거 원비까지 다 받은 뒤 한 번 더 그린다 (지연 로드) */
+    whenAllData(function () { syRender(); });
   }
 
   /* =========================================================
@@ -15993,11 +16065,15 @@ setTimeout(function () {
   }
 
   function downloadBackup() {
-    var data = buildBackup();
-    var now = new Date();
-    var name = '도장백업_' + todayKey(now) + '_' + pad2(now.getHours()) + pad2(now.getMinutes()) + '.json';
-    downloadText(JSON.stringify(data, null, 2), 'application/json', name);
-    toast('전체 백업을 내려받았어요 · 관원 ' + data.students.length + '명');
+    /* v53 — 지연 로드한 상담·차량·쿠폰·과거 원비까지 다 받은 뒤에 내려받는다 */
+    return whenAllData(function () {
+      var data = buildBackup();
+      var now = new Date();
+      var name = '도장백업_' + todayKey(now) + '_' + pad2(now.getHours()) + pad2(now.getMinutes()) + '.json';
+      downloadText(JSON.stringify(data, null, 2), 'application/json', name);
+      toast('전체 백업을 내려받았어요 · 관원 ' + data.students.length + '명');
+      return { ok: true, students: data.students.length };
+    });
   }
 
   function validateBackup(data) {
@@ -16426,14 +16502,16 @@ setTimeout(function () {
     }
     driveInFlight = true;
     renderDriveState();
-    var payload = driveBackupPayload();
-    return fetchTimeout(driveEndpoint('backup'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload),
-      mode: 'cors',
-      cache: 'no-store'
-    }, 25000).then(function (res) {
+    /* v53 — 지연 로드분까지 다 받은 뒤에 백업한다(빠진 자료로 드라이브 최신본을 덮어쓰지 않게) */
+    return whenAllData(function () {
+      var payload = driveBackupPayload();
+      return fetchTimeout(driveEndpoint('backup'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        mode: 'cors',
+        cache: 'no-store'
+      }, 25000).then(function (res) {
       return driveReadJson(res).then(function (j) {
         if (res && res.ok === false) { throw new Error('웹 앱이 HTTP ' + res.status + ' 로 거절했어요'); }
         if (j && j.ok === false) { throw new Error(j.error || '웹 앱이 백업을 저장하지 못했어요'); }
@@ -16449,9 +16527,13 @@ setTimeout(function () {
         if (manual) { toast('☁️ 드라이브에 백업했어요 · 관원 ' + app.students.length + '명'); }
         return { ok: true, at: at, fileId: (j && (j.fileId || j.id)) || '' };
       });
-    }).then(function (r) {
+    });
+    }, { requireAll: true }).then(function (r) {
       driveInFlight = false;
       renderDriveState();
+      if (r && r.ok === false && r.reason === 'lazy-partial') {
+        if (manual) { toast('일부 자료(상담·차량·쿠폰·원비)를 다 받지 못해 백업하지 않았어요 — 인터넷을 확인하고 다시 해 주세요.'); }
+      }
       return r;
     }, function (err) {
       driveInFlight = false;
@@ -16566,7 +16648,11 @@ setTimeout(function () {
     driveSyncRunning = true;
     driveInFlight = true;
     renderDriveState();
-    return driveFetchLatest().then(function (j) {
+    /* v53 — 비교 전에 지연 로드분을 다 받는다(빠진 자료로 "이 기기가 최신" 이라 판단하지 않게).
+       단, 이 기기가 비었으면(새 기기) 드라이브 백업을 그대로 받는 길이라 기다릴 필요가 없다. */
+    var needAll = !driveLocalEmpty();
+    return whenAllData(function () {
+      return driveFetchLatest().then(function (j) {
       driveInFlight = false;
       renderDriveState();
       if (!j || j.ok === false) { return driveSyncNoBackup(); }
@@ -16580,11 +16666,18 @@ setTimeout(function () {
       driveInFlight = false;
       renderDriveState();
       return { ok: false, reason: errText(err), offline: true };
-    }).then(function (r) {
+    });
+    }, { requireAll: needAll }).then(function (r) {
       driveSyncRunning = false;
+      if (r && r.reason === 'lazy-partial') {
+        /* 지연 로드분을 다 받지 못했을 때 — 비교·백업을 하지 않고 열린 상태만 풀어 둔다 */
+        driveInFlight = false;
+        renderDriveState();
+      }
       return r;
     }, function (err) {
       driveSyncRunning = false;
+      driveInFlight = false;
       return { ok: false, reason: errText(err) };
     });
   }
@@ -18232,6 +18325,15 @@ setTimeout(function () {
       cancelLazy: function (key) { cancelLazyRows(key); return true; },
       xlsxReady: function () { return (typeof XLSX !== 'undefined') && !window.__xlsxLoadFailed; },
       isAdminView: currentViewIsAdmin
+    },
+    /* v53 — 지연 로드(상담·차량·쿠폰·전체 원비) 점검용 훅 */
+    lazy: {
+      table: function () { return JSON.parse(JSON.stringify(LAZY_TAB_DATA)); },
+      pending: tdkLazyPending,
+      ensureTab: ensureTabData,
+      whenAll: whenAllData,
+      tab: function (t) { return setAdminTab(t); },
+      all: function () { return whenAllData(function () { return { ok: true }; }); }
     },
     /* v45 — 출결 모니터(초기화면) */
     monitor: {

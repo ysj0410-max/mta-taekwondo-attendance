@@ -699,10 +699,53 @@
       renderAll();
       return;
     }
-    var msg = '현재 이 기기의 데이터 ' + numText(S.plan.total) + '건을 Firestore로 보냅니다.\n\n' +
-      '· 이미 Firestore에 있는 문서는 건드리지 않습니다(덮어쓰기 없음).\n' +
-      '· 약 ' + Math.max(1, Math.ceil(S.plan.total / 400)) + '초 걸립니다.\n\n진행할까요?';
-    if (typeof window.confirm === 'function' && !window.confirm(msg)) { return; }
+    /* v53 — 서버에 이미 자료가 있는지 먼저 확인한다(2,234건을 읽고 쓰는 일을 막는다) */
+    S.migGuard = null;
+    S.busy = true;
+    S.msg = '🔎 서버에 이미 자료가 있는지 확인하는 중…';
+    renderAll();
+    var guardCall = (typeof S.engine.migrationGuard === 'function') ? S.engine.migrationGuard() : Promise.resolve(null);
+    Promise.resolve(guardCall).then(function (g) {
+      S.busy = false;
+      S.migGuard = g || null;
+      if (g && g.hasServerData) {
+        /* 서버에 이미 있다 — 한 번 더 분명하게 확인받는다 */
+        var warn = '서버에 이미 자료가 있습니다 (' + (g.hits || []).join(', ') + ').\n\n' +
+          '· 이 작업은 지금 이 기기의 데이터 ' + numText(S.plan.total) + '건을 서버와 하나씩 비교해 다시 보냅니다.\n' +
+          '· 이미 같은 자료가 있으면 보통은 필요 없고, 무료 한도(읽기·쓰기)만 씁니다.\n' +
+          '· 평소에는 「🔄 전체 다시 불러오기」로 충분합니다.\n\n' +
+          '그래도 진행할까요?';
+        var ok = true;
+        if (typeof window.confirm === 'function') { ok = window.confirm(warn); }
+        if (ok && typeof window.prompt === 'function') {
+          var typed = window.prompt('정말 이전할 때만 아래에 "이전"이라고 입력하세요. (취소하면 아무것도 보내지 않습니다)', '');
+          ok = String(typed == null ? '' : typed).replace(/\s+/g, '') === '이전';
+        }
+        if (!ok) {
+          S.msg = '이전을 하지 않았습니다 — 서버 자료는 그대로입니다. 다른 기기와 맞추려면 「🔄 전체 다시 불러오기」를 눌러 주세요.';
+          S.msgKind = '';
+          setHtml('fb-mig-result', '서버에 이미 자료가 있어 이전을 건너뛰었습니다: ' + (g.hits || []).join(', '));
+          renderAll();
+          return;
+        }
+      } else {
+        var msg = '현재 이 기기의 데이터 ' + numText(S.plan.total) + '건을 Firestore로 보냅니다.\n\n' +
+          '· 이미 Firestore에 있는 문서는 건드리지 않습니다(덮어쓰기 없음).\n' +
+          '· 약 ' + Math.max(1, Math.ceil(S.plan.total / 400)) + '초 걸립니다.\n' +
+          (g && g.checked === false ? '· 서버 확인은 하지 못했지만(연결·권한), 서버 문서는 덮어쓰지 않습니다.\n' : '') +
+          '\n진행할까요?';
+        if (typeof window.confirm === 'function' && !window.confirm(msg)) { return; }
+      }
+      runMigrateConfirmed();
+    }, function () {
+      S.busy = false;
+      renderAll();
+    });
+  }
+
+  /* 확인을 마친 뒤의 실제 이전 — 예전 onMigrate 본문 그대로 */
+  function runMigrateConfirmed() {
+    if (!S.engine || !S.plan) { return; }
     S.busy = true;
     S.msg = '📤 이전 중…';
     renderAll();
@@ -1173,7 +1216,9 @@
   }
   function clearVerified() { try { localStorage.removeItem(VERIFIED_KEY); } catch (e) {} }
 
-  /* 서버 roles/{uid} 를 직접 읽어 관리자인지 확인하고, 엔진의 유효 권한도 맞춘다 */
+  /* 서버 roles/{uid} 를 직접 읽어 관리자인지 확인하고, 엔진의 유효 권한도 맞춘다
+     v53 — 부팅 때 엔진(start → verifyOnStart)이 이미 읽은 결과가 있으면 그것을 그대로 쓴다.
+     (예전에는 같은 문서를 두 번 읽어 새 기기 부팅 때 읽기 1건을 더 썼다) */
   function verifyAdminNow(uid) {
     var ad = S.adapter;
     var id = String(uid || '');
@@ -1184,9 +1229,16 @@
     }
     if (!ad || !id) { return Promise.resolve({ verified: '', role: 'none', reason: 'no-sign-in' }); }
     var path = 'dojangs/' + S.cfg.dojangId + '/roles/' + id;
-    if (typeof ad.getDoc !== 'function') { return Promise.resolve({ verified: '', role: 'none', reason: 'no-adapter', uid: id, path: path }); }
     var call;
-    try { call = ad.getDoc(path); } catch (err) { call = Promise.reject(err); }
+    var eng = S.engine;
+    if (eng && typeof eng.verifyRole === 'function') {
+      /* 엔진이 진행 중인 확인을 같이 쓰거나, 방금 확인한 결과를 그대로 돌려준다 */
+      try { call = eng.verifyRole(); } catch (err) { call = null; }
+    }
+    if (!call) {
+      if (typeof ad.getDoc !== 'function') { return Promise.resolve({ verified: '', role: 'none', reason: 'no-adapter', uid: id, path: path }); }
+      try { call = ad.getDoc(path); } catch (err) { call = Promise.reject(err); }
+    }
     /* v49 — 서버가 응답하지 않아도(모바일 네트워크·캐시·IndexedDB 지연) 영원히 기다리지 않는다 */
     var bounded = (typeof FB.withinTime === 'function')
       ? FB.withinTime(Promise.resolve(call), VERIFY_TIMEOUT_MS, function () {
@@ -1197,12 +1249,18 @@
         })
       : Promise.resolve(call);
     return bounded.then(function (res) {
-      var v = (res && res.exists && res.data) ? String(res.data.role || '') : '';
+      var v = (res && (res.verified !== undefined ? res.verified : ((res.exists && res.data) ? String(res.data.role || '') : ''))) || '';
+      var vPath = (res && res.path) || path;
       /* 서버 roles 로 유효 권한을 잠근다 — admin 이면 엔진이 구독·전송을 시작한다 */
       if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
         try { S.engine.setVerifiedRole(v); } catch (e) {}
       }
-      return { verified: v, role: v || 'none', uid: id, email: G.email, path: path };
+      var out = { verified: v, role: v || 'none', uid: (res && res.uid) || id, email: G.email, path: vPath };
+      /* v53 — 엔진이 돌려준 실패 사유(없으면 기억으로 연다·아니면 잠금)를 그대로 전달한다 */
+      if (res && res.error) { out.error = res.error; }
+      if (res && res.reason) { out.reason = res.reason; }
+      if (res && res.reused) { out.reused = true; }
+      return out;
     }, function (err) {
       if (S.engine && typeof S.engine.setVerifiedRole === 'function') {
         try { S.engine.setVerifiedRole(''); } catch (e) {}
