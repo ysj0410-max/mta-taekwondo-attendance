@@ -71,14 +71,13 @@
        · 전체 기기 합산 쓰기가 (하루 한도 - reserveWrites) 에 닿으면 오늘은 멈춘다
          → 정상 출결·원생·원비 쓰기가 무료 한도에 밀리지 않는다(자동 유료 전환 없음)
        · 오늘 날짜의 수동 출결은 이 큐를 거치지 않고 곧바로 올라간다(capture)
-       · 시작 직후 delayMs 는 다른 기기가 이미 올려 둔 기록을 받아 보고(델타) 중복 업로드를 피하는 시간이다 */
+       · 시작 직후 delayMs 는 다른 기기가 이미 올려 둔 기록을 받아 보고(델타·meta/usage) 중복 업로드를 피하는 시간이다 */
   var EVENT_UPLOAD = {
     chunk: 1500,
     reserveWrites: 4000,
     delayMs: 45000,
     intervalMs: 90000,
-    retryMs: 600000,
-    sampleDocs: 6
+    retryMs: 600000
   };
   var QUOTA_MESSAGE = '무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다. 지금 찍은 기록은 이 기기에 임시 보관 중이며, 한도가 풀리면(태평양 시간 자정) 자동으로 다시 보냅니다. 그동안 Google Drive 백업을 받아 두시길 권합니다.';
 
@@ -1452,7 +1451,11 @@
         };
       });
       devices[safeId(deviceId)] = clone(entry) || entry;
-      return { date: entry.date, devices: devices };
+      var body = { date: entry.date, devices: devices };
+      /* v52 — 과거 출결 업로드를 마쳤다면 그 건수를 함께 적는다 → 다른 기기가 같은 기록을
+         또 올리지 않는다(건수 비교라 중간 달이 빠지는 잘못된 생략이 없다) */
+      if (eventPump.marker) { body.events = clone(eventPump.marker) || eventPump.marker; }
+      return body;
     }
 
     /* 한 번 올려 본다. force 를 주면 간격·변화량 판단을 건너뛴다(진단용).
@@ -2385,7 +2388,7 @@
        ※ 서버 규칙은 그대로 둔다 — 문서 모양은 기존 허용 칸/형식 안에서만 만든다.
        ========================================================================= */
     var eventPump = {
-      timer: null, running: false, sampled: false,
+      timer: null, running: false, marker: null,
       lastAt: '', result: '', reason: '',
       uploaded: 0, total: 0, remaining: 0, done: false
     };
@@ -2401,6 +2404,8 @@
         done: !!eventPump.done,
         result: eventPump.result || '',
         reason: eventPump.reason || '',
+        shared: sharedBacklogCount(),
+        marker: eventPump.marker ? clone(eventPump.marker) : null,
         chunk: EVENT_UPLOAD.chunk,
         reserveWrites: EVENT_UPLOAD.reserveWrites,
         pending: outbox.count(),
@@ -2443,27 +2448,13 @@
       return room > 0 ? room : 0;
     }
 
-    /* 상대 기기가 이미 올려 둔 기록인지 표본으로 확인 — 몇 건 읽기로 1만 건 쓰기를 아낀다 */
-    function serverHasBacklog(cands) {
-      if (!adapter || typeof adapter.getDocs !== 'function') { return Promise.resolve(false); }
-      var n = Math.min(EVENT_UPLOAD.sampleDocs, cands.length);
-      if (n < 2) { return Promise.resolve(false); }
-      var pick = [], seen = {};
-      for (var i = 0; i < n; i++) {
-        var idx = Math.round(i * (cands.length - 1) / (n - 1));
-        if (seen[idx]) { continue; }
-        seen[idx] = 1;
-        pick.push(cands[idx]);
-      }
-      var paths2 = pick.map(function (c) { return c.path; });
-      var p;
-      try { p = adapter.getDocs(paths2); } catch (e) { return Promise.resolve(false); }
-      return Promise.resolve(p).then(function (res) {
-        try { usage.record('reads', pick.length); } catch (e) {}
-        var have = 0;
-        (res || []).forEach(function (r) { if (r && r.exists && r.data && r.data._deleted !== true) { have++; } });
-        return have === pick.length;
-      }, function () { return false; });
+    /* 상대 기기가 이미 다 올렸는지 — meta/usage 에 적힌 "과거 출결 업로드 완료 건수"로 판단한다
+       (표본 몇 건이 아니라 건수로 보므로, 중간 달이 빠지는 식의 잘못된 생략이 없다) */
+    function sharedBacklogCount() {
+      var ev = usageSync.remote && usageSync.remote.events;
+      var n = num(ev && ev.count);
+      if (!(n > 0)) { return 0; }
+      return String(ev.by || '') === String(deviceId) ? 0 : n;   /* 내가 올린 몫은 빼고 본다 */
     }
 
     function scheduleEventPump(delayMs) {
@@ -2506,27 +2497,16 @@
         return Promise.resolve({ ok: true, uploaded: 0, remaining: 0, done: true, total: scan.total, state: eventBacklogState() });
       }
       eventPump.running = true;
-      var first = Promise.resolve(false);
-      if (!eventPump.sampled) {
-        eventPump.sampled = true;
-        first = serverHasBacklog(scan.cands).then(function (has) {
-          if (!has) { return false; }
-          /* 이미 서버에 있다 → 그림자에 "아는 상태"로 채워 두 번 올리지 않는다 */
-          var at = isoOf(now());
-          scan.cands.forEach(function (c) {
-            putShadowEntry(c.path, { v: 0, m: {}, u: '', by: '', d: false, h: eventHash(c.body), b: null, t: c.body.time });
-          });
-          saveShadow();
-          eventPump.done = true; eventPump.remaining = 0; eventPump.uploaded = 0;
-          eventPump.result = 'already'; eventPump.reason = 'already'; eventPump.lastAt = at;
-          emit('event-backlog', eventBacklogState());
-          return true;
-        }, function () { return false; });
+      /* 다른 기기가 이미 더 많이(또는 같은 만큼) 올려 둔 상태면 다시 올리지 않는다 */
+      var shared = sharedBacklogCount();
+      if (shared >= scan.total && scan.total > 0) {
+        eventPump.done = true; eventPump.remaining = 0; eventPump.uploaded = 0;
+        eventPump.result = 'already'; eventPump.reason = 'already'; eventPump.lastAt = isoOf(now());
+        eventPump.running = false;
+        emit('event-backlog', eventBacklogState());
+        return Promise.resolve({ ok: true, already: true, uploaded: 0, remaining: 0, total: scan.total, shared: shared, state: eventBacklogState() });
       }
-      return first.then(function (already) {
-        if (already) {
-          return { ok: true, already: true, uploaded: 0, remaining: 0, total: scan.total, state: eventBacklogState() };
-        }
+      return Promise.resolve(true).then(function () {
         var room = eventUploadRoom();
         var take = scan.cands.slice(0, Math.max(0, Math.min(EVENT_UPLOAD.chunk, room)));
         if (!take.length) {
@@ -2966,6 +2946,12 @@
           lastSyncAt = isoOf(now());
           lastError = '';
           lastErrorKind = '';
+          /* v52 — 과거 출결 묶음을 다 보냈으면 "서버에 N건 있음"을 meta/usage 에 남긴다 */
+          if (eventPump.done && eventPump.total > 0 &&
+              (!eventPump.marker || num(eventPump.marker.count) !== num(eventPump.total))) {
+            eventPump.marker = { at: lastSyncAt, count: num(eventPump.total), by: String(deviceId) };
+            scheduleUsagePush(1500);
+          }
           emit('synced', { sent: sentTotal, at: lastSyncAt });
           return { ok: true, sent: sentTotal, queued: outbox.count() };
         }, function (err) {
