@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=54"></script>
-<script src="firebase-sync-ui.js?v=54"></script>
+<script src="firebase-sync.js?v=55"></script>
+<script src="firebase-sync-ui.js?v=55"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1657,7 +1657,7 @@
 
     <div class="gate-msg" id="gate-msg" style="display:none"></div>
     <div class="gate-note" id="gate-note" style="display:none"></div>
-    <div class="gate-ver">v54 · 2026-11-26 · Spark 무료 요금제</div>
+    <div class="gate-ver">v55 · 2026-11-26 · Spark 무료 요금제</div>
   </div>
 </div>
 
@@ -2117,6 +2117,12 @@ setTimeout(function () {
                     <button class="btn btn-sm" id="fb-guide">📋 설정 안내서 열기</button>
                   </div>
                   <div class="tiny-note" id="fb-msg" style="margin-top:8px">설정을 저장하고 연결하면 실시간 동기화가 시작됩니다.</div>
+                  <!-- v55 — 데이터 안전 통로: 대량 삭제 1회 허용 · 서버가 거부한 항목 다시 보내기 -->
+                  <div class="form-actions" id="fb-safety" style="display:none;margin-top:6px">
+                    <button class="btn btn-sm" id="fb-bulk-allow" type="button">🛡️ 대량 삭제 1회 허용</button>
+                    <button class="btn btn-sm" id="fb-dead-retry" type="button">♻️ 서버가 거부한 항목 다시 보내기</button>
+                  </div>
+                  <div class="tiny-note" id="fb-safety-note" style="display:none;margin-top:4px;color:#8a6d3b"></div>
                   <div class="tiny-note" style="margin-top:4px;color:#8a6d3b">
                     🔑 <b>PC·태블릿·폰이 모두 같은 관리자 계정 하나</b>로 연결합니다 — 실제 권한은 <b>로그인한 계정의 서버 <code>roles/{UID}</code> 문서</b>가 정합니다. 그 문서의 role 이 <code>admin</code> 이 아니면(또는 문서가 없으면) 서버로 아무것도 보내지 않습니다.
                   </div>
@@ -4240,7 +4246,7 @@ setTimeout(function () {
     // v44 — 출석 인식은 바코드 전용 (얼굴인식 제거)
     app.settings.kioskMode = 'barcode';
     // 예전 설정·백업에 남아 있던 얼굴인식 설정은 더 쓰지 않는다
-    if (Object.prototype.hasOwnProperty.call(app.settings, 'face')) { delete app.settings.face; }
+    if (Object.prototype.hasOwnProperty.call(app.settings, 'face')) { app.settings.face = ''; }   /* v55 — delete 는 동기화로 전달되지 않아 매번 되살아났다 */
 
     // 띠 체계(순서·이름·색상·급수·기준) 복원
     var rawBelts = (settings && Array.isArray(settings.belts)) ? settings.belts : null;
@@ -6894,8 +6900,9 @@ setTimeout(function () {
     } else if (old) {
       var prev = app.tuition[mk] && app.tuition[mk][sid];
       if (prev && prev.paidDate === tuitionDateForDay(mk, old)) {
-        delete prev.paidDate;
-        delete prev.method;
+        /* v55 — 빈 값으로 (delete 는 서버로 전달되지 않아 되살아났다) */
+        prev.paidDate = '';
+        prev.method = '';
         prev.status = 'unpaid';
         changed = true;
       }
@@ -6914,12 +6921,13 @@ setTimeout(function () {
     if (next) {
       if (tuitionDayOf(s) !== next || s.tuitionDate) {
         s.tuitionDay = next;
-        delete s.tuitionDate;
+        s.tuitionDate = '';
         saveStudents();
       }
     } else if (prev && tuitionDayOf(s) === prev) {
-      delete s.tuitionDay;
-      delete s.tuitionDate;
+      /* v55 — 빈 값으로 남긴다(delete 는 서버에 전달되지 않아 되살아났다) */
+      s.tuitionDay = '';
+      s.tuitionDate = '';
       saveStudents();
     }
     if (el('stu-table')) { renderStudentsTable(); }
@@ -7357,9 +7365,11 @@ setTimeout(function () {
         s.firstRegDate = firstRegDate;
         s.birthDate = birthDate;
         s.tconId = tconId;
-        if (barcodeNo) { s.barcode = barcodeNo; } else { delete s.barcode; }
-        if (tuitionDay) { s.tuitionDay = tuitionDay; } else { delete s.tuitionDay; }
-        delete s.tuitionDate;
+        /* v55 — 지운 칸은 "없앰"이 아니라 빈 값으로 남긴다. delete 하면 서버에 전달되지 않아
+           다음 동기화에서 옛 값이 되살아났다("번호를 지웠는데 다시 생겨요"). */
+        s.barcode = barcodeNo || '';
+        s.tuitionDay = tuitionDay || '';
+        s.tuitionDate = '';
         if (prevTuitionDay !== tuitionDay) { syncTuitionFromStudentDay(s.id, prevTuitionDay, tuitionDay); }
       }
       toast(name + ' 관원 정보를 수정했어요.' + (status === 'paused' ? ' · 휴관생은 「🛌 휴관생 관리」에 모입니다' : ''));
@@ -10307,11 +10317,13 @@ setTimeout(function () {
     if (!TUITION_STATUS[cur.status]) { cur.status = 'unpaid'; }
     var prevPaid = isDateKey(cur.paidDate) ? String(cur.paidDate) : '';
     Object.keys(patch || {}).forEach(function (k) {
-      if (patch[k] === undefined || patch[k] === null || patch[k] === '') { delete cur[k]; }
+      /* v55 — 비우기는 delete 가 아니라 '' (빈 값)로. delete 는 merge 쓰기로 전달되지 않아
+         서버·다른 기기에서 옛 값이 되살아났다. */
+      if (patch[k] === undefined || patch[k] === null || patch[k] === '') { cur[k] = ''; }
       else { cur[k] = patch[k]; }
     });
     if (cur.status === 'paid' && !isDateKey(cur.paidDate)) { cur.paidDate = todayKey(); }
-    if (cur.status !== 'paid') { delete cur.paidDate; delete cur.method; }
+    if (cur.status !== 'paid') { cur.paidDate = ''; cur.method = ''; }
     app.tuition[mk][sid] = cur;
     saveTuition();
     // 원비 관리의 납부일 → 「🥋 원생 관리」의 원비 날짜(일자)
@@ -11556,7 +11568,7 @@ setTimeout(function () {
       if (row.day) {
         if (tuitionDayOf(s) !== row.day || s.tuitionDate) {
           s.tuitionDay = row.day;
-          delete s.tuitionDate;
+          s.tuitionDate = '';          /* v55 — delete 대신 빈 값 */
           out.daySet++;
         }
       }
@@ -15856,7 +15868,7 @@ setTimeout(function () {
       }
       if (!tuitionDayOf(hit) && tuitionDayOf(s)) {
         hit.tuitionDay = tuitionDayOf(s);
-        delete hit.tuitionDate;
+        hit.tuitionDate = '';          /* v55 — delete 대신 빈 값 */
       }
       /* v40 — 바코드 번호: 비어 있으면 채우고, 파일 값이 다르면 학원 프로그램 값을 따른다
          (카드에 실제로 찍힌 번호가 원본이므로 띠·수업 같은 앱 값과 달리 갱신을 허용) */
@@ -17370,8 +17382,8 @@ setTimeout(function () {
         var day = parseInt(rawDay, 10);
         if (isNaN(day) || day < 1 || day > 31) { day = 0; }
         var before = tuitionDayOf(ts);
-        if (day) { ts.tuitionDay = day; } else { delete ts.tuitionDay; }
-        delete ts.tuitionDate;
+        if (day) { ts.tuitionDay = day; } else { ts.tuitionDay = ''; }   /* v55 — 빈 값으로 */
+        ts.tuitionDate = '';
         saveStudents();
         syncTuitionFromStudentDay(ts.id, before, day);
         renderStudentsTable();
@@ -17970,8 +17982,8 @@ setTimeout(function () {
         var nd = parseInt(rawDy, 10);
         if (isNaN(nd) || nd < 1 || nd > 31) { nd = 0; }
         var wasDay = tuitionDayOf(ys);
-        if (nd) { ys.tuitionDay = nd; } else { delete ys.tuitionDay; }
-        delete ys.tuitionDate;
+        if (nd) { ys.tuitionDay = nd; } else { ys.tuitionDay = ''; }     /* v55 — 빈 값으로 */
+        ys.tuitionDate = '';
         saveStudents();
         renderStudentsTable();
         renderTuition(true);

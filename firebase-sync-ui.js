@@ -159,11 +159,29 @@
           S.msg = '🔒 서버에서 이 계정의 관리자 역할(roles 문서)을 확인하기 전에는 아무것도 올리지 않습니다 — 관리자 계정으로 로그인해 주세요.';
           S.msgKind = 'warn';
         }
-        /* v51 — 한 번에 너무 많은 기록을 지우려 할 때(원비·원생 대량 삭제 사고 방지) */
+        /* v51 — 한 번에 너무 많은 기록을 지우려 할 때(원비·원생 대량 삭제 사고 방지)
+           v55 — 의도된 정리(연말 일괄 삭제 등)는 아래 「🛡️ 대량 삭제 1회 허용」으로 한 번만 통과한다 */
         if (type === 'bulk-delete-blocked' && payload) {
           S.msg = '🛡️ ' + String(payload.message || '대량 삭제를 막았습니다.') +
-            ' 서버의 기록은 그대로 두었습니다 — 원생·원비 목록이 비어 보이면 「🔄 전체 다시 불러오기」로 서버에서 다시 받아 주세요.';
+            ' 서버의 기록은 그대로 두었습니다 — 일부러 하는 정리라면 「🛡️ 대량 삭제 1회 허용」을 누른 뒤 다시 지워 주세요.';
           S.msgKind = 'warn';
+        }
+        if (type === 'bulk-delete-approved' && payload) {
+          S.msg = '🛡️ 대량 삭제를 이번 한 번만 허용했습니다 — 다시 지우면 그대로 반영됩니다(1회용).';
+          S.msgKind = 'ok';
+        }
+        /* v55 — 서버가 영구 거부한 항목은 대기에서 빼서 격리했다(다른 기록이 막히지 않게) */
+        if (type === 'dead-letters' && payload) {
+          S.msg = '♻️ 서버가 받아 주지 않는 항목 ' + numText(payload.count) + '건을 대기에서 빼 두었습니다(다른 기록은 계속 전송). ' +
+            '원인을 고친 뒤 「♻️ 서버가 거부한 항목 다시 보내기」를 눌러 주세요.';
+          S.msgKind = 'warn';
+        }
+        /* v55 — 아직 받지 않은 범위라 보류한 삭제 (묶음을 받아 처리하면 payload 없이 온다) */
+        if (type === 'delete-held') {
+          S.msg = payload
+            ? ('⏳ ' + String(payload.message || '아직 받지 않은 범위의 삭제는 보류했습니다.'))
+            : '✅ 보류하던 삭제를 모두 처리했습니다.';
+          S.msgKind = payload ? 'warn' : 'ok';
         }
         /* v52 — 과거 수동·CSV 출결을 무료 한도를 지키며 나눠 올리는 중 */
         if (type === 'event-backlog' && payload && payload.result) {
@@ -378,10 +396,23 @@
     if (!el) { return; }
     if (!on) { el.style.display = 'none'; return; }
     el.style.display = '';
-    el.innerHTML = '🔴 <b>무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다.</b><br>' +
-      '지금 찍은 기록은 <b>이 기기 로컬에 임시 보관</b> 중이며, 한도가 풀리면(미국 태평양 자정 = 한국 오후 4~5시) 자동으로 다시 보냅니다. ' +
-      '유료 결제로 자동 전환되지 않습니다.<br>' +
-      '그동안 <b>Google Drive 백업</b>(「💾 도장 데이터 전체 백업」 또는 「☁️ 드라이브 자동 백업」)을 받아 두시길 권합니다.';
+    /* v55 — 이 기기가 아니라 "전체 기기 합산"이 한도에 가까워 멈춘 경우를 구분해 알린다 */
+    var totalBlock = false;
+    var pct = 0;
+    try {
+      var snap = S.engine ? S.engine.usage.snapshot() : null;
+      totalBlock = !!(snap && snap.totalBlock);
+      if (snap && snap.totalPct) { pct = Math.round(Math.max(snap.totalPct.reads || 0, snap.totalPct.writes || 0, snap.totalPct.deletes || 0) * 100); }
+    } catch (e) {}
+    el.innerHTML = totalBlock
+      ? ('🔴 <b>전체 기기 사용량이 무료 한도에 가까워 동기화를 잠시 멈췄습니다(' + pct + '%).</b><br>' +
+        'PC·폰이 함께 쓰는 합산 사용량 기준이며, 지금 찍은 기록은 <b>이 기기 로컬에 임시 보관</b> 중입니다 — 한도가 풀리면(미국 태평양 자정 = 한국 오후 4~5시) 자동으로 다시 보냅니다. ' +
+        '유료 결제로 자동 전환되지 않습니다.<br>' +
+        '그동안 <b>Google Drive 백업</b>(「💾 도장 데이터 전체 백업」 또는 「☁️ 드라이브 자동 백업」)을 받아 두시길 권합니다.')
+      : ('🔴 <b>무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다.</b><br>' +
+        '지금 찍은 기록은 <b>이 기기 로컬에 임시 보관</b> 중이며, 한도가 풀리면(미국 태평양 자정 = 한국 오후 4~5시) 자동으로 다시 보냅니다. ' +
+        '유료 결제로 자동 전환되지 않습니다.<br>' +
+        '그동안 <b>Google Drive 백업</b>(「💾 도장 데이터 전체 백업」 또는 「☁️ 드라이브 자동 백업」)을 받아 두시길 권합니다.');
   }
 
   function renderUsage() {
@@ -443,12 +474,22 @@
 
   function renderQueue() {
     var out = S.engine ? S.engine.outbox : null;
-    var sum = out ? out.summary() : { pending: 0, failed: 0, unacked: 0, sent: 0, oldestAt: '' };
+    var sum = out ? out.summary() : { pending: 0, failed: 0, unacked: 0, sent: 0, dead: 0, oldestAt: '' };
     var chip = $('fb-queue-chip');
     if (chip) {
       var total = sum.pending + sum.failed + sum.unacked;
-      chip.textContent = total ? ('대기 ' + total + '건' + (sum.failed ? ' · 실패 ' + sum.failed : '') + (sum.unacked ? ' · 확인대기 ' + sum.unacked : '')) : '대기 없음';
+      chip.textContent = total ? ('대기 ' + total + '건' + (sum.failed ? ' · 실패 ' + sum.failed : '') + (sum.unacked ? ' · 확인대기 ' + sum.unacked : '') + (sum.dead ? ' · 확인필요 ' + sum.dead : '')) : (sum.dead ? ('확인 필요 ' + sum.dead + '건') : '대기 없음');
       chip.className = 'chip ' + (total ? (sum.failed ? 'off' : 'wait') : 'ok');
+    }
+    /* v55 — 서버가 거부해 격리한 항목이 있으면 다시 보내기 버튼을 보여 준다 */
+    var deadBtn = $('fb-dead-retry');
+    if (deadBtn) {
+      var deadN = Number(sum.dead) || 0;
+      deadBtn.textContent = deadN ? ('♻️ 서버가 거부한 항목 다시 보내기 (' + numText(deadN) + ')') : '♻️ 서버가 거부한 항목 다시 보내기';
+      deadBtn.disabled = !deadN;
+      deadBtn.title = deadN
+        ? '규칙 거부 등으로 서버가 받지 않은 ' + numText(deadN) + '건을 대기로 되돌려 다시 보냅니다'
+        : '거부된 항목이 없습니다';
     }
     /* 「🗑️ 실패 비우기」 — 실패 건이 없으면 누를 수 없게 */
     var clearBtn = $('fb-clear-failed');
@@ -460,11 +501,12 @@
         : '비울 실패 항목이 없습니다';
     }
     if (!S.queueOpen || !out) { return; }
-    var items = out.list().filter(function (it) { return it.state !== 'sent'; }).slice(-40).reverse();
+    /* v55 — 900건짜리 큐를 통째로 복사하지 않고 최근 40건만 가져온다(화면 멈춤 방지) */
+    var items = (typeof out.recent === 'function') ? out.recent(40) : out.list().filter(function (it) { return it.state !== 'sent'; }).slice(-40).reverse();
     if (!items.length) { setHtml('fb-queue-list', '<div class="tiny-note" style="padding:8px 0">대기 중인 기록이 없습니다.</div>'); return; }
-    var stateText = { pending: '전송 대기', failed: '전송 실패', 'sent-unacked': '서버 확인 대기', sending: '보내는 중' };
+    var stateText = { pending: '전송 대기', failed: '전송 실패', 'sent-unacked': '서버 확인 대기', sending: '보내는 중', dead: '확인 필요(격리)' };
     var html = items.map(function (it) {
-      var cls = it.state === 'failed' ? 'off' : 'wait';
+      var cls = (it.state === 'failed' || it.state === 'dead') ? 'off' : 'wait';
       return '<div class="fb-queue-row"><span class="chip ' + cls + '">' + (stateText[it.state] || it.state) + '</span>' +
         '<span class="fb-q-path">' + baseName(it.path) + '</span>' +
         '<span class="fb-q-time">' + nowText(it.at) + (it.attempts ? ' · ' + it.attempts + '회' : '') + '</span>' +
@@ -472,6 +514,102 @@
     }).join('');
     var old = sum.oldestAt ? ('가장 오래된 대기: ' + nowText(sum.oldestAt)) : '';
     setHtml('fb-queue-list', (old ? '<div class="tiny-note" style="padding:4px 0 8px">' + old + '</div>' : '') + html);
+  }
+
+  /* =========================================================================
+     v55 — 데이터 안전 통로 화면
+     -------------------------------------------------------------------------
+     · 「🛡️ 대량 삭제 1회 허용」: 한 번에 20% 이상을 지우려 할 때 막히는 가드를,
+       사용자가 확인 문구를 입력한 경우에만 이번 한 번 통과시킨다(1회용).
+     · 「♻️ 서버가 거부한 항목 다시 보내기」: 규칙 거부 등으로 격리(dead)된 항목을 대기로 되돌린다.
+     · 아직 받지 않은 범위라 보류한 삭제가 있으면 그 사실을 함께 알린다.
+     ========================================================================= */
+  function bulkState() { try { return S.engine ? S.engine.bulkDeleteState() : null; } catch (e) { return null; } }
+  function heldState() { try { return (S.engine && typeof S.engine.deleteHeldState === 'function') ? S.engine.deleteHeldState() : null; } catch (e) { return null; } }
+
+  function renderSafety() {
+    var box = $('fb-safety');
+    var note = $('fb-safety-note');
+    if (!box && !note) { return; }
+    var bulk = bulkState();
+    var held = heldState();
+    var sum = { dead: 0 };
+    try { if (S.engine && S.engine.outbox) { sum = S.engine.outbox.summary(); } } catch (e) { sum = { dead: 0 }; }
+    var deadN = Number(sum.dead) || 0;
+    var showBulk = !!bulk;
+    var showAny = showBulk || deadN > 0 || !!held;
+    if (box) { box.style.display = showAny ? '' : 'none'; }
+    var allowBtn = $('fb-bulk-allow');
+    if (allowBtn) {
+      allowBtn.style.display = showBulk ? '' : 'none';
+      allowBtn.textContent = showBulk
+        ? ('🛡️ 대량 삭제 1회 허용 (' + numText(bulk.held || 0) + '건)')
+        : '🛡️ 대량 삭제 1회 허용';
+    }
+    if (!note) { return; }
+    var lines = [];
+    if (showBulk) {
+      var cols = (bulk.collections || []).map(function (d) {
+        return labelOfCollection(d.collection) + ' ' + numText(d.deletes) + '/' + numText(d.total) + '건';
+      }).join(', ');
+      lines.push('🛡️ 한 번에 너무 많은 기록을 지우려 해 막았습니다(' + cols + '). 서버 기록은 그대로입니다.' +
+        ' 연말 정리처럼 일부러 지우는 것이면 「대량 삭제 1회 허용」을 누른 뒤 다시 지워 주세요.');
+    }
+    if (deadN > 0) {
+      lines.push('♻️ 서버가 받아 주지 않는 항목 ' + numText(deadN) + '건이 대기에서 빠져 있습니다(다른 기록은 계속 전송됩니다).');
+    }
+    if (held) {
+      lines.push('⏳ ' + String(held.message || '아직 받지 않은 범위의 삭제는 보류했습니다.'));
+    }
+    note.innerHTML = lines.join('<br>');
+    note.style.display = lines.length ? '' : 'none';
+  }
+
+  function labelOfCollection(coll) {
+    var n = String(coll == null ? '' : coll);
+    if (n === 'students') { return '원생'; }
+    if (n === 'tuition') { return '원비'; }
+    if (n === 'attendanceEvents') { return '출결'; }
+    if (n === 'counsel') { return '상담'; }
+    if (n === 'shuttle') { return '차량'; }
+    if (n === 'coupons') { return '쿠폰'; }
+    if (n.indexOf('meta/') === 0) { return '설정(' + n.slice(5) + ')'; }
+    return n;
+  }
+
+  function onBulkAllow() {
+    if (!S.engine || typeof S.engine.allowBulkDeleteOnce !== 'function') { return; }
+    var bulk = bulkState();
+    var cols = (bulk && bulk.collections) || [];
+    var detail = cols.map(function (d) {
+      return labelOfCollection(d.collection) + ' ' + numText(d.deletes) + '건(전체 ' + numText(d.total) + '건 중)';
+    }).join(', ');
+    var ask = '정말 이번 한 번만 대량 삭제를 허용할까요?\n\n' +
+      (detail ? detail + ' 이 서버에서 삭제 표시됩니다.\n\n' : '') +
+      '되돌릴 수 없습니다. 계속하려면 아래 칸에 「대량삭제」를 그대로 적어 주세요.';
+    var answer = '';
+    try {
+      if (typeof window.prompt === 'function') { answer = String(window.prompt(ask, '') || '').trim(); }
+    } catch (e) { answer = ''; }
+    if (answer !== '대량삭제') {
+      S.msg = '대량 삭제 허용을 취소했습니다 — 아무것도 지우지 않았습니다.';
+      S.msgKind = '';
+      renderAll();
+      return;
+    }
+    var r = S.engine.allowBulkDeleteOnce({ collections: cols.map(function (d) { return d.collection; }), src: 'ui' });
+    S.msg = '🛡️ 대량 삭제를 1회 허용했습니다(' + (r && r.collections ? String(r.collections) : '전체') + ') — 이제 다시 지우면 그대로 반영됩니다.';
+    S.msgKind = 'ok';
+    renderAll();
+  }
+
+  function onDeadRetry() {
+    if (!S.engine || typeof S.engine.retryDeadLetters !== 'function') { return; }
+    var n = S.engine.retryDeadLetters();
+    S.msg = n ? ('♻️ ' + numText(n) + '건을 대기로 되돌렸습니다 — 다시 보냅니다.') : '격리된 항목이 없습니다.';
+    S.msgKind = n ? 'ok' : '';
+    renderAll();
+    if (n) { onFlush(); }
   }
 
   function keyCountText(byKey) {
@@ -581,6 +719,7 @@
     renderStatus();
     renderUsage();
     renderQueue();
+    renderSafety();
     renderMigration();
     renderAuth();
   }
@@ -1059,6 +1198,8 @@
       ['fb-mig-preview', onPreview], ['fb-mig-run', onMigrate],
       ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-clear-failed', onClearFailed], ['fb-usage-reset', onUsageReset],
       ['fb-guide', onGuide],
+      /* v55 — 데이터 안전 통로 */
+      ['fb-bulk-allow', onBulkAllow], ['fb-dead-retry', onDeadRetry],
       /* 🔄 새로고침 · 동기화 상태 — 헤더 도구 영역과 관리자 화면 양쪽에서 */
       ['app-refresh-btn', function () { appRefresh(); }],
       ['hdr-fb-chip', openSyncStatus],
@@ -1718,6 +1859,10 @@
     flush: function () { return S.engine ? S.engine.flush() : null; },
     clearFailed: onClearFailed,
     failedCount: failedCount,
+    /* v55 — 데이터 안전 통로(화면 버튼과 같은 함수) */
+    allowBulkOnce: onBulkAllow,
+    deadRetry: onDeadRetry,
+    safety: function () { return { bulk: bulkState(), held: heldState() }; },
     preview: onPreview,
     plan: function () { return S.plan; },
     render: renderAll,

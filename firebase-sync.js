@@ -14,7 +14,7 @@
        dojangs/{dojangId}/tuition/{YYYY-MM}_{studentId}  원생·월 원비 1건 = 문서 1개
        dojangs/{dojangId}/counsel|shuttle|coupons/{id}   기록 1건 = 문서 1개
        dojangs/{dojangId}/meta/{설정문서}                설정·단가표·문구·로그·계정
-       dojangs/{dojangId}/meta/usage                     기기별 무료 한도 추정 사용량 합산(관리자 전용 · 60초 간격)
+       dojangs/{dojangId}/meta/usage                     기기별 무료 한도 추정 사용량 합산(관리자 전용 · 5분 간격)
        dojangs/{dojangId}/roles/{uid}                    권한(관리자) — 'admin' 이 아니면 서버로 아무것도 보내지 않는다
      · 기기 로컬 전용(절대 업로드하지 않음) — tdk.fbLastSync.v1(컬렉션별 마지막 동기화 시각) 포함
        그리고 이 엔진의 상태 키(tdk.fb*.v1)
@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.8.0';   /* v53 — 문자 로그 묶음 저장 · 사용량 합산 5분 · roles 1회 · 지연 구독 · 서버 _updatedAt 델타 */
+  var VERSION = '1.9.0';   /* v55 — 출결 툼스톤 격리 · 필드 비우기 전파 · 복원 그림자 재조정 · 합산 한도 차단 · flush 재진입 · 분할 업로드 소량화 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -73,10 +73,18 @@
        · 오늘 날짜의 수동 출결은 이 큐를 거치지 않고 곧바로 올라간다(capture)
        · 시작 직후 delayMs 는 다른 기기가 이미 올려 둔 기록을 받아 보고(델타·meta/usage) 중복 업로드를 피하는 시간이다 */
   var EVENT_UPLOAD = {
-    chunk: 1500,
+    /* v55 — 한 번에 큐에 넣는 양을 1,500 → 240 으로 줄였다.
+       도장 PC 에서 "대기 900여 건"이 쌓이며 화면이 버벅이던 원인은, 1,500건을 한꺼번에
+       아웃박스에 넣으면서 (a) 큐 전체를 localStorage 에 다시 쓰고 (b) 상태 표시·flush 가
+       1,500건짜리 목록을 매번 훑은 것이다. 이제 한 번에 한 배치(500)보다 적은 240건만 넣고,
+       큐가 비어 있을 때 다음 묶음을 넣는다. 전체 건수는 그대로 다 올라간다(느긋하게 나눠서). */
+    chunk: 240,
+    /* 큐에 이만큼(전송 대기)이 남아 있으면 다음 묶음을 넣지 않고 기다린다 — 큐가 불어나지 않게 */
+    maxQueued: 480,
     reserveWrites: 4000,
     delayMs: 45000,
-    intervalMs: 90000,
+    intervalMs: 90000,   /* 큐가 아직 남아 있을 때 다음 묶음까지 기다리는 시간 */
+    stepMs: 20000,       /* v55 — 앞 묶음을 다 보냈으면(큐 비었음) 더 빨리 다음 묶음 (화면은 계속 가볍게) */
     retryMs: 600000
   };
   var QUOTA_MESSAGE = '무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다. 지금 찍은 기록은 이 기기에 임시 보관 중이며, 한도가 풀리면(태평양 시간 자정) 자동으로 다시 보냅니다. 그동안 Google Drive 백업을 받아 두시길 권합니다.';
@@ -244,6 +252,11 @@
     minWrites: 20,
     minDeletes: 20,
     intervalMs: 300000,    /* 두 번 올리는 사이 최소 간격 — 5분 */
+    /* v55 — 이 기기 계량기뿐 아니라 기기 합산(meta/usage)이 한도에 가까워지면 동기화를 멈춘다.
+       95% 에서 멈추고 capture(로컬 저장)는 계속하므로 기록은 잃지 않는다. 5% 는 여유분이다
+       (규칙 get()·0건 쿼리처럼 계량기에 안 잡히는 과금이 있어 실제 사용량이 더 클 수 있다). */
+    blockTotalPct: 0.95,
+    warnTotalPct: 0.9,
     tickMs: 60000,         /* 간격이 차면 스스로 한 번 확인하는 주기 */
     debounceMs: 3000,      /* 사용량이 늘어난 직후 몰아서 한 번 */
     logDeferMs: 2500       /* (참고) 문자 로그 묶음 저장 간격 — 문자 로그 절감 항목에서 쓴다 */
@@ -303,7 +316,7 @@
     };
   }
 
-  /* 이번에 서버로 올릴지 판단 — 60초 간격 · 최소 변화량 · 차단 상태 변화
+  /* 이번에 서버로 올릴지 판단 — 5분 간격 · 최소 변화량(20건) · 차단 상태 변화
        local     { date, reads, writes, deletes, blocked }
        lastSent  마지막으로 올린 값(없으면 null)
        atMs      지금 시각, lastAtMs 마지막으로 올린 시각 */
@@ -406,6 +419,20 @@
   function isQuotaError(err) {
     var e = normalizeError(err);
     return e.code === 'resource-exhausted' || /resource[- ]exhausted|quota|daily limit/i.test(e.message);
+  }
+  /* v55 — 다시 보내도 결과가 같은 오류(규칙 거부·형식 오류 등).
+     이것 하나가 배치에 섞이면 firestore 배치가 원자적이라 같은 배치의 정상 기록까지
+     전부 실패했다. 이런 오류만 골라 반씩 나눠(bisect) 문제 항목만 격리한다.
+     네트워크·한도 오류는 잠시 뒤 다시 보내면 되므로 격리하지 않는다. */
+  function isPermanentError(err) {
+    var e = normalizeError(err);
+    if (isQuotaError(err)) { return false; }
+    var code = String(e.code || '').toLowerCase();
+    if (code === 'permission-denied' || code === 'invalid-argument' || code === 'failed-precondition' ||
+        code === 'out-of-range' || code === 'unimplemented' || code === 'data-loss') {
+      return true;
+    }
+    return /permission|invalid argument|invalid-argument/i.test(e.message);
   }
 
   /* ---------- 브라우저 저장공간(localStorage)이 가득 찼을 때 ----------
@@ -838,6 +865,23 @@
     if (!m) { return null; }
     return { date: m[1], studentId: m[2], kind: m[3] };
   }
+  /* v55 — 출결 시각을 라이브 규칙(validEvent)이 받는 모양으로 맞춘다.
+       · 규칙: time 은 5자 `([01][0-9]|2[0-3]):[0-5][0-9]`
+       · 예전 CSV·수동 기록에는 `9:30` 같은 4자 시각이 섞여 있다 → 만들기(create)가 거부되고
+         그 한 건이 같은 배치의 정상 출결까지 막았다(배치는 원자적).
+       · 해석할 수 없는 값은 '' 을 돌려주고, 부르는 쪽이 "시각 없음(00:00 + manual)"으로 처리한다 */
+  function normEventTime(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    var m = /^(\d{1,2}):(\d{2})/.exec(s);
+    if (!m) { return ''; }
+    var h = num(m[1]), mi = num(m[2]);
+    if (!(h >= 0 && h <= 23) || !(mi >= 0 && mi <= 59)) { return ''; }
+    return (h < 10 ? '0' : '') + h + ':' + (mi < 10 ? '0' : '') + mi;
+  }
+  /* v55 — 출결 문서 ID 의 날짜가 규칙이 받는 모양(YYYY-MM-DD)인가 */
+  function isEventDateKey(v) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(v == null ? '' : v));
+  }
   /* v52 — 시각 없는 수동·CSV 출석을 나타내는 출결 문서인가
      (규칙이 time 을 필수로 요구해 자리표시 00:00 을 쓰므로 manual 로 구분한다) */
   function isDayOnlyEvent(body) {
@@ -930,11 +974,16 @@
       Object.keys(days).forEach(function (date) {
         var day = days[date];
         if (!isPlain(day)) { return; }
+        /* v55 — 규칙이 날짜 YYYY-MM-DD(10자)를 요구한다. 형태가 다른 날짜 키는 문서를 만들지 않는다
+           (만들면 permission-denied 로 배치 전체가 막힌다). */
+        if (!isEventDateKey(date)) { return; }
         Object.keys(day).forEach(function (sid) {
           var e = day[sid];
           if (!isPlain(e)) { return; }
-          var inT = att ? String(e.inTime || '').slice(0, 5) : String(e.in || '').slice(0, 5);
-          var outT = att ? String(e.outTime || '').slice(0, 5) : String(e.out || '').slice(0, 5);
+          if (!sid) { return; }
+          /* v55 — 시각은 규칙 모양(HH:MM)으로 맞춘다. `9:30` → `09:30`, 해석 불가는 '' */
+          var inT = normEventTime(att ? e.inTime : e.in);
+          var outT = normEventTime(att ? e.outTime : e.out);
           var manual = !!e.manual;
           var src = String(e.src || (att ? '' : 'legacy'));
           /* 문서에 넣는 칸은 firestore.rules 의 eventFields() 와 정확히 같아야 한다
@@ -1128,7 +1177,11 @@
         resetIfNeeded();
         if (state.blocked) { return true; }
         var s = this.snapshot();
-        return s.level >= 2;
+        if (s.level >= 2) { return true; }
+        /* v55 — 이 기기 계량기뿐 아니라 전체 기기 합산(meta/usage)도 본다.
+           PC 60% + 폰 60% = 실제 120%인데 양쪽 다 계속 보내던 구멍을 막는다(95%에서 멈춤). */
+        if (num(s.totalMaxPct) >= USAGE_SYNC.blockTotalPct) { return true; }
+        return false;
       },
       blockByError: function (err) {
         resetIfNeeded();
@@ -1235,33 +1288,25 @@
     /* 큐는 메모리에 항상 살아 있고, 저장만 실패해도 계속 쓸 수 있다 */
     function persist() { setItemSafe(storage, key, JSON.stringify(state), opts); }
 
-    return {
-      list: function () { return clone(state.items) || []; },
-      pending: function () {
-        return state.items.filter(function (it) { return it.state !== 'sent'; });
-      },
-      count: function () {
-        var n = 0;
-        state.items.forEach(function (it) { if (it.state !== 'sent') { n++; } });
-        return n;
-      },
-      summary: function () {
-        var s = { pending: 0, failed: 0, unacked: 0, sent: 0, oldestAt: '' };
-        state.items.forEach(function (it) {
-          if (it.state === 'sent') { s.sent++; return; }
-          if (it.state === 'failed') { s.failed++; }
-          else if (it.state === 'sent-unacked') { s.unacked++; }
-          else { s.pending++; }
-          if (!s.oldestAt || it.at < s.oldestAt) { s.oldestAt = it.at; }
-        });
-        return s;
-      },
-      enqueue: function (op) {
-        /* 같은 문서에 대한 대기 항목은 마지막 것만 남긴다 (무료 쓰기 절약) */
-        var path = String(op.path || '');
+    /* v55 — 여러 건을 한 번에 넣는다(capture·분할 업로더). 예전에는 건마다 persist()
+       (큐 전체 JSON 직렬화 + localStorage 쓰기)를 해서 1,500건이면 O(n²) 로 멈췄다. */
+    function enqueueMany(ops) {
+      var made = [];
+      var list = Array.isArray(ops) ? ops : [];
+      if (!list.length) { return made; }
+      var drop = {};
+      list.forEach(function (op) {
+        if (op && op.path) { drop[String(op.path)] = 1; }
+      });
+      if (Object.keys(drop).length) {
+        /* 같은 문서에 대한 이전 대기 항목은 마지막 것만 남긴다 (무료 쓰기·큐 크기 절약) */
         state.items = state.items.filter(function (it) {
-          return !(it.path === path && it.state === 'pending');
+          return !(it.state === 'pending' && drop[it.path]);
         });
+      }
+      list.forEach(function (op) {
+        if (!op) { return; }
+        var path = String(op.path || '');
         var item = {
           id: 'op_' + now().toString(36) + '_' + (seq++).toString(36) + Math.random().toString(36).slice(2, 6),
           path: path,
@@ -1273,9 +1318,64 @@
           error: ''
         };
         state.items.push(item);
-        persist();
-        return item;
+        made.push(item);
+      });
+      persist();
+      return made;
+    }
+
+    return {
+      list: function () { return clone(state.items) || []; },
+      /* v55 — 화면(대기 목록)은 마지막 몇 건만 보여 준다. list() 는 900건이면 그 전체를
+         깊은 복사하느라 화면이 멈췄다. recent(n) 은 뒤에서 n건만 얕게 돌려준다. */
+      recent: function (n) {
+        var out = [];
+        var want = Math.max(0, num(n) || 40);
+        for (var i = state.items.length - 1; i >= 0 && out.length < want; i--) {
+          var it = state.items[i];
+          if (!it || it.state === 'sent') { continue; }
+          out.push({ id: it.id, path: it.path, state: it.state, at: it.at, attempts: it.attempts, error: it.error });
+        }
+        return out;
       },
+      /* dead = 서버가 영구 거부한 항목(격리). 다시 시도하지 않고, 대기 건수에도 세지 않는다 */
+      pending: function () {
+        return state.items.filter(function (it) { return it.state !== 'sent' && it.state !== 'dead'; });
+      },
+      count: function () {
+        var n = 0;
+        state.items.forEach(function (it) { if (it.state !== 'sent' && it.state !== 'dead') { n++; } });
+        return n;
+      },
+      deadCount: function () {
+        var n = 0;
+        state.items.forEach(function (it) { if (it.state === 'dead') { n++; } });
+        return n;
+      },
+      dead: function (limit) {
+        var out = [];
+        var want = Math.max(0, num(limit) || 20);
+        state.items.forEach(function (it) {
+          if (out.length >= want) { return; }
+          if (it.state !== 'dead') { return; }
+          out.push({ id: it.id, path: it.path, at: it.at, attempts: it.attempts, error: it.error });
+        });
+        return out;
+      },
+      summary: function () {
+        var s = { pending: 0, failed: 0, unacked: 0, sent: 0, dead: 0, oldestAt: '' };
+        state.items.forEach(function (it) {
+          if (it.state === 'sent') { s.sent++; return; }
+          if (it.state === 'dead') { s.dead++; return; }
+          if (it.state === 'failed') { s.failed++; }
+          else if (it.state === 'sent-unacked') { s.unacked++; }
+          else { s.pending++; }
+          if (!s.oldestAt || it.at < s.oldestAt) { s.oldestAt = it.at; }
+        });
+        return s;
+      },
+      enqueue: function (op) { return enqueueMany([op])[0]; },
+      enqueueMany: function (ops) { return enqueueMany(ops); },
       remove: function (ids) {
         var set = {};
         (ids || []).forEach(function (id) { set[id] = 1; });
@@ -1297,9 +1397,19 @@
       },
       retryAll: function () {
         state.items.forEach(function (it) {
-          if (it.state === 'failed') { it.state = 'pending'; it.error = ''; }
+          if (it.state === 'failed' || it.state === 'dead') { it.state = 'pending'; it.error = ''; }
         });
         persist();
+      },
+      /* v55 — 영구 거부(dead)로 격리된 항목만 다시 보낸다(사용자가 원인을 고친 뒤) */
+      retryDead: function () {
+        var n = 0;
+        state.items.forEach(function (it) {
+          if (it.state !== 'dead') { return; }
+          it.state = 'pending'; it.error = ''; it.attempts = 0; n++;
+        });
+        if (n) { persist(); }
+        return n;
       },
       /* 조건에 맞는 항목만 지운다.
          · dropWhere('failed') 처럼 상태 이름을 주면 그 상태만
@@ -1341,7 +1451,7 @@
       var after = 0;
       try { after = usage.snapshot().level; } catch (e) { after = 0; }
       if (after !== before) { emit('usage', usage.snapshot()); }
-      /* 사용량이 늘었으면 잠시 뒤 한 번만 합산 문서에 올려 본다(60초 간격·최소 변화량은 pushUsageNow 가 판단) */
+      /* 사용량이 늘었으면 잠시 뒤 한 번만 합산 문서에 올려 본다(5분 간격·최소 변화량은 pushUsageNow 가 판단) */
       scheduleUsagePush();
     };
     /* v50 — 읽기 사용량은 모아서 한 번에 기록한다.
@@ -1375,7 +1485,8 @@
          meta/usage 구독·쓰기를 아예 시도하지 않는다(오류도 내지 않는다).
        · 이 문서의 쓰기·수신은 계량기(tdk.fbUsage.v1)에 넣지 않는다 —
          합산 문서 자체가 사용량을 늘려 다시 쓰는 되먹임 고리를 막기 위해서다.
-       · 올리기는 최소 60초 간격 + 읽기 20/쓰기·삭제 5 이상 변화일 때만. */
+       · 올리기는 최소 5분 간격 + 읽기·쓰기·삭제 각 20건 이상 변화일 때만(차단 상태 변화는 바로).
+       · v55 — 이 기기 계기판이 아니라 기기 합산이 95%를 넘으면 flush 를 멈춘다(다른 기기 몫까지 고려). */
     var usageSync = {
       remote: null,        /* 서버에서 받은 마지막 meta/usage 문서 */
       last: null,          /* 마지막으로 올린 내 값 */
@@ -1462,6 +1573,9 @@
       s.syncReason = usageSyncReason();
       s.syncAt = usageSync.lastPushAt;
       s.syncCount = usageSync.pushes;
+      /* v55 — 기기 합산이 한도에 가까워 동기화를 멈춘 상태인지(화면 문구용) */
+      s.totalBlockPct = USAGE_SYNC.blockTotalPct;
+      s.totalBlock = v.maxPct >= USAGE_SYNC.blockTotalPct && !s.blocked;
       return s;
     };
 
@@ -1489,6 +1603,13 @@
       var reason = usageSyncReason();
       if (reason) { return Promise.resolve({ ok: false, pushed: false, reason: reason, skipped: true }); }
       if (usageSync.busy) { return Promise.resolve({ ok: false, pushed: false, reason: 'busy' }); }
+      /* v55 — 한도에 막힌 상태에서는 합산 문서 쓰기도 하지 않는다(5분마다 실패를 반복하던 것).
+         단 "막혔다"는 사실은 한 번은 알려야 다른 기기가 같이 멈춘다 — 이미 막힘을 올렸으면 건너뛴다. */
+      try {
+        if (usage.blocked() && usageSync.last && usageSync.last.blocked) {
+          return Promise.resolve({ ok: false, pushed: false, reason: 'quota', skipped: true });
+        }
+      } catch (e) {}
       var at = now();
       var local = myUsageEntry(at);
       var d = (force === true) ? { push: true, reason: 'force' } : usagePushDecision(local, usageSync.last, at, usageSync.lastAt);
@@ -1551,6 +1672,8 @@
     var idbOpenPromise = null;
     var idbDisabled = false;
     var queuedCaptures = {};
+    /* v55 — 받아 두지 않은 범위라 보류한 삭제를 묶음을 연 뒤 한 번 더 시도할 때의 중복 방지 */
+    var captureRetryQueued = {};
     var shadowReadyResolve = null;
     var shadowReadyPromise = new Promise(function (resolve) { shadowReadyResolve = resolve; });
 
@@ -1608,6 +1731,15 @@
     var skippedTuitionIds = 0;
     var lastSkippedTuitionId = '';
     var bulkDeleteBlocked = null;
+    /* v55 — 사용자가 명시적으로 확인한 "대량 삭제 1회 허용" 통로와, 받아 두지 않은 범위라
+       보류한 삭제 목록. 둘 다 진단·화면 표시용으로 남긴다. */
+    var bulkApproval = null;      /* { at, collections:{이름:1}|null, once:true, src } */
+    var deleteHeld = null;        /* { at, key, count, collections:['tuition'], message } */
+    /* v55 — 받지 않은 범위라 보류한 삭제의 "의도"를 경로별로 기억한다.
+       묶음을 열어 받아 오면 그 문서가 로컬에 다시 들어오므로(서버 값), 의도를 따로 남겨 두었다가
+       그때 다시 지운다. 이게 없으면 사용자는 "지웠는데 다시 나타났다"를 겪는다. */
+    var pendingDeletes = {};      /* path → { at, key, coll } */
+    var restoreReconciled = null; /* 복원 직후 그림자 재조정 결과(진단용) */
     var lastSyncAt = '';
     var lastSyncMark = null;      /* 컬렉션별 마지막 동기화 시각(tdk.fbLastSync.v1) — 인메모리 사본 */
     var lastSyncTimer = null;
@@ -1822,11 +1954,66 @@
       var keys = Object.keys(suppressedKeys);
       suppressedKeys = {};
       if (!was) { return { ok: true, suppressed: false, keys: [] }; }
+      /* v55 — 복원 직후 그림자를 복원본에 맞게 다시 심는다.
+         예전에는 로컬(LS)만 덮어쓰고 그림자는 그대로라, 어느 한 칸만 고쳐도 그 키의 모든 문서가
+         "바뀐 것"으로 보여 옛 백업 값이 서버로 밀려 올라갔다(백업 뒤 다른 기기가 고친 값이 되돌아감).
+         이제 복원본과 같은 내용은 그림자 해시가 맞아 아예 보내지 않고, 복원본에 없는 문서는
+         그림자에서도 빼서 서버에서 지우지 않는다. */
+      var rec = null;
+      try { rec = reconcileShadow(keys); } catch (e) { rec = { error: errorText(e) }; }
       var since = String(o.since || restoreAt || '');
       var rewound = rewindDelta(since);
       if (rewound) { resubscribe(); }
-      emit('restore-done', { at: isoOf(now()), since: since, keys: keys, rewound: !!rewound });
-      return { ok: true, suppressed: false, keys: keys, since: since, rewound: rewound };
+      emit('restore-done', { at: isoOf(now()), since: since, keys: keys, rewound: !!rewound, shadow: rec });
+      return { ok: true, suppressed: false, keys: keys, since: since, rewound: rewound, shadow: rec };
+    }
+
+    /* 복원한 키들의 그림자를 복원본 내용으로 새로 심는다(버전은 이전 그림자 값 유지 —
+       나중에 고친 칸이 서버의 더 새 값을 이기려면 버전이 낮아지면 안 된다). */
+    function reconcileShadow(names) {
+      var base = basePath();
+      var out = { keys: [], entries: 0, dropped: 0, ghosts: 0, at: isoOf(now()) };
+      (names || []).forEach(function (n) {
+        var e = entryByName(n);
+        if (!e || e.kind === 'local') { return; }
+        var prefix = (e.kind === 'object' || e.kind === 'value')
+          ? (base + '/meta/' + safeId(e.meta))
+          : (base + '/' + e.coll);
+        var prevVers = {};
+        Object.keys(shadow).forEach(function (p) {
+          if (!(p === prefix || p.indexOf(prefix + '/') === 0)) { return; }
+          var old = shadow[p];
+          if (old && !old.d) { prevVers[p] = num(old.v); }
+          if (old && old.d) { out.ghosts++; }      /* 서버가 지운 기록을 복원본이 되살린 경우 */
+          delete shadow[p];
+          out.dropped++;
+        });
+        function seed(p, body, hash) {
+          putShadowEntry(p, {
+            v: num(prevVers[p]), m: {}, u: '', by: '', d: false,
+            h: hash, b: e.kind === 'events' ? null : mergeMetaBody(body, {}),
+            t: body && body.time, r: 1
+          });
+          out.entries++;
+        }
+        if (e.kind === 'events') {
+          var map = unionEventDocs(readValue('attendance'), readValue('records'), base, { deviceId: deviceId });
+          Object.keys(map).forEach(function (p) {
+            var b = map[p].body;
+            if (!b) { return; }                    /* "있음" 표시는 그림자를 만들지 않는다 */
+            seed(p, b, eventHash(b));
+          });
+        } else {
+          docsForEntry(e, readValue(e.name), base, { deviceId: deviceId }).forEach(function (d) {
+            if (!d.body) { return; }
+            seed(d.path, d.body, contentHash(d.body));
+          });
+        }
+        out.keys.push(n);
+      });
+      saveShadow();
+      restoreReconciled = out;
+      return out;
     }
     function entryByName(n) {
       for (var i = 0; i < registry.length; i++) { if (registry[i].name === n) { return registry[i]; } }
@@ -1873,6 +2060,13 @@
     /* 그림자에 문서 상태를 적는다 — 새 항목이면 항목 수를 센다(trimShadow 를 가볍게) */
     function putShadowEntry(path, entry) {
       if (!shadow[path]) { shadowCount++; shadowSinceTrim++; }
+      /* v55 — 서버에 있다고 확인된 표시(s=1)와 "복원본이라 칸별로만 보낸다" 표시(r=1)는
+         항목을 새로 쓸 때 지정하지 않으면 이어 받는다 (지우려면 0 을 넣는다) */
+      var prev = shadow[path];
+      if (prev && isPlain(prev) && isPlain(entry)) {
+        if (entry.s === undefined && prev.s) { entry.s = prev.s; }
+        if (entry.r === undefined && prev.r) { entry.r = prev.r; }
+      }
       shadow[path] = entry;
       return entry;
     }
@@ -2407,12 +2601,63 @@
       return true;
     }
 
-    function capture(entry) {
+    /* v55 — 문서에서 빠진 필드( 진짜 지우기 )를 빈 값으로 바꿔 적는다.
+       merge:true 쓰기만으로는 "필드가 없어졌다"는 사실이 서버에 전달되지 않아 다음 수신에서
+       옛 값이 되살아났다("번호를 지웠는데 다시 생겨요"). 앱은 이제 지우기 대신 '' 을 쓰지만
+       (index.html), 예전 버전·다른 코드 경로가 필드를 지운 경우도 여기서 빈 값으로 바꾼다.
+       · 문자열·숫자·참·거짓 → '' (앱이 쓰는 "비어 있음" 규칙과 같다)
+       · 객체·배열 → null   (빈 문자열로 바꾸면 모양이 깨진다) */
+    function applyClearedFields(prevBody, body) {
+      var pf = flatten(prevBody || {});
+      var nf = flatten(body || {});
+      var cleared = [];
+      Object.keys(pf).forEach(function (f) {
+        if (hasOwn(nf, f)) { return; }
+        var v = pf[f];
+        nf[f] = (v != null && typeof v === 'object') ? null : '';
+        cleared.push(f);
+      });
+      if (!cleared.length) { return { body: body, cleared: cleared }; }
+      return { body: unflatten(nf), cleared: cleared };
+    }
+
+    /* v55 — 출결 삭제 표시(툼스톤). 라이브 규칙 validEvent() 의 필수칸(date·studentId·kind·time)을
+       채워 둔다. 문서가 서버에 있으면 update 라 모양 검사를 하지 않고, 혹시 없어서 create 가 되면
+       규칙의 hasOnly(eventFields()) 가 `_deleted` 를 막는다(규칙을 못 바꾸므로). 그래서 서버에
+       있다고 확인된 문서(s=1)에만 이 본문을 쓰고, 확인되지 않은 문서는 삭제(del)로 보낸다. */
+    function eventTombstoneBody(path, sh, ver, at) {
+      var m = parseEventId(String(path || '').split('/').pop());
+      if (!m || !isEventDateKey(m.date) || !m.studentId || String(m.studentId).length > 120) { return null; }
+      var t = normEventTime(sh && sh.t !== undefined ? sh.t : '');
+      return {
+        date: m.date,
+        studentId: m.studentId,
+        kind: m.kind,
+        time: t || NO_TIME,
+        eventId: eventIdOf(m.date, m.studentId, m.kind),
+        manual: !t,
+        _deleted: true,
+        _ver: ver,
+        _updatedAt: at,
+        _updatedBy: deviceId
+      };
+    }
+
+    /* 대량 삭제 1회 허용 — 사용자가 화면에서 확인한 경우에만 통로가 열린다 */
+    function approvalCovers(collName) {
+      if (!bulkApproval) { return false; }
+      if (!bulkApproval.collections) { return true; }
+      return !!bulkApproval.collections[String(collName || '')];
+    }
+
+    function capture(entry, retryOpts) {
+      var afterLoad = !!(retryOpts && retryOpts.afterLoad);
       /* v51 — 복원 중이면 아무것도 올리지 않는다 */
       if (suppressCapture) {
         if (entry && entry.name) { suppressedKeys[entry.name] = 1; }
         return;
       }
+      if (!entry) { return; }
       /* 역할 미확인 기기는 아무것도 올리지 않는다 (그림자를 앞지르지도 않는다) */
       if (effectiveRole() !== 'admin') {
         emit('blocked-local', { key: entry.name, reason: 'role-unverified' });
@@ -2432,9 +2677,15 @@
         if (!d || !d.body) { return; }        /* v52 — "있음" 표시(과거 수동 기록)는 보내지 않는다 */
         var src = live[p].entry;
         var body = clone(d.body) || {};
-        var h = bodyHash(src.kind, body);
         var sh = shadow[p];
-        if (sh && !sh.d && sh.h === h) { return; }          /* 내용이 그대로 → 보내지 않음 */
+        /* v55 — 필드가 사라진 경우 빈 값으로 채워 "지움"이 서버까지 전달되게 한다.
+           출결은 규칙(eventFields)이 칸을 제한하므로 건드리지 않는다. */
+        if (src.kind !== 'events') {
+          var fixed = applyClearedFields(sh && sh.b ? sh.b : {}, body);
+          if (fixed.cleared.length) { body = fixed.body; }
+        }
+        var h = bodyHash(src.kind, body);
+        if (sh && !sh.d && sh.h === h) { return; }           /* 내용이 그대로 → 보내지 않음 */
         /* v52 — 과거(오늘 이전) 날짜의 "시각 없는 수동·CSV 출석"은 처음 올릴 때
            분할 업로더(pumpEventBacklog)가 맡는다. 여기서 한꺼번에 밀어 넣으면
            무료 한도(하루 쓰기 2만)를 한 번에 태우고, 그날 정상 출결 쓰기가 막힌다.
@@ -2450,13 +2701,24 @@
         var prevBody = sh && sh.b ? sh.b : {};
         var meta = stampFields(prevBody, sh ? sh.m : {}, body, { at: isoOf(now()), by: deviceId });
         var ver = (sh ? num(sh.v) : 0) + 1;
-        var doc = valueFields(body);
+        var docBody2 = valueFields(body);
+        /* v55 — 드라이브 복원 직후에는 그림자가 복원본으로 새로 심겨 있다(r=1).
+           그 상태에서 한 칸만 고치면 그 문서 전체(옛 백업 값)를 덮어쓰지 않고, 바뀐 칸만 보낸다.
+           (백업 뒤 다른 기기에서 고친 전화번호가 옛 값으로 되돌아가던 문제) */
+        if (sh && sh.r === 1 && num(sh.v) > 0 && src.kind !== 'events') {
+          var pf0 = flatten(prevBody), nf0 = flatten(body), only = {};
+          Object.keys(nf0).forEach(function (f) {
+            if (!hasOwn(pf0, f) || stableStringify(pf0[f]) !== stableStringify(nf0[f])) { only[f] = nf0[f]; }
+          });
+          if (Object.keys(only).length) { docBody2 = unflatten(only); }
+        }
+        var doc = docBody2;
         doc._ver = ver;
         doc._updatedAt = isoOf(now());
         doc._updatedBy = deviceId;
         doc._fieldMeta = meta;
         putShadowEntry(p, {
-          v: ver, m: meta, u: doc._updatedAt, by: deviceId, h: h, d: false,
+          v: ver, m: meta, u: doc._updatedAt, by: deviceId, h: h, d: false, r: sh && sh.r === 1 ? 1 : undefined,
           b: src.kind === 'events' ? null : mergeMetaBody(body, meta),
           t: body.time
         });
@@ -2469,6 +2731,8 @@
         return base + '/' + e.coll;
       };
       var prefixes = sources.map(prefixOf);
+      var prefixKind = {};
+      sources.forEach(function (e) { prefixKind[prefixOf(e)] = e.kind; });
       /* 한 경로가 어느 컬렉션(또는 meta 문서) 아래인지 — 가장 긴 접두사 */
       var prefixFor = function (p) {
         var hit = '';
@@ -2483,7 +2747,8 @@
       /* ---------- v51 대량 삭제 방지 ----------
          그림자가 10건 이상인 컬렉션에서 한 번에 20% 이상을 삭제 표시하려 하면 그 컬렉션의
          삭제만 막는다(값 변경은 그대로 보낸다). 원비 ID 해석 버그·빈 명단 같은 사고가
-         서버의 원비·원생을 통째로 지우는 것을 막는 마지막 안전장치다. */
+         서버의 원비·원생을 통째로 지우는 것을 막는 마지막 안전장치다.
+         v55 — 사용자가 화면에서 "1회 허용"을 확인했으면 그 컬렉션은 이번 한 번 통과한다. */
       var totals = {}, doomed = {};
       Object.keys(shadow).forEach(function (p) {
         var pr = prefixFor(p);
@@ -2494,12 +2759,14 @@
         if (!live[p]) { doomed[pr] = (doomed[pr] || 0) + 1; }
       });
       var blockedAt = {};
+      var approvedColls = [];
       Object.keys(doomed).forEach(function (pr) {
         var total = totals[pr] || 0;
         var want = doomed[pr] || 0;
-        if (total >= BULK_DELETE_MIN_DOCS && want >= Math.ceil(total * BULK_DELETE_RATIO)) {
-          blockedAt[pr] = { total: total, deletes: want };
-        }
+        if (!(total >= BULK_DELETE_MIN_DOCS && want >= Math.ceil(total * BULK_DELETE_RATIO))) { return; }
+        var collName = String(pr).replace(base + '/', '');
+        if (approvalCovers(collName)) { approvedColls.push(collName); return; }
+        blockedAt[pr] = { total: total, deletes: want };
       });
       var heldPaths = 0;
       var heldDetail = [];
@@ -2516,23 +2783,72 @@
       }
       /* v53 — 지연 구독한 컬렉션은 "받아 둔 범위" 안에서만 삭제 표시한다.
          상담·차량·쿠폰을 아직 안 받았거나 원비는 최근 몇 달만 받은 상태에서,
-         그림자에 없던 문서를 지우면 서버만 사라질 수 있기 때문이다. */
+         그림자에 없던 문서를 지우면 서버만 사라질 수 있기 때문이다.
+         v55 — 조용히 버리지 않는다: 그 묶음을 열어(ensureLoaded) 받아 둔 뒤 한 번 더 시도하고,
+         그래도 안 되면 화면에 "이 기기에서는 지울 수 없습니다"로 알린다. */
       var covNow = adapterCoverage();
+      var needLoad = {};
+      var heldOutOfRange = [];
+      /* 삭제 후보 = 그림자에 있는데 지금 로컬 값에 없는 문서 + 예전에 보류했던 삭제의 경로 */
+      var tombPaths = [];
       Object.keys(shadow).forEach(function (p) {
         if (!underAny(p)) { return; }
         if (live[p]) { return; }
+        tombPaths.push(p);
+      });
+      Object.keys(pendingDeletes).forEach(function (p) {
+        if (!underAny(p)) { return; }
+        var pd = shadow[p];
+        if (!pd || pd.d) { delete pendingDeletes[p]; return; }
+        if (tombPaths.indexOf(p) === -1) { tombPaths.push(p); }
+      });
+      tombPaths.forEach(function (p) {
         var sh2 = shadow[p];
         if (!sh2 || sh2.d) { return; }
         if (blockedAt[prefixFor(p)]) { return; }      /* v51 — 대량 삭제는 보류한다 */
-        if (!deletablePath(p, covNow)) { return; }    /* v53 — 아직 받지 않은 범위는 건드리지 않는다 */
+        if (!deletablePath(p, covNow)) {
+          /* 아직 받지 않은 범위 — 받은 뒤에 지운다(의도를 기억해 둔다) */
+          var seg = String(p).split('/');
+          var coll2 = seg.length >= 4 ? seg[2] : '';
+          if (coll2 === 'tuition') { needLoad.tuition = 1; }
+          else if (coll2 === 'counsel' || coll2 === 'shuttle' || coll2 === 'coupons') { needLoad[coll2] = 1; }
+          pendingDeletes[p] = { at: isoOf(now()), key: entry.name, coll: coll2 };
+          heldOutOfRange.push(p);
+          return;
+        }
+        /* 묶음을 열어 받아 와서 로컬에 다시 들어온 문서라도, 사용자가 지운 것이면 지운다 */
+        if (live[p] && pendingDeletes[p]) {
+          try { applyRemoteDoc(p, entry, { deleted: true, body: {} }); } catch (e) { lastError = errorText(e); }
+        }
+        delete pendingDeletes[p];
         var ver2 = num(sh2.v) + 1;
         var at2 = isoOf(now());
+        var kind2 = prefixKind[prefixFor(p)] || '';
         putShadowEntry(p, { v: ver2, m: {}, u: at2, by: deviceId, h: '', d: true, b: null, t: undefined });
-        changes.push({
-          path: p,
-          body: { _deleted: true, _ver: ver2, _updatedAt: at2, _updatedBy: deviceId }
-        });
+        if (kind2 === 'events') {
+          /* v55 — 출결 툼스톤은 규칙의 create 검사(hasOnly(eventFields))를 통과하지 못한다.
+             서버에 있다고 확인된 문서(s=1)만 툼스톤(update)으로, 확인되지 않은 문서는 삭제(del)로 보낸다.
+             (오프라인·한도 초과 중에 찍은 출결을 그 자리에서 지우면 서버에 문서가 없어
+              툼스톤 생성이 영구 거부 → 배치 전체가 막히던 원인) */
+          if (num(sh2.s) === 1) {
+            var tbody = eventTombstoneBody(p, sh2, ver2, at2);
+            if (tbody) { changes.push({ path: p, body: tbody }); }
+            else { changes.push({ path: p, del: true, body: null }); }
+          } else {
+            changes.push({ path: p, del: true, body: null });
+          }
+        } else {
+          changes.push({
+            path: p,
+            body: { _deleted: true, _ver: ver2, _updatedAt: at2, _updatedBy: deviceId }
+          });
+        }
       });
+      if (approvedColls.length) {
+        /* 1회 허용은 한 번만 쓴다 — 다음 대량 삭제는 다시 확인을 받는다 */
+        bulkApproval = null;
+        emit('bulk-delete-approved', { at: isoOf(now()), key: entry.name, collections: approvedColls });
+      }
       if (Object.keys(blockedAt).length) {
         /* 경고 상태를 남긴다 — 화면(상태 문구)과 진단(engine.bulkDeleteState())에서 보인다 */
         bulkDeleteBlocked = {
@@ -2542,12 +2858,47 @@
         };
         emit('bulk-delete-blocked', bulkDeleteBlocked);
       }
+      if (heldOutOfRange.length && !afterLoad && typeof ensureLoaded === 'function') {
+        /* 받아 두지 않은 범위 — 그 묶음을 지금 열고, 첫 스냅샷이 오면 이 키를 한 번 더 처리한다 */
+        var names = Object.keys(needLoad);
+        if (names.length) {
+          captureRetryQueued[entry.name] = 1;
+          ensureLoaded(names).then(function (res) {
+            captureRetryQueued[entry.name] = 0;
+            var any = !res || res.ok !== false;
+            if (!any) { return; }
+            try { capture(entry, { afterLoad: true }); scheduleFlush(); } catch (e) { lastError = errorText(e); }
+          }, function () { captureRetryQueued[entry.name] = 0; });
+        }
+        deleteHeld = {
+          at: isoOf(now()), key: entry.name, count: heldOutOfRange.length,
+          collections: Object.keys(needLoad),
+          paths: heldOutOfRange.slice(0, 20),
+          message: '아직 받지 않은 ' + Object.keys(needLoad).join('·') + ' 기록 ' + heldOutOfRange.length +
+            '건은 지금 서버에서 확인하는 중입니다 — 잠시 뒤 다시 지워 주세요.'
+        };
+        emit('delete-held', deleteHeld);
+      } else if (!heldOutOfRange.length && !Object.keys(pendingDeletes).length) {
+        /* 보류하던 삭제가 모두 처리됐다 — 안내를 내린다 */
+        if (deleteHeld) { deleteHeld = null; emit('delete-held', null); }
+      }
+      if (heldOutOfRange.length && afterLoad) {
+        deleteHeld = {
+          at: isoOf(now()), key: entry.name, count: heldOutOfRange.length,
+          collections: Object.keys(needLoad),
+          paths: heldOutOfRange.slice(0, 20),
+          message: '이 기기에서는 지울 수 없는 기록 ' + heldOutOfRange.length +
+            '건이 있습니다(아직 받지 않은 범위) — 「🔄 전체 다시 불러오기」 뒤에 다시 지워 주세요.'
+        };
+        emit('delete-held', deleteHeld);
+      }
 
       if (changes.length) {
         saveShadow();
-        changes.forEach(function (c) {
-          outbox.enqueue({ path: c.path, body: c.body });
-        });
+        /* v55 — 큐에 한 번에 넣는다(건마다 저장하지 않는다) */
+        outbox.enqueueMany(changes.map(function (c) {
+          return c.del === true ? { path: c.path, del: true } : { path: c.path, body: c.body };
+        }));
         emit('captured', { key: entry.name, count: changes.length });
       }
     }
@@ -2583,7 +2934,8 @@
     var eventPump = {
       timer: null, running: false, marker: null,
       lastAt: '', result: '', reason: '',
-      uploaded: 0, total: 0, remaining: 0, done: false
+      uploaded: 0, total: 0, remaining: 0, done: false,
+      queue: null            /* v55 — 한 번 만든 대기 목록(240건씩 꺼내 쓴다) */
     };
 
     function eventBacklogState() {
@@ -2600,6 +2952,7 @@
         shared: sharedBacklogCount(),
         marker: eventPump.marker ? clone(eventPump.marker) : null,
         chunk: EVENT_UPLOAD.chunk,
+        maxQueued: EVENT_UPLOAD.maxQueued,
         reserveWrites: EVENT_UPLOAD.reserveWrites,
         pending: outbox.count(),
         running: !!eventPump.running
@@ -2682,11 +3035,18 @@
         return Promise.resolve({ ok: false, reason: blocked, state: eventBacklogState() });
       }
       var base = basePath();
-      var scan;
-      try { scan = dayOnlyEventBacklog(base); }
-      catch (e) {
-        eventPump.reason = 'scan';
-        return Promise.resolve({ ok: false, reason: 'scan', error: errorText(e), state: eventBacklogState() });
+      /* v55 — 스캔 결과(11,800건)를 매번 다시 만들지 않는다. 한 번 만들어 두고 240건씩 꺼내 쓴다.
+         (예전에는 90초마다 전체 출결을 다시 훑어 PC 가 버벅였다) */
+      var scan = null;
+      if (eventPump.queue && eventPump.queue.length) {
+        scan = { cands: eventPump.queue, total: eventPump.total || eventPump.queue.length, cached: true };
+      } else {
+        try { scan = dayOnlyEventBacklog(base); }
+        catch (e) {
+          eventPump.reason = 'scan';
+          return Promise.resolve({ ok: false, reason: 'scan', error: errorText(e), state: eventBacklogState() });
+        }
+        eventPump.queue = scan.cands.slice();
       }
       eventPump.total = scan.total;
       eventPump.remaining = scan.cands.length;
@@ -2694,6 +3054,7 @@
       if (!scan.cands.length) {
         eventPump.done = true; eventPump.uploaded = 0;
         eventPump.result = 'done'; eventPump.lastAt = isoOf(now());
+        eventPump.queue = null;
         emit('event-backlog', eventBacklogState());
         return Promise.resolve({ ok: true, uploaded: 0, remaining: 0, done: true, total: scan.total, state: eventBacklogState() });
       }
@@ -2704,12 +3065,23 @@
         eventPump.done = true; eventPump.remaining = 0; eventPump.uploaded = 0;
         eventPump.result = 'already'; eventPump.reason = 'already'; eventPump.lastAt = isoOf(now());
         eventPump.running = false;
+        eventPump.queue = null;
         emit('event-backlog', eventBacklogState());
         return Promise.resolve({ ok: true, already: true, uploaded: 0, remaining: 0, total: scan.total, shared: shared, state: eventBacklogState() });
       }
       return Promise.resolve(true).then(function () {
+        /* v55 — 큐가 이미 차 있으면 다음 묶음을 넣지 않는다(대기 900건 → 화면 버벅임 방지) */
+        var queued = 0;
+        try { queued = outbox.pending().length; } catch (e) { queued = 0; }
+        if (queued >= EVENT_UPLOAD.maxQueued) {
+          eventPump.uploaded = 0; eventPump.reason = 'queue';
+          eventPump.result = 'queue'; eventPump.lastAt = isoOf(now());
+          emit('event-backlog', eventBacklogState());
+          return { ok: true, uploaded: 0, remaining: scan.cands.length, blocked: 'queue', total: scan.total, state: eventBacklogState() };
+        }
         var room = eventUploadRoom();
-        var take = scan.cands.slice(0, Math.max(0, Math.min(EVENT_UPLOAD.chunk, room)));
+        var quotaLeft = Math.max(0, EVENT_UPLOAD.maxQueued - queued);
+        var take = scan.cands.slice(0, Math.max(0, Math.min(EVENT_UPLOAD.chunk, room, quotaLeft)));
         if (!take.length) {
           eventPump.uploaded = 0; eventPump.reason = 'reserve';
           eventPump.result = 'reserve'; eventPump.lastAt = isoOf(now());
@@ -2717,6 +3089,7 @@
           return { ok: true, uploaded: 0, remaining: scan.cands.length, blocked: 'reserve', total: scan.total, state: eventBacklogState() };
         }
         var at2 = isoOf(now());
+        var ops = [];
         take.forEach(function (c) {
           var sh = shadow[c.path];
           var prevBody = sh && sh.b ? sh.b : {};
@@ -2728,11 +3101,17 @@
           doc._updatedBy = deviceId;
           doc._fieldMeta = meta;
           putShadowEntry(c.path, { v: ver, m: meta, u: at2, by: deviceId, h: eventHash(c.body), d: false, b: null, t: c.body.time });
-          outbox.enqueue({ path: c.path, body: doc });
+          ops.push({ path: c.path, body: doc });
         });
+        /* v55 — 240건을 한 번에 넣는다(건마다 큐 저장 → O(n²) 로 멈추던 것) */
+        outbox.enqueueMany(ops);
         saveShadow();
+        /* 이미 꺼낸 것은 대기 목록에서 뺀다 */
+        var donePaths = {};
+        take.forEach(function (c) { donePaths[c.path] = 1; });
+        eventPump.queue = scan.cands.filter(function (c) { return !donePaths[c.path]; });
         eventPump.uploaded = take.length;
-        eventPump.remaining = scan.cands.length - take.length;
+        eventPump.remaining = eventPump.queue.length;
         eventPump.done = eventPump.remaining === 0;
         eventPump.result = 'uploaded';
         eventPump.lastAt = at2;
@@ -2743,7 +3122,9 @@
       }).then(function (res) {
         eventPump.running = false;
         if (res && res.remaining > 0) {
-          scheduleEventPump(res.blocked ? EVENT_UPLOAD.retryMs : EVENT_UPLOAD.intervalMs);
+          var wait = res.blocked ? EVENT_UPLOAD.retryMs
+            : (outbox.count() === 0 ? EVENT_UPLOAD.stepMs : EVENT_UPLOAD.intervalMs);
+          scheduleEventPump(wait);
         }
         return res;
       }, function (err) {
@@ -2914,6 +3295,8 @@
       var rv = remoteDoc ? num(remoteDoc._ver) : null;
       var by = (sentBody && sentBody._updatedBy) ||
         (remoteDoc && remoteDoc._updatedBy) || merged.updatedBy || deviceId;
+      var prev = shadow[path];
+      var onServer = !!(remoteDoc && !merged.deleted);
       putShadowEntry(path, {
         v: sentBody ? (num(merged.ver) + 1) : (rv != null && rv > 0 ? Math.max(rv, num(merged.ver)) : num(merged.ver)),
         m: merged.meta || {},
@@ -2921,9 +3304,15 @@
         by: by,
         d: merged.deleted === true,
         h: bodyHash(kind, body),
+        /* v55 — 서버 문서를 받았으면 "이 문서는 서버에 있다"(s=1)로 기억한다. 출결 삭제를
+           툼스톤(update)으로 보낼지 삭제(del)로 보낼지 이 표시로 정한다.
+           서버와 같은 내용이 되었으니 복원본 칸별 쓰기 표시(r)는 끝낸다. */
+        s: onServer ? 1 : (merged.deleted ? 0 : undefined),
+        r: onServer ? 0 : undefined,
         b: merged.deleted ? null : (kind === 'events' ? null : mergeMetaBody(body, merged.meta)),
         t: merged.deleted ? undefined : body.time
       });
+      if (prev && prev.s && !onServer && prev.d) { /* 삭제 수신 → 서버에 없다 */ }
       saveShadow();
     }
 
@@ -3077,13 +3466,13 @@
     }
 
     /* ---------- 전송 ---------- */
-    function scheduleFlush() {
+    function scheduleFlush(delayMs) {
       if (opts.autoflush === false) { return; }
       if (flushTimer) { return; }
       flushTimer = setTimeout(function () {
         flushTimer = null;
         flush().then(function () {}, function () {});
-      }, opts.flushMs || 700);
+      }, num(delayMs) > 0 ? num(delayMs) : (opts.flushMs || 700));
     }
 
     function online() {
@@ -3099,53 +3488,183 @@
       return { path: item.path, body: item.body, merge: true };
     }
 
+    /* v55 — 서버 저장이 확인된 문서를 그림자에 표시한다(출결 삭제를 툼스톤으로 보낼지 판단). */
+    function markShadowConfirmed(list) {
+      var changed = 0;
+      (list || []).forEach(function (it) {
+        if (!it || !it.path) { return; }
+        if (it.del === true) { return; }
+        if (it.body && it.body._deleted === true) { return; }
+        var sh = shadow[it.path];
+        if (!sh || sh.d) { return; }
+        if (sh.s === 1) { return; }
+        sh.s = 1;
+        changed++;
+      });
+      if (changed) { saveShadow(); }
+      return changed;
+    }
+
+    /* v55 — flush 재진입 가드.
+       재시도 타이머(30초)와 capture 가 같은 순간에 flush 를 부르면, ACK 를 기다리는 동안
+       같은 항목을 또 commit 해 같은 기록을 여러 번 쓰는(과금) 일이 있었다.
+       이제 진행 중이면 같은 약속을 돌려주고, 그 사이 새로 쌓인 항목은 끝난 뒤 한 번 더 보낸다. */
+    var flushInFlight = null;
+    var flushAgain = false;
+
     function flush() {
-      if (!adapter) { return Promise.resolve({ ok: false, reason: 'no-adapter', queued: outbox.count() }); }
+      if (flushInFlight) { flushAgain = true; return flushInFlight; }
+      var p = Promise.resolve().then(function () { return doFlush(); }).then(function (r) {
+        flushInFlight = null;
+        var again = flushAgain;
+        flushAgain = false;
+        if (again && outbox.count() > 0) { scheduleFlush(300); }
+        return r;
+      }, function (err) {
+        flushInFlight = null;
+        flushAgain = false;
+        throw err;
+      });
+      flushInFlight = p;
+      return p;
+    }
+
+    function doFlush() {
+      if (!adapter) { return { ok: false, reason: 'no-adapter', queued: outbox.count() }; }
       /* 서버 roles 로 역할이 확인되지 않은 상태(로그인 전·roles 문서 없음)에서는 서버로 아무것도 보내지 않는다 */
       if (effectiveRole() === 'none') {
         emit('role-blocked', { role: 'none', verified: verifiedRole, queued: outbox.count() });
-        return Promise.resolve({ ok: false, reason: 'role-unverified', queued: outbox.count() });
+        return { ok: false, reason: 'role-unverified', queued: outbox.count() };
       }
       if (!online()) {
         lastErrorKind = 'offline';
         emit('status', { state: 'offline', queued: outbox.count() });
-        return Promise.resolve({ ok: false, reason: 'offline', queued: outbox.count() });
+        return { ok: false, reason: 'offline', queued: outbox.count() };
       }
       if (usage.blocked()) {
         var snap = usage.snapshot();
         emit('quota-blocked', snap);
-        return Promise.resolve({ ok: false, reason: 'quota', blocked: true, queued: outbox.count(), usage: snap });
+        return { ok: false, reason: 'quota', blocked: true, queued: outbox.count(), usage: snap };
       }
       /* v53 — 모아 둔 문자 로그가 있으면 먼저 반영해 이번 배치에 함께 보낸다 */
       if (deferredEntries) { try { flushDeferred(); } catch (e) { lastError = errorText(e); } }
       var items = outbox.pending();
-      if (!items.length) { return Promise.resolve({ ok: true, sent: 0 }); }
+      if (!items.length) { return { ok: true, sent: 0 }; }
 
       var batches = [];
       for (var i = 0; i < items.length; i += SPARK.maxBatch) { batches.push(items.slice(i, i + SPARK.maxBatch)); }
-      var sentTotal = 0;
-      var failedErr = null;
 
-      function runBatch(bi) {
-        if (bi >= batches.length) { return Promise.resolve(); }
-        var batch = batches[bi];
+      /* 한 묶음을 보낸다. 영구 거부(permission-denied 등)면 반씩 나눠(bisect) 문제 문서만 찾아낸다.
+         예전에는 그 한 건 때문에 같은 배치의 정상 기록까지 전부 failed 가 되고,
+         30초마다 같은 실패를 되풀이하며 그 뒤 기록까지 영원히 막혔다. */
+      function commit(list) {
         var writes = 0, deletes = 0;
-        batch.forEach(function (it) {
-          if (it.del === true) { deletes++; } else { writes++; }
-        });
-        return adapter.writeBatch(batch.map(opOf)).then(function () {
-          usage.record('writes', writes);
-          usage.record('deletes', deletes);
-          sentTotal += batch.length;
-          return runBatch(bi + 1);
+        list.forEach(function (it) { if (it.del === true) { deletes++; } else { writes++; } });
+        return adapter.writeBatch(list.map(opOf)).then(function () {
+          if (writes) { usage.record('writes', writes); }
+          if (deletes) { usage.record('deletes', deletes); }
+          return { ok: list, dead: [], transient: null, quota: false };
+        }, function (err) {
+          if (isQuotaError(err)) { return { ok: [], dead: [], transient: err, quota: true }; }
+          if (!isPermanentError(err)) { return { ok: [], dead: [], transient: err, quota: false }; }
+          if (list.length === 1) { return { ok: [], dead: list, transient: null, quota: false }; }
+          var half = Math.ceil(list.length / 2);
+          return commit(list.slice(0, half)).then(function (a) {
+            if (a.transient) { return a; }
+            return commit(list.slice(half)).then(function (b) {
+              return { ok: a.ok.concat(b.ok), dead: a.dead.concat(b.dead), transient: b.transient, quota: b.quota };
+            });
+          });
         });
       }
 
-      return runBatch(0).then(function () {
+      var okItems = [], deadItems = [], failedItems = [];
+      var fatalError = null, quotaError = null;
+
+      function runBatches(bi) {
+        if (bi >= batches.length) { return Promise.resolve(); }
+        return commit(batches[bi]).then(function (res) {
+          okItems = okItems.concat(res.ok);
+          deadItems = deadItems.concat(res.dead);
+          if (res.transient) {
+            var doneIds = {};
+            res.ok.concat(res.dead).forEach(function (it) { doneIds[it.id] = 1; });
+            for (var j = bi; j < batches.length; j++) {
+              batches[j].forEach(function (it) { if (!doneIds[it.id]) { failedItems.push(it); } });
+            }
+            fatalError = res.transient;
+            if (res.quota) { quotaError = res.transient; }
+            return;
+          }
+          return runBatches(bi + 1);
+        });
+      }
+
+      /* 출결 툼스톤이 규칙(create 검사)에 막혔을 때의 마지막 구제책 —
+         문서가 서버에 없으면 그냥 지우면 된다(삭제는 관리자면 언제나 허용, 없는 문서 삭제도 성공). */
+      function rescueDeadTombstones(list) {
+        var ok = [], dead = [];
+        var chain = Promise.resolve();
+        (list || []).forEach(function (it) {
+          chain = chain.then(function () {
+            var isEventTomb = !!(it.body && it.body._deleted === true) && String(it.path || '').indexOf('/attendanceEvents/') !== -1;
+            if (!isEventTomb) { dead.push(it); return; }
+            return Promise.resolve(adapter.writeBatch([{ path: it.path, del: true }])).then(function () {
+              usage.record('deletes', 1);
+              ok.push(it);
+            }, function () { dead.push(it); });
+          });
+        });
+        return chain.then(function () { return { ok: ok, dead: dead }; });
+      }
+
+      function finishFailure(finalOk) {
+        if (finalOk.length) {
+          /* 일부는 성공했으나 ACK 전에 오류 — 성공분은 서버 확인을 기다린다 */
+          outbox.mark(finalOk.map(function (it) { return it.id; }), 'sent-unacked', fatalError);
+          lastError = errorText(fatalError);
+          emit('ack-failed', { error: lastError, queued: outbox.count() });
+          return { ok: false, reason: 'ack', error: lastError, queued: outbox.count() };
+        }
+        if (quotaError) {
+          usage.blockByError(quotaError);
+          emit('quota-blocked', usage.snapshot());
+        } else if (failedItems.length) {
+          outbox.mark(failedItems.map(function (it) { return it.id; }), 'failed', fatalError);
+        }
+        var ne = normalizeError(fatalError);
+        var isOff = ne.code === 'unavailable' || /offline|network|failed to fetch|ERR_NETWORK/i.test(ne.message);
+        lastError = errorText(fatalError);
+        lastErrorKind = quotaError ? 'quota' : (isOff ? 'offline' : 'error');
+        emit('flush-failed', { error: lastError, queued: outbox.count(), kind: lastErrorKind });
+        return { ok: false, reason: lastErrorKind === 'quota' ? 'quota' : (isOff ? 'offline' : 'error'), error: lastError, queued: outbox.count() };
+      }
+
+      return runBatches(0).then(function () {
+        if (!deadItems.length) { return { ok: okItems, dead: deadItems }; }
+        return rescueDeadTombstones(deadItems).then(function (r) {
+          return { ok: okItems.concat(r.ok), dead: r.dead };
+        });
+      }).then(function (res) {
+        var finalOk = res.ok, finalDead = res.dead;
+        if (finalDead.length) {
+          outbox.mark(finalDead.map(function (it) { return it.id; }), 'dead', { code: 'permission-denied', message: '서버가 받아 주지 않습니다(규칙 확인 필요)' });
+          emit('dead-letters', {
+            count: outbox.deadCount(),
+            paths: finalDead.slice(0, 20).map(function (it) { return it.path; }),
+            at: isoOf(now())
+          });
+        }
+        if (fatalError) { return finishFailure(finalOk); }
+        if (!finalOk.length) {
+          if (finalDead.length) { return { ok: true, sent: 0, dead: finalDead.length, queued: outbox.count() }; }
+          return { ok: true, sent: 0 };
+        }
         /* setDoc/writeBatch 성공만으로는 부족 — 서버 저장 확인(ACK)까지 기다린 뒤 큐에서 지운다 */
         var ack = (adapter && typeof adapter.acknowledge === 'function') ? adapter.acknowledge() : true;
         return Promise.resolve(ack).then(function () {
-          outbox.remove(items.map(function (it) { return it.id; }));
+          outbox.remove(finalOk.map(function (it) { return it.id; }));
+          markShadowConfirmed(finalOk);
           lastSyncAt = isoOf(now());
           lastError = '';
           lastErrorKind = '';
@@ -3155,32 +3674,14 @@
             eventPump.marker = { at: lastSyncAt, count: num(eventPump.total), by: String(deviceId) };
             scheduleUsagePush(1500);
           }
-          emit('synced', { sent: sentTotal, at: lastSyncAt });
-          return { ok: true, sent: sentTotal, queued: outbox.count() };
+          emit('synced', { sent: finalOk.length, at: lastSyncAt });
+          return { ok: true, sent: finalOk.length, dead: finalDead.length, queued: outbox.count() };
         }, function (err) {
-          outbox.mark(items.map(function (it) { return it.id; }), 'sent-unacked', err);
+          outbox.mark(finalOk.map(function (it) { return it.id; }), 'sent-unacked', err);
           lastError = errorText(err);
           emit('ack-failed', { error: lastError, queued: outbox.count() });
           return { ok: false, reason: 'ack', error: lastError, queued: outbox.count() };
         });
-      }, function (err) {
-        failedErr = err;
-        var ids = [];
-        batches.slice(Math.floor(sentTotal / SPARK.maxBatch)).forEach(function (b) {
-          b.forEach(function (it) { ids.push(it.id); });
-        });
-        if (isQuotaError(err)) {
-          usage.blockByError(err);
-          emit('quota-blocked', usage.snapshot());
-        } else {
-          outbox.mark(ids, 'failed', err);
-        }
-        var ne = normalizeError(err);
-        var isOff = ne.code === 'unavailable' || /offline|network|failed to fetch|ERR_NETWORK/i.test(ne.message);
-        lastError = errorText(err);
-        lastErrorKind = isQuotaError(err) ? 'quota' : (isOff ? 'offline' : 'error');
-        emit('flush-failed', { error: lastError, queued: outbox.count(), kind: lastErrorKind });
-        return { ok: false, reason: lastErrorKind === 'quota' ? 'quota' : (isOff ? 'offline' : 'error'), error: lastError, queued: outbox.count() };
       });
     }
 
@@ -3209,7 +3710,13 @@
     /* ---------- 상태 ---------- */
     function status() {
       var s = { state: 'local', text: '⚪ 미연결(로컬 모드)', queued: outbox.count(), lastSyncAt: lastSyncAt, lastError: lastError, mode: adapter ? adapter.mode : 'local', role: effectiveRole(), verifiedRole: verifiedRole };
-      if (usage.blocked()) { s.state = 'blocked'; s.text = '🔴 한도 초과 · 동기화 멈춤'; return s; }
+      if (usage.blocked()) {
+        var q = null;
+        try { q = usage.snapshot(); } catch (e) { q = null; }
+        s.state = 'blocked';
+        s.text = (q && q.totalBlock) ? '🔴 전체 기기 사용량이 한도에 가까움 · 동기화 멈춤' : '🔴 한도 초과 · 동기화 멈춤';
+        return s;
+      }
       if (!adapter) { return s; }
       if (effectiveRole() === 'none') {
         s.state = 'role';
@@ -3632,9 +4139,44 @@
       forceFullSync: forceFullSync,
       /* v51 — 드라이브 복원 중에는 로컬 전량 쓰기를 올리지 않는다(역류 차단) */
       setSuppressCapture: setSuppressCapture,
-      restoring: function () { return { suppressed: suppressCapture, at: restoreAt, keys: Object.keys(suppressedKeys) }; },
+      restoring: function () {
+        return {
+          suppressed: suppressCapture, at: restoreAt, keys: Object.keys(suppressedKeys),
+          reconciled: restoreReconciled ? clone(restoreReconciled) : null
+        };
+      },
       /* v51 — 대량 삭제 차단 상태 (화면·진단용) */
       bulkDeleteState: function () { return clone(bulkDeleteBlocked); },
+      /* v55 — 사용자가 화면에서 확인한 "대량 삭제 1회 허용".
+           opts.collections 를 주면 그 컬렉션만, 없으면 다음 대량 삭제 한 번만 통과한다. */
+      allowBulkDeleteOnce: function (opts) {
+        var o = isPlain(opts) ? opts : {};
+        var cols = null;
+        if (Array.isArray(o.collections) && o.collections.length) {
+          cols = {};
+          o.collections.forEach(function (c) { cols[String(c)] = 1; });
+        }
+        bulkApproval = { at: isoOf(now()), collections: cols, once: true, src: String(o.src || 'ui') };
+        emit('bulk-delete-allow-once', { at: bulkApproval.at, collections: cols ? Object.keys(cols) : 'all' });
+        return { ok: true, at: bulkApproval.at, collections: cols ? Object.keys(cols) : 'all' };
+      },
+      bulkDeleteApproval: function () { return clone(bulkApproval); },
+      clearBulkDeleteApproval: function () { bulkApproval = null; return true; },
+      /* v55 — 받아 두지 않은 범위라 보류한 삭제 (화면 안내용) */
+      deleteHeldState: function () {
+        var n = Object.keys(pendingDeletes).length;
+        var h = clone(deleteHeld) || {};
+        h.pending = n;
+        if (n > 0) {
+          h.count = n;
+          h.paths = Object.keys(pendingDeletes).slice(0, 20);
+          h.message = h.message || ('아직 받지 않은 범위의 삭제 ' + n + '건은 묶음을 받은 뒤 다시 지웁니다.');
+        }
+        return (n > 0 || deleteHeld) ? h : null;
+      },
+      /* v55 — 서버가 영구 거부해 격리한 항목 (화면·진단용) */
+      deadLetters: function (limit) { return outbox.dead(limit); },
+      retryDeadLetters: function () { var n = outbox.retryDead(); if (n) { scheduleFlush(); } return n; },
       /* v51 — 원비 문서 ID 해석 결과 (진단용) */
       tuitionState: function () {
         return { skipped: skippedTuitionIds, lastSkippedId: lastSkippedTuitionId };
