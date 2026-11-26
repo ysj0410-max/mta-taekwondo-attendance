@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.9.0';   /* v55 — 출결 툼스톤 격리 · 필드 비우기 전파 · 복원 그림자 재조정 · 합산 한도 차단 · flush 재진입 · 분할 업로드 소량화 */
+  var VERSION = '2.0.0';   /* v56 — 막힌 대기(933건) 부팅 정리 · 배치 소량화·양보 · 응답 없음 기한 · 「🧹 막힌 대기 비우기」 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -39,6 +39,35 @@
     deletes: 20000,   /* 문서 삭제 / 일 */
     warnRatio: 0.8,   /* 80% 경고 */
     maxBatch: 500     /* Firestore 배치 1회 최대 쓰기 수 */
+  };
+
+  /* v56 — 전송(flush) 배치 설정.
+     도장 PC 에서 "대기 933건"이 나가지 않고 화면이 버벅이던 문제의 원인은,
+       (a) 원생 문서 933건을 500건씩 두 덩어리로 한 번에 commit 하면서
+           배치 하나가 너무 커져(요청 크기·응답 시간) 실패하거나 응답이 끝나지 않았고,
+       (b) commit 이 끝나지 않으면 flush 재진입 가드가 그 약속을 계속 돌려주어
+           이후 모든 전송이 영원히 멈췄으며(초록 배지 + 대기 숫자만 유지),
+       (c) bisect 가 수백 번 writeBatch 를 연달아 불러 화면을 붙잡은 것이다.
+     이제 ① 문서 수(150)와 바이트(3MB) 두 기준으로 잘게 나누고 ② 배치 하나에 응답 기한을 두며
+     ③ 배치 사이에 화면에 양보하고 ④ 실패하면 배치를 절반으로 줄여 다시 시도한다. */
+  var FLUSH = {
+    maxWrites: 150,        /* 한 배치에 넣는 문서 수 (서버 한도 500의 1/3 — 큰 원생 문서도 안전) */
+    minWrites: 20,         /* 실패가 이어져도 이보다 작게는 줄이지 않는다 */
+    maxBytes: 3 * 1024 * 1024,  /* 한 배치의 대략 바이트 상한 (서버 10MB 한도에 여유) */
+    batchMs: 12000,        /* 배치 1개의 응답을 기다리는 최대 시간 */
+    totalMs: 45000,        /* 한 번의 flush 전체 기한 — 넘으면 남은 것은 다음 차례로 */
+    maxCommits: 240        /* 한 번의 flush 에서 writeBatch 를 부르는 최대 횟수(bisect 포함) */
+  };
+
+  /* v56 — 「막힌 대기」 판정: 200건 이상이 45초 넘게 줄지 않으면 화면에 🧹 버튼을 띄운다 */
+  var STALL = { minQueued: 200, ms: 45000, tickMs: 20000 };
+
+  /* v56 — 아웃박스 부팅 정리 상한 */
+  var OUTBOX = {
+    maxItems: 2500,                        /* 큐가 이보다 크면 오래된 항목부터 버린다(화면·저장 보호) */
+    maxBytes: 3 * 1024 * 1024,             /* 큐 전체가 이보다 크면 오래된 항목부터 버린다(localStorage 5MB 보호) */
+    maxDead: 100,                          /* 서버가 거부해 격리한 항목은 최신 100건만 남긴다 */
+    maxDocBytes: 900 * 1024                /* 문서 하나가 1MB 에 가까우면 서버가 받지 못한다 → 격리 */
   };
 
   var REFRESH_MS = 150;        /* 원격 변경을 모아서 한 번에 화면에 반영 */
@@ -1276,6 +1305,7 @@
     var key = opts.key || 'tdk.fbOutbox.v1';
     var now = opts.now || function () { return Date.now(); };
     var seq = 0;
+    var compactInfo = { before: 0, after: 0, removed: 0, merged: 0, sent: 0, dead: 0, trimmed: 0, at: '' };
     var state = read();
     function read() {
       var raw = null;
@@ -1283,7 +1313,99 @@
       var s = null;
       try { s = raw ? JSON.parse(raw) : null; } catch (e) { s = null; }
       if (!isPlain(s) || !Array.isArray(s.items)) { s = { items: [] }; }
-      return s;
+      return compactQueue(s);
+    }
+
+    /* v56 — 부팅 정리 (도장 PC "대기 933건" 재발 방지)
+       ------------------------------------------------------------------
+       예전에는 큐를 그대로 읽었다. 그래서 예전 시도에서 남은
+         · `sent` (이미 보낸) 항목
+         · 같은 문서(`students/stu_...`)의 `pending/failed/sent-unacked` 중복
+         · 1MB 에 가까운(서버가 받아 주지 않는) 문서
+       가 수백 건씩 함께 실려, 큐를 통째로 JSON 으로 다시 쓰고·훑고·다시 보내는
+       일이 매번 반복됐다. 이제 읽는 순간 정리한다.
+         · `sent` 는 버린다 (서버에 이미 있음)
+         · 같은 경로는 마지막 1건만 남긴다 (앞 항목의 빠진 칸은 합쳐 잃지 않는다)
+         · 1MB 에 가까운 문서는 dead 로 격리 (같은 배치의 다른 기록을 막지 않게)
+         · 큐가 너무 크면(2,500건) 오래된 것부터 버린다 — 화면·저장공간 보호
+       정리한 내용은 바로 저장해서 다음 실행에서도 되돌아오지 않게 한다. */
+    function compactQueue(rawState) {
+      var items = Array.isArray(rawState.items) ? rawState.items : [];
+      var before = items.length;
+      var out = [], where = {}, deads = [];
+      var merged = 0, sent = 0, trimmed = 0, tooBig = 0, bad = 0;
+      items.forEach(function (it) {
+        if (!isPlain(it) || !it.path) { bad++; return; }
+        var path = String(it.path);
+        if (it.state === 'sent') { sent++; return; }
+        if (it.state === 'dead') { deads.push(it); return; }
+        /* 문서 하나가 1MB 에 가까우면 서버가 언제나 거부한다 — 대기로 두면 영원히 막힌다 */
+        if (it.del !== true && bodyBytes(it.body) > OUTBOX.maxDocBytes) {
+          tooBig++;
+          var dead = {};
+          Object.keys(it).forEach(function (k) { dead[k] = it[k]; });
+          dead.state = 'dead';
+          dead.error = '문서가 너무 큽니다(' + Math.round(bodyBytes(it.body) / 1024) + 'KB) — 서버가 받을 수 없습니다';
+          deads.push(dead);
+          return;
+        }
+        if (it.state !== 'failed' && it.state !== 'sent-unacked') { it.state = 'pending'; }
+        var at = where[path];
+        if (at === undefined) { where[path] = out.length; out.push(it); return; }
+        merged++;
+        out[at] = mergeQueued(out[at], it);
+      });
+      if (out.length > OUTBOX.maxItems) {
+        trimmed += out.length - OUTBOX.maxItems;
+        out = out.slice(out.length - OUTBOX.maxItems);
+      }
+      if (deads.length > OUTBOX.maxDead) { deads = deads.slice(deads.length - OUTBOX.maxDead); }
+      var kept = out.concat(deads);
+      /* 바이트 상한 — 933건이 localStorage 5MB 를 넘기면 큐 자체가 저장되지 않는다 */
+      try {
+        var bytes = JSON.stringify({ items: kept }).length;
+        while (bytes > OUTBOX.maxBytes && kept.length > 1) {
+          var cut = Math.max(1, Math.floor(kept.length * 0.2));
+          kept = kept.slice(cut);
+          trimmed += cut;
+          bytes = JSON.stringify({ items: kept }).length;
+        }
+      } catch (e) {}
+      out = kept;
+      var removed = before - kept.length;
+      compactInfo = {
+        before: before, after: kept.length, removed: removed > 0 ? removed : 0,
+        merged: merged, sent: sent, dead: tooBig, trimmed: trimmed, bad: bad, at: isoOf(now())
+      };
+      var next = { items: kept };
+      if (removed !== 0 || merged || sent || tooBig || trimmed || bad) {
+        /* 정리한 큐를 바로 저장 — 다음 실행에서 같은 933건이 되살아나지 않게 */
+        setItemSafe(storage, key, JSON.stringify(next), opts);
+      }
+      return next;
+    }
+    function bodyBytes(b) {
+      if (b == null) { return 0; }
+      try { return JSON.stringify(b).length; } catch (e) { return OUTBOX.maxDocBytes + 1; }
+    }
+    /* 같은 문서의 두 대기 항목 — 마지막 뜻(본문/삭제)을 따르되,
+       앞 항목에만 있던 사용자 칸은 합쳐 잃 지 않는다(_ver·_fieldMeta 같은 표시 칸은 새 것만). */
+    function mergeQueued(prev, next) {
+      if (!prev) { return next; }
+      if (prev.del === true || next.del === true) { return next; }
+      if (!isPlain(prev.body) || !isPlain(next.body)) { return next; }
+      var pf = flatten(prev.body), nf = flatten(next.body), add = {}, n = 0;
+      Object.keys(pf).forEach(function (f) {
+        if (hasOwn(nf, f) || f.charAt(0) === '_') { return; }
+        add[f] = pf[f]; n++;
+      });
+      if (!n) { return next; }
+      var body = unflatten(Object.assign({}, nf, add));
+      var made = {};
+      Object.keys(next).forEach(function (k) { made[k] = next[k]; });
+      made.body = body;
+      made.mergedFrom = (num(next.mergedFrom) || 1) + 1;
+      return made;
     }
     /* 큐는 메모리에 항상 살아 있고, 저장만 실패해도 계속 쓸 수 있다 */
     function persist() { setItemSafe(storage, key, JSON.stringify(state), opts); }
@@ -1299,9 +1421,11 @@
         if (op && op.path) { drop[String(op.path)] = 1; }
       });
       if (Object.keys(drop).length) {
-        /* 같은 문서에 대한 이전 대기 항목은 마지막 것만 남긴다 (무료 쓰기·큐 크기 절약) */
+        /* 같은 문서에 대한 이전 대기 항목은 마지막 것만 남긴다 (무료 쓰기·큐 크기 절약)
+           v56 — pending 뿐 아니라 failed·sent-unacked 도 함께 걷어낸다(
+           같은 문서를 여러 번 다시 보내며 큐가 불어나던 원인). */
         state.items = state.items.filter(function (it) {
-          return !(it.state === 'pending' && drop[it.path]);
+          return !((it.state === 'pending' || it.state === 'failed' || it.state === 'sent-unacked') && drop[it.path]);
         });
       }
       list.forEach(function (op) {
@@ -1326,6 +1450,27 @@
 
     return {
       list: function () { return clone(state.items) || []; },
+      /* v56 — 부팅 정리 결과(진단·화면) */
+      compactInfo: function () { return clone(compactInfo) || null; },
+      /* v56 — 화면에서 "지금 무엇 때문에 막혔는지" 를 보여 주기 위한 요약 */
+      stats: function () {
+        var by = { pending: 0, failed: 0, 'sent-unacked': 0, dead: 0, sent: 0, other: 0 };
+        var paths = {}, top = '';
+        state.items.forEach(function (it) {
+          if (!it) { return; }
+          if (by[it.state] === undefined) { by.other++; } else { by[it.state]++; }
+          if (it.state === 'sent' || it.state === 'dead') { return; }
+          var coll = String(it.path || '').split('/');
+          var k = coll.length > 1 ? coll[coll.length - 2] : '(?)';
+          paths[k] = (paths[k] || 0) + 1;
+        });
+        Object.keys(paths).forEach(function (k) { if (!top || paths[k] > paths[top]) { top = k; } });
+        return {
+          total: state.items.length, by: by, collections: paths,
+          topCollection: top, topCount: top ? paths[top] : 0,
+          compacted: clone(compactInfo) || null
+        };
+      },
       /* v55 — 화면(대기 목록)은 마지막 몇 건만 보여 준다. list() 는 900건이면 그 전체를
          깊은 복사하느라 화면이 멈췄다. recent(n) 은 뒤에서 n건만 얕게 돌려준다. */
       recent: function (n) {
@@ -1425,7 +1570,14 @@
         if (removed) { persist(); }
         return removed;
       },
-      clear: function () { state = { items: [] }; persist(); }
+      clear: function () { state = { items: [] }; persist(); },
+      /* v56 — 실행 중에도 같은 정리를 한 번에 할 수 있게 노출(진단·복구·테스트) */
+      compact: function () {
+        var before = state.items.length;
+        state = compactQueue({ items: state.items });
+        persist();
+        return { before: before, after: state.items.length, info: clone(compactInfo) || null };
+      }
     };
   }
 
@@ -3469,10 +3621,12 @@
     function scheduleFlush(delayMs) {
       if (opts.autoflush === false) { return; }
       if (flushTimer) { return; }
+      var wait = num(delayMs) > 0 ? num(delayMs) : (opts.flushMs || 700);
+      if (nextAttemptAt && now() < nextAttemptAt) { wait = Math.max(wait, nextAttemptAt - now()); }
       flushTimer = setTimeout(function () {
         flushTimer = null;
         flush().then(function () {}, function () {});
-      }, num(delayMs) > 0 ? num(delayMs) : (opts.flushMs || 700));
+      }, wait);
     }
 
     function online() {
@@ -3512,6 +3666,40 @@
     var flushInFlight = null;
     var flushAgain = false;
 
+    /* v56 — 전송 상태 기록. 화면에게 "왜 나가지 않는지"를 보여 주기 위한 것.
+       · batchWrites : 지금 쓰는 배치 크기(실패하면 줄고 성공하면 친천히 는다)
+       · lastOutcome : ok / timeout / held / offline / quota / error
+       · timeouts    : 응답 없음으로 끝난 횟수(연속되면 배치가 줄어든다) */
+    var flushStat = {
+      batchWrites: FLUSH.maxWrites, batches: 0, commits: 0, picked: 0,
+      sent: 0, timeouts: 0, failures: 0, lastOutcome: '', lastError: ''
+    };
+
+    /* v56 — 「막힌 대기」 감시. 대기 건수가 200건 이상인데 45초 넘게 줄지 않으면
+       화면에 🧹 「막힌 대기 비우기」 버튼을 띄운다. (한국어 주석: 화면이 멈춘 이유를 모른 채
+       초록 배지만 보이며 수백 건이 쌓여 있던 일을 되풀이하지 않게 한다) */
+    var queueWatch = { count: -1, since: 0, stuck: false, stuckAt: 0, stalledEmitted: false };
+    var queueWatchTimer = null;
+    /* v56 — 서버 응답이 없을 때의 재시도 간격(1분 → 2분 → 4분 → 최대 5분).
+       응답 없는 commit 을 30초마다 다시 걸면 Firestore 로컬 큐에 같은 쓰기가 쌓여,
+       연결이 돌아올 때 중복 쓰기로 무료 한도를 태운다. */
+    var nextAttemptAt = 0;
+    var timeoutBackoff = 0;
+
+    function yieldToUi() {
+      return new Promise(function (resolve) {
+        try { setTimeout(function () { resolve(); }, 0); } catch (e) { resolve(); }
+      });
+    }
+
+    /* 배치에 넣기 전 문서 크기 어림값(문자 수) — 큰 문서가 섞인 배치를 피한다 */
+    function itemBytes(it) {
+      if (!it) { return 0; }
+      if (it.del === true) { return 80; }
+      try { return JSON.stringify(it.body == null ? {} : it.body).length + 100; }
+      catch (e) { return FLUSH.maxBytes + 1; }
+    }
+
     function flush() {
       if (flushInFlight) { flushAgain = true; return flushInFlight; }
       var p = Promise.resolve().then(function () { return doFlush(); }).then(function (r) {
@@ -3523,6 +3711,17 @@
       }, function (err) {
         flushInFlight = null;
         flushAgain = false;
+        /* v56 — 어떤 이유로든 flush 가 실패했으면 화면에 이유를 남긴다.
+           예전에는 여기서 조용히 promise 만 실패해, 초록 배지 + 대기 숫자만 남았다. */
+        flushStat.failures++;
+        flushStat.lastOutcome = 'error';
+        try {
+          lastError = errorText(err);
+          lastErrorKind = 'error';
+          flushStat.lastError = lastError;
+          queueWatch.since = now();
+          emit('flush-failed', { error: lastError, queued: outbox.count(), kind: 'error' });
+        } catch (e) {}
         throw err;
       });
       flushInFlight = p;
@@ -3551,52 +3750,142 @@
       var items = outbox.pending();
       if (!items.length) { return { ok: true, sent: 0 }; }
 
+      /* v56 — 배치 나누기: 문서 수(150)와 바이트(3MB) 두 기준.
+         예전에는 500건(서버 한도)씩 두 덩어리로 보냈다 — 원생 문서 933건이면 한 덩어리가
+         너무 커져 commit 이 끝나지 않거나 한 건 때문에 덩어리 전체가 거부됐다. */
       var batches = [];
-      for (var i = 0; i < items.length; i += SPARK.maxBatch) { batches.push(items.slice(i, i + SPARK.maxBatch)); }
+      var limit = Math.max(FLUSH.minWrites, Math.min(FLUSH.maxWrites, num(flushStat.batchWrites) || FLUSH.maxWrites));
+      (function () {
+        var cur = [], bytes = 0;
+        items.forEach(function (it) {
+          var sz = itemBytes(it);
+          if (cur.length && (cur.length >= limit || bytes + sz > FLUSH.maxBytes)) {
+            batches.push(cur); cur = []; bytes = 0;
+          }
+          cur.push(it); bytes += sz;
+        });
+        if (cur.length) { batches.push(cur); }
+      })();
+      flushStat.batches = batches.length;
+      flushStat.commits = 0;
+      flushStat.picked = items.length;
+      var flushStart = now();
+      var shrunk = false;
 
       /* 한 묶음을 보낸다. 영구 거부(permission-denied 등)면 반씩 나눠(bisect) 문제 문서만 찾아낸다.
          예전에는 그 한 건 때문에 같은 배치의 정상 기록까지 전부 failed 가 되고,
-         30초마다 같은 실패를 되풀이하며 그 뒤 기록까지 영원히 막혔다. */
+         30초마다 같은 실패를 되풀이하며 그 뒤 기록까지 영원히 막혔다.
+         v56 — 배치를 만드는 도중에 던지는 오류(값 형식 등)도 실패로 다루고,
+                배치 하나에 응답 기한을 두어 끝나지 않는 commit 이 화면을 잡지 않게 했다. */
+      function writeOnce(ops) {
+        var p = null;
+        try {
+          p = adapter.writeBatch(ops);
+        } catch (err) {
+          /* Firestore 배치에 넣을 수 없는 값이면 batch.set 이 동기적으로 던진다 —
+             예전에는 이 오류가 flush 밖으로 튀어 큐가 영원히 '대기'로 남았다. */
+          return Promise.reject(err);
+        }
+        if (!p || typeof p.then !== 'function') {
+          return Promise.reject({ code: 'invalid-argument', message: '저장 결과(약속)를 돌려받지 못했습니다' });
+        }
+        return withinTime(p, FLUSH.batchMs, function () {
+          var e = new Error('서버 응답이 ' + Math.round(FLUSH.batchMs / 1000) + '초 동안 없습니다');
+          e.code = 'timeout';
+          return e;
+        });
+      }
+
+      function shrinkBatch() {
+        if (shrunk) { return; }
+        shrunk = true;
+        flushStat.batchWrites = Math.max(FLUSH.minWrites, Math.floor((num(flushStat.batchWrites) || FLUSH.maxWrites) / 2));
+      }
+
       function commit(list) {
+        if (flushStat.commits >= FLUSH.maxCommits) {
+          return Promise.resolve({ ok: [], dead: [], transient: null, quota: false, skipped: list });
+        }
+        flushStat.commits++;
         var writes = 0, deletes = 0;
         list.forEach(function (it) { if (it.del === true) { deletes++; } else { writes++; } });
-        return adapter.writeBatch(list.map(opOf)).then(function () {
+        return writeOnce(list.map(opOf)).then(function () {
           if (writes) { usage.record('writes', writes); }
           if (deletes) { usage.record('deletes', deletes); }
-          return { ok: list, dead: [], transient: null, quota: false };
+          return { ok: list, dead: [], transient: null, quota: false, timeout: false };
         }, function (err) {
-          if (isQuotaError(err)) { return { ok: [], dead: [], transient: err, quota: true }; }
-          if (!isPermanentError(err)) { return { ok: [], dead: [], transient: err, quota: false }; }
-          if (list.length === 1) { return { ok: [], dead: list, transient: null, quota: false }; }
+          var nc = normalizeError(err);
+          /* 응답이 없는 것은 '다시 보내도 같은 결과'가 아니다 — 쪼개지도 격리하지도 않고
+             이번 시도를 멈춘다(이미 서버에 닿았을 수 있으므로 다시 보내도 같은 값으로 덮어쓴다). */
+          if (nc.code === 'timeout') { return { ok: [], dead: [], transient: err, quota: false, timeout: true }; }
+          if (isQuotaError(err)) { return { ok: [], dead: [], transient: err, quota: true, timeout: false }; }
+          if (!isPermanentError(err)) { return { ok: [], dead: [], transient: err, quota: false, timeout: false }; }
+          shrinkBatch();
+          if (list.length <= 1) { return { ok: [], dead: list, transient: null, quota: false }; }
           var half = Math.ceil(list.length / 2);
           return commit(list.slice(0, half)).then(function (a) {
-            if (a.transient) { return a; }
+            if (a.transient || a.timeout) { return a; }
             return commit(list.slice(half)).then(function (b) {
-              return { ok: a.ok.concat(b.ok), dead: a.dead.concat(b.dead), transient: b.transient, quota: b.quota };
+              return { ok: a.ok.concat(b.ok), dead: a.dead.concat(b.dead), transient: b.transient, quota: b.quota, timeout: b.timeout };
             });
           });
         });
       }
 
-      var okItems = [], deadItems = [], failedItems = [];
-      var fatalError = null, quotaError = null;
+      var okItems = [], deadItems = [], failedItems = [], leftItems = [];
+      var fatalError = null, quotaError = null, timedOut = false, stopped = false;
 
+      function holdRest(fromIndex, doneIds) {
+        for (var j = fromIndex; j < batches.length; j++) {
+          batches[j].forEach(function (it) { if (!doneIds[it.id]) { leftItems.push(it); } });
+        }
+      }
+      function idsOf(list) {
+        var m = {};
+        (list || []).forEach(function (it) { m[it.id] = 1; });
+        return m;
+      }
+
+      /* 남은 배치를 이어서 보낸다 — 배치 사이에 화면에 양보(yield)해 PC 가 얼지 않게 한다 */
       function runBatches(bi) {
-        if (bi >= batches.length) { return Promise.resolve(); }
+        if (stopped || bi >= batches.length) { return Promise.resolve(); }
+        if (now() - flushStart > FLUSH.totalMs) {
+          /* 전체 기한 초과 — 남은 항목은 손대지 않고 다음 차례로 */
+          holdRest(bi, idsOf(okItems.concat(deadItems)));
+          stopped = true;
+          return Promise.resolve();
+        }
         return commit(batches[bi]).then(function (res) {
           okItems = okItems.concat(res.ok);
           deadItems = deadItems.concat(res.dead);
+          var doneIds = idsOf(res.ok.concat(res.dead));
+          if (res.timeout) {
+            timedOut = true;
+            fatalError = res.transient;
+            holdRest(bi, idsOf(okItems.concat(deadItems)));
+            stopped = true;
+            return;
+          }
+          if (res.skipped) {
+            holdRest(bi, idsOf(okItems.concat(deadItems)));
+            stopped = true;
+            return;
+          }
           if (res.transient) {
-            var doneIds = {};
-            res.ok.concat(res.dead).forEach(function (it) { doneIds[it.id] = 1; });
             for (var j = bi; j < batches.length; j++) {
               batches[j].forEach(function (it) { if (!doneIds[it.id]) { failedItems.push(it); } });
             }
             fatalError = res.transient;
             if (res.quota) { quotaError = res.transient; }
+            stopped = true;
             return;
           }
-          return runBatches(bi + 1);
+          /* 잘 보냈으면 배치를 다시 조금씩 키운다(느린 회선이면 스스로 줄어든 채로 유지) */
+          if (flushStat.batchWrites < FLUSH.maxWrites) {
+            flushStat.batchWrites = Math.min(FLUSH.maxWrites, Math.floor(flushStat.batchWrites * 1.25) + 1);
+          }
+          if (bi + 1 >= batches.length) { return; }
+          return yieldToUi().then(function () { return runBatches(bi + 1); });
         });
       }
 
@@ -3636,8 +3925,85 @@
         var isOff = ne.code === 'unavailable' || /offline|network|failed to fetch|ERR_NETWORK/i.test(ne.message);
         lastError = errorText(fatalError);
         lastErrorKind = quotaError ? 'quota' : (isOff ? 'offline' : 'error');
+        flushStat.lastOutcome = lastErrorKind;
+        flushStat.lastError = lastError;
+        /* 막힘 판정 시계(queueWatch.since)는 건수가 줄었을 때만 다시 잡는다 —
+           실패·응답 없음이 반복되는데 수백 건이 그대로인 상태야말로 🧹 가 필요한 때다. */
         emit('flush-failed', { error: lastError, queued: outbox.count(), kind: lastErrorKind });
         return { ok: false, reason: lastErrorKind === 'quota' ? 'quota' : (isOff ? 'offline' : 'error'), error: lastError, queued: outbox.count() };
+      }
+
+      /* 서버 응답(또는 ACK)이 기한 안에 오지 않은 경우 — 성공분만 정리하고 나머지는 '대기'로 남긴다 */
+      function finishTimeout(finalOk, finalDead) {
+        flushStat.timeouts++;
+        flushStat.lastOutcome = 'timeout';
+        shrinkBatch();   /* 응답이 없으면 다음에는 더 작게 보낸다 */
+        lastError = errorText(fatalError);
+        lastErrorKind = 'slow';
+        /* 응답이 없을수록 재시도 간격을 늘린다(1분 → 2분 → 4분 → 5분) */
+        timeoutBackoff = Math.min(300000, timeoutBackoff ? Math.max(60000, timeoutBackoff * 2) : 60000);
+        nextAttemptAt = now() + timeoutBackoff;
+        emit('flush-timeout', {
+          error: lastError, queued: outbox.count(), sent: finalOk.length,
+          waited: Math.round(FLUSH.batchMs / 1000), batchWrites: flushStat.batchWrites,
+          retryInMs: timeoutBackoff
+        });
+        if (!finalOk.length) {
+          return { ok: false, reason: 'timeout', error: lastError, queued: outbox.count(), sent: 0 };
+        }
+        return completeOk(finalOk, finalDead, 'timeout');
+      }
+
+      /* 보낸 것을 큐에서 지우고 서버 확인(ACK)까지 기다린다.
+         v56 — ACK 도 기한을 둔다: waitForPendingWrites 가 끝나지 않아도 flush 가 영원히
+         진행 중인 채로 남아 이후 전송을 막지 않게(도장 PC 가 이 상태로 멈췄다). */
+      function completeOk(finalOk, finalDead, kind) {
+        var ack = (adapter && typeof adapter.acknowledge === 'function') ? adapter.acknowledge() : true;
+        ack = withinTime(Promise.resolve(ack), FLUSH.batchMs, function () {
+          var e = new Error('서버 확인(ACK)이 늦습니다');
+          e.code = 'timeout';
+          return e;
+        });
+        return Promise.resolve(ack).then(function () {
+          outbox.remove(finalOk.map(function (it) { return it.id; }));
+          markShadowConfirmed(finalOk);
+          lastSyncAt = isoOf(now());
+          lastError = '';
+          lastErrorKind = '';
+          flushStat.sent = num(flushStat.sent) + finalOk.length;
+          timeoutBackoff = 0;
+          nextAttemptAt = 0;
+          queueWatch.since = now();
+          if (kind !== 'timeout') { flushStat.lastOutcome = 'ok'; }
+          /* v52 — 과거 출결 묶음을 다 보냈으면 "서버에 N건 있음"을 meta/usage 에 남긴다 */
+          if (eventPump.done && eventPump.total > 0 &&
+              (!eventPump.marker || num(eventPump.marker.count) !== num(eventPump.total))) {
+            eventPump.marker = { at: lastSyncAt, count: num(eventPump.total), by: String(deviceId) };
+            scheduleUsagePush(1500);
+          }
+          emit('synced', { sent: finalOk.length, at: lastSyncAt });
+          if (kind === 'timeout') {
+            return { ok: false, reason: 'timeout', error: '서버 확인이 늦어 일부만 보냈습니다', sent: finalOk.length, queued: outbox.count() };
+          }
+          return { ok: true, sent: finalOk.length, dead: finalDead.length, queued: outbox.count() };
+        }, function (err) {
+          var nc = normalizeError(err);
+          if (nc.code === 'timeout') {
+            /* commit 은 끝났다(서버가 받았다) — ACK 만 늦은 것이므로 큐에서 지운다.
+               남겨 두면 30초마다 같은 문서를 다시 써서 무료 쓰기만 태운다. */
+            outbox.remove(finalOk.map(function (it) { return it.id; }));
+            markShadowConfirmed(finalOk);
+            lastSyncAt = isoOf(now());
+            flushStat.timeouts++;
+            flushStat.lastOutcome = 'ack-timeout';
+            emit('flush-timeout', { error: '서버 확인(ACK)이 늦습니다 — 기록은 보냈습니다', queued: outbox.count(), sent: finalOk.length });
+            return { ok: false, reason: 'ack-timeout', error: '서버 확인(ACK)이 늦습니다 — 기록은 보냈습니다', sent: finalOk.length, queued: outbox.count() };
+          }
+          outbox.mark(finalOk.map(function (it) { return it.id; }), 'sent-unacked', err);
+          lastError = errorText(err);
+          emit('ack-failed', { error: lastError, queued: outbox.count() });
+          return { ok: false, reason: 'ack', error: lastError, queued: outbox.count() };
+        });
       }
 
       return runBatches(0).then(function () {
@@ -3655,33 +4021,19 @@
             at: isoOf(now())
           });
         }
+        if (timedOut) { return finishTimeout(finalOk, finalDead); }
         if (fatalError) { return finishFailure(finalOk); }
         if (!finalOk.length) {
+          if (leftItems.length) {
+            /* 기한·호출 한도에 걸려 손대지 못한 항목 — '대기' 그대로 두고 이유만 남긴다 */
+            flushStat.lastOutcome = 'held';
+            emit('flush-timeout', { error: '보낼 양이 많아 나눠 보내는 중입니다', queued: outbox.count(), held: leftItems.length });
+            return { ok: false, reason: 'held', queued: outbox.count(), held: leftItems.length };
+          }
           if (finalDead.length) { return { ok: true, sent: 0, dead: finalDead.length, queued: outbox.count() }; }
           return { ok: true, sent: 0 };
         }
-        /* setDoc/writeBatch 성공만으로는 부족 — 서버 저장 확인(ACK)까지 기다린 뒤 큐에서 지운다 */
-        var ack = (adapter && typeof adapter.acknowledge === 'function') ? adapter.acknowledge() : true;
-        return Promise.resolve(ack).then(function () {
-          outbox.remove(finalOk.map(function (it) { return it.id; }));
-          markShadowConfirmed(finalOk);
-          lastSyncAt = isoOf(now());
-          lastError = '';
-          lastErrorKind = '';
-          /* v52 — 과거 출결 묶음을 다 보냈으면 "서버에 N건 있음"을 meta/usage 에 남긴다 */
-          if (eventPump.done && eventPump.total > 0 &&
-              (!eventPump.marker || num(eventPump.marker.count) !== num(eventPump.total))) {
-            eventPump.marker = { at: lastSyncAt, count: num(eventPump.total), by: String(deviceId) };
-            scheduleUsagePush(1500);
-          }
-          emit('synced', { sent: finalOk.length, at: lastSyncAt });
-          return { ok: true, sent: finalOk.length, dead: finalDead.length, queued: outbox.count() };
-        }, function (err) {
-          outbox.mark(finalOk.map(function (it) { return it.id; }), 'sent-unacked', err);
-          lastError = errorText(err);
-          emit('ack-failed', { error: lastError, queued: outbox.count() });
-          return { ok: false, reason: 'ack', error: lastError, queued: outbox.count() };
-        });
+        return completeOk(finalOk, finalDead);
       });
     }
 
@@ -3724,10 +4076,92 @@
         return s;
       }
       if (!online() || lastErrorKind === 'offline' || outbox.summary().failed > 0) { s.state = 'offline'; s.text = '🟡 오프라인 대기'; return s; }
+      if (lastErrorKind === 'slow') { s.state = 'error'; s.text = '🟠 서버 응답이 느림'; return s; }
       if (lastError) { s.state = 'error'; s.text = '🟠 연결 문제'; return s; }
       s.state = 'online';
       s.text = '🟢 실시간 연결됨';
       return s;
+    }
+
+    /* v56 — 대기열 건강 상태(화면의 🧹 버튼·안내에 쓰인다)
+       "대기 933건이 45초 넘게 그대로"인지를 본다. 보내는 중에 건수가 줄면 시계를 다시 잡는다. */
+    function queueHealth() {
+      var sum = null;
+      try { sum = outbox.summary(); } catch (e) { sum = { pending: 0, failed: 0, unacked: 0, dead: 0, sent: 0, oldestAt: '' }; }
+      var q = num(sum.pending) + num(sum.failed) + num(sum.unacked);
+      var t = now();
+      if (q !== queueWatch.count) { queueWatch.count = q; queueWatch.since = t; }
+      if (!queueWatch.since) { queueWatch.since = t; }
+      var waited = q > 0 ? Math.max(0, t - queueWatch.since) : 0;
+      var stuck = q >= STALL.minQueued && waited >= STALL.ms;
+      var reason = '';
+      if (stuck) {
+        if (usage.blocked()) { reason = 'quota'; }
+        else if (effectiveRole() === 'none') { reason = 'role'; }
+        else if (!online()) { reason = 'offline'; }
+        else { reason = flushStat.lastOutcome || 'unknown'; }
+      }
+      return {
+        queued: q, pending: num(sum.pending), failed: num(sum.failed), unacked: num(sum.unacked),
+        dead: num(sum.dead), oldestAt: sum.oldestAt || '', waitedMs: waited,
+        since: queueWatch.since ? isoOf(queueWatch.since) : '', stuck: stuck, reason: reason,
+        batchWrites: num(flushStat.batchWrites), lastOutcome: flushStat.lastOutcome || '',
+        lastError: flushStat.lastError || lastError || '', timeouts: num(flushStat.timeouts),
+        failures: num(flushStat.failures), batches: num(flushStat.batches), commits: num(flushStat.commits),
+        sentTotal: num(flushStat.sent)
+      };
+    }
+
+    /* 막힘 상태가 바뀔 때 한 번만 알린다(queue-stall / queue-ok) */
+    function checkQueueHealth() {
+      var h = queueHealth();
+      queueWatch.stuck = !!h.stuck;
+      if (h.stuck && !queueWatch.stalledEmitted) {
+        queueWatch.stalledEmitted = true;
+        queueWatch.stuckAt = now();
+        emit('queue-stall', h);
+      } else if (!h.stuck && queueWatch.stalledEmitted) {
+        queueWatch.stalledEmitted = false;
+        emit('queue-ok', h);
+      }
+      return h;
+    }
+
+    /* v56 — 「🧹 막힌 대기 비우기」
+       서버·드라이브 데이터는 건드리지 않는다. 이 기기의 전송 대기(queue)만 비운다.
+       (이미 그림자에는 "보냈다"로 적혀 있어 같은 933건이 곧바로 다시 쌓이지 않는다.) */
+    function clearStuckQueue(opts) {
+      opts = opts || {};
+      var before = outbox.summary();
+      var stats = null;
+      try { stats = outbox.stats(); } catch (e) { stats = null; }
+      var was = num(before.pending) + num(before.failed) + num(before.unacked) + num(before.dead);
+      var removed = 0;
+      try {
+        removed = outbox.dropWhere(function () { return true; });
+        /* 남은 찌꺼기(빈 항목)까지 한 번 더 정리 */
+        try { outbox.compact(); } catch (e) {}
+      } catch (e) { removed = 0; }
+      flushStat.batchWrites = FLUSH.maxWrites;
+      flushStat.timeouts = 0;
+      flushStat.failures = 0;
+      flushStat.lastOutcome = 'cleared';
+      flushStat.lastError = '';
+      flushStat.picked = 0;
+      flushStat.batches = 0;
+      nextAttemptAt = 0;
+      timeoutBackoff = 0;
+      queueWatch.count = outbox.count();
+      queueWatch.since = now();
+      queueWatch.stuck = false;
+      /* stalledEmitted 는 그대로 둔다 — 다음 감시(20초)가 queue-ok 를 한 번 알린다 */
+      var payload = {
+        removed: removed, was: was, serverKept: true, at: isoOf(now()),
+        before: before, collections: stats ? stats.collections : null
+      };
+      emit('queue-cleared', payload);
+      emit('status', status());
+      return { ok: true, removed: removed, was: was, queued: outbox.count(), at: payload.at };
     }
 
     function emit(type, payload) {
@@ -3974,11 +4408,15 @@
       retryTimer = setInterval(function () {
         if (!adapter || usage.blocked() || !outbox.count()) { return; }
         if (!online()) { return; }
+        if (nextAttemptAt && now() < nextAttemptAt) { return; }
         flush().then(function () {}, function () {});
       }, opts.retryMs || 30000);
     }
     function onOnline() {
       lastErrorKind = '';
+      /* 연결이 돌아왔으면 기다리지 않고 바로 보낸다 */
+      nextAttemptAt = 0;
+      timeoutBackoff = 0;
       emit('status', status());
       if (outbox.count()) { scheduleFlush(); }
     }
@@ -4023,6 +4461,12 @@
             pushUsageNow().then(function () {}, function () {});
           }, USAGE_SYNC.tickMs);
         }
+        /* v56 — 막힌 대기 감시(20초 간격) — 45초 넘게 줄지 않으면 화면에 🧹 버튼이 뜬다 */
+        if (!queueWatchTimer) {
+          queueWatchTimer = setInterval(function () {
+            try { checkQueueHealth(); } catch (e) {}
+          }, STALL.tickMs);
+        }
       }
       emit('status', status());
       return api;
@@ -4037,6 +4481,7 @@
       saveLastSync();
       if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
       if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
+      if (queueWatchTimer) { try { clearInterval(queueWatchTimer); } catch (e) {} queueWatchTimer = null; }
       if (root.removeEventListener) {
         try { root.removeEventListener('online', onOnline); root.removeEventListener('offline', onOffline); } catch (e) {}
       }
@@ -4076,6 +4521,11 @@
       setDevice: function (d) { deviceId = String(d || deviceId); },
       /* 「🗑️ 실패 비우기」 — failed 항목만 지운다 */
       clearFailed: clearFailed,
+      /* v56 — 「🧹 막힌 대기 비우기」 · 대기열 건강 상태 */
+      clearStuckQueue: clearStuckQueue,
+      queueHealth: queueHealth,
+      checkQueueHealth: checkQueueHealth,
+      flushState: function () { return clone(flushStat) || {}; },
       role: function () { return effectiveRole(); },
       effectiveRole: effectiveRole,
       verifiedRole: function () { return verifiedRole; },

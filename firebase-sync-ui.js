@@ -150,6 +150,25 @@
           S.msg = '⚠️ 이 기기의 브라우저 저장 공간(localStorage)이 가득 찼습니다 — 동기화 그림자는 IndexedDB로 옮겨 두었지만, 남은 공간이 부족하면 새 기록이 기기에 남지 않습니다. 「💾 도장 데이터 전체 백업」을 받아 두고 사이트 데이터를 정리해 주세요.';
           S.msgKind = 'warn';
         }
+        /* v56 — 막힌 대기: 수백 건이 오래 줄지 않으면 화면에 🧹 버튼을 띄우고 이유를 적는다 */
+        if (type === 'queue-stall' && payload) {
+          S.stuck = true;
+          S.msg = '🧹 전송 대기가 ' + numText(payload.queued) + '건에서 ' + Math.round((Number(payload.waitedMs) || 0) / 1000) +
+            '초째 줄지 않고 있습니다 — 「🧹 막힌 대기 비우기」를 누르면 한 번에 정리됩니다(서버·드라이브 데이터는 그대로).';
+          S.msgKind = 'warn';
+        }
+        if (type === 'queue-ok') { S.stuck = false; }
+        if (type === 'queue-cleared' && payload) {
+          S.stuck = false;
+          S.msg = '🧹 막힌 대기 ' + numText(payload.removed) + '건을 비웠습니다 — 서버·드라이브 데이터는 그대로입니다.' +
+            (payload.queued ? (' 남은 대기 ' + numText(payload.queued) + '건은 계속 보냅니다.') : ' 대기 없음.');
+          S.msgKind = 'ok';
+        }
+        if (type === 'flush-timeout') {
+          S.msg = '🟠 ' + String((payload && payload.error) || '서버 응답이 늦습니다') +
+            (payload && payload.queued ? (' — 대기 ' + numText(payload.queued) + '건은 자동으로 다시 보냅니다.') : '');
+          S.msgKind = 'warn';
+        }
         if (type === 'synced') { saveConfig({ lastSyncAt: payload && payload.at }); }
         if (type === 'full-sync') {
           S.msg = '🔄 전체 다시 불러오기를 시작했습니다 — 서버에서 전체를 다시 받는 중입니다.';
@@ -377,6 +396,18 @@
       hdr.className = 'hdr-fb-chip ' + st.state;
       hdr.title = (st.text || '') + (st.queued ? (' · 전송 대기 ' + st.queued + '건') : '') + ' — 눌러서 동기화 상태 보기';
     }
+    /* v56 — 막힌 대기면 상태 배지 옆에 🧹 버튼을 띄운다(1초 만에 풀 수 있게) */
+    var stuckBtn = $('hdr-stuck-clear');
+    if (stuckBtn) {
+      var h = queueHealth();
+      var stuck = !!(h && h.stuck);
+      stuckBtn.style.display = stuck ? '' : 'none';
+      if (stuck) {
+        stuckBtn.textContent = '🧹 막힌 대기 비우기 (' + numText(h.queued) + ')';
+        stuckBtn.title = '대기 ' + numText(h.queued) + '건이 ' + Math.round((h.waitedMs || 0) / 1000) +
+          '초째 줄지 않고 있습니다 — 누르면 이 기기의 막힌 전송 대기만 비웁니다(서버 데이터는 그대로)';
+      }
+    }
     if (SYNC_MODAL.open) { renderSyncModal(); }
     var tag = $('fb-pill-tag');
     if (tag) { tag.style.display = 'none'; }
@@ -499,6 +530,17 @@
       clearBtn.title = sum.failed
         ? '서버 규칙 거부 등으로 실패한 ' + numText(sum.failed) + '건만 목록에서 비웁니다 (대기 중인 출결은 그대로)'
         : '비울 실패 항목이 없습니다';
+    }
+    /* v56 — 「🧹 막힌 대기 비우기」 — 대기가 있을 때만 누를 수 있게 */
+    var stuckClear = $('fb-clear-stuck');
+    if (stuckClear) {
+      var hState = queueHealth() || {};
+      var qn = (Number(hState.queued) || 0) + (Number(hState.dead) || 0);
+      stuckClear.disabled = !(S.engine && qn);
+      stuckClear.textContent = qn ? ('🧹 막힌 대기 비우기 (' + numText(qn) + ')') : '🧹 막힌 대기 비우기';
+      stuckClear.title = qn
+        ? ('이 기기의 전송 대기 ' + numText(qn) + '건을 한 번에 비웁니다 — 서버·드라이브 데이터는 그대로입니다')
+        : '비울 대기가 없습니다';
     }
     if (!S.queueOpen || !out) { return; }
     /* v55 — 900건짜리 큐를 통째로 복사하지 않고 최근 40건만 가져온다(화면 멈춤 방지) */
@@ -983,6 +1025,57 @@
     renderAll();
   }
 
+  /* ---------- 🧹 막힌 대기 비우기 (v56) ----------
+     ・전송 대기(tdk.fbOutbox.v1)만 비운다. 서버·드라이브 데이터는 건드리지 않는다.
+     ・대기 933건이 오래 줄지 않으며 PC 가 버벅이던 상황을 1초 안에 풀기 위한 안전 버튼.
+     ・비우면 그림자에는 "보냈다"로 적혀 있으므로 같은 건이 곧바로 다시 쌓이지 않는다. */
+  function queueHealth() {
+    try {
+      return (S.engine && typeof S.engine.queueHealth === 'function') ? S.engine.queueHealth() : null;
+    } catch (e) { return null; }
+  }
+  function onClearStuck() {
+    if (!S.engine || typeof S.engine.clearStuckQueue !== 'function') {
+      S.msg = '지금은 비울 대기가 없습니다.';
+      S.msgKind = '';
+      renderAll();
+      return;
+    }
+    var h = queueHealth() || {};
+    var n = Number(h.queued) || 0;
+    if (!n) {
+      S.msg = '비울 대기가 없습니다.';
+      S.msgKind = '';
+      renderAll();
+      return;
+    }
+    var ask = '막힌 전송 대기 ' + numText(n) + '건을 비웁니다.\n\n' +
+      '· 서버(Firestore)·Google Drive 데이터는 그대로입니다.\n' +
+      '· 이 기기에서 아직 못 보낸 변경은 서버에 반영되지 않게 됩니다.\n' +
+      '· 비운 뒤 잠시 뒤에 새 변경만 다시 쌓입니다.\n\n계속할까요?';
+    if (typeof window.confirm === 'function' && !window.confirm(ask)) {
+      S.msg = '막힌 대기 비우기를 취소했습니다 — 아무것도 지우지 않았습니다.';
+      S.msgKind = '';
+      renderAll();
+      return;
+    }
+    var r = null;
+    try { r = S.engine.clearStuckQueue({ includeDead: true }); } catch (e) { r = null; }
+    if (!r) {
+      S.msg = '⚠️ 대기를 비우지 못했습니다 — 잠시 뒤 다시 시도해 주세요.';
+      S.msgKind = 'warn';
+      renderAll();
+      return;
+    }
+    S.stuck = false;
+    S.msg = '🧹 막힌 대기 ' + numText(r.removed) + '건을 비웠습니다 — 서버·드라이브 데이터는 그대로입니다.' +
+      (r.queued ? (' 남은 대기 ' + numText(r.queued) + '건은 계속 보냅니다.') : ' 전송 대기가 없습니다.');
+    S.msgKind = 'ok';
+    renderAll();
+    /* 비운 뒤 화면과 기록이 어긋나지 않게 한 번 새로 그린다(대기 숫자 즉시 반영) */
+    try { if (typeof window.__tdk !== 'undefined' && window.__tdk && window.__tdk.sync && typeof window.__tdk.sync.refresh === 'function') { window.__tdk.sync.refresh(); } } catch (e) {}
+  }
+
   function onUsageReset() {
     if (!S.engine) { return; }
     if (typeof window.confirm === 'function' && !window.confirm('오늘 사용량 카운터를 0으로 되돌립니다.\n실제 Firebase 사용량은 그대로이니 안내용으로만 쓰세요. 계속할까요?')) { return; }
@@ -1072,13 +1165,31 @@
     var sum = S.engine ? S.engine.outbox.summary() : { pending: 0, failed: 0, unacked: 0 };
     var body = SYNC_MODAL.root.querySelector('#fb-sync-modal-body');
     if (!body) { return; }
+    /* v56 — 대기열이 막혔는지·무슨 이유인지를 창 안에 그대로 적는다 */
+    var h = queueHealth() || {};
+    var stuckLine = '';
+    if (h.stuck) {
+      var why = h.reason === 'quota' ? '무료 한도'
+        : h.reason === 'offline' ? '인터넷 연결'
+        : h.reason === 'role' ? '관리자 확인'
+        : h.reason === 'timeout' ? '서버 응답 없음'
+        : h.reason === 'held' ? '보낼 양이 많아 나누는 중'
+        : (h.lastError || '알 수 없음');
+      stuckLine = '<div class="tiny-note" style="margin:0 0 8px;color:#8a6d3b">🧹 대기 <b>' + numText(h.queued) +
+        '</b>건이 ' + Math.round((h.waitedMs || 0) / 1000) + '초째 줄지 않고 있습니다(이유: ' + escHtml(why) +
+        '). 아래 <b>🧹 막힌 대기 비우기</b>를 누르면 이 기기의 대기만 비웁니다 — 서버 데이터는 그대로입니다.</div>';
+    }
     body.innerHTML =
       '<div class="fb-sync-state"><span class="chip ' + chipFor(st.state) + '">' + escHtml(st.text) + '</span>' +
       '<span class="tiny-note">마지막 동기화: ' + escHtml(st.lastSyncAt ? isoText(st.lastSyncAt) : '아직 없음') + '</span></div>' +
       '<div class="tiny-note" style="margin:8px 0 10px">보낼 것 <b>' + sum.pending + '</b>건 · 확인 중 <b>' + sum.unacked +
       '</b>건 · 실패 <b>' + sum.failed + '</b>건 · 기기 ID <b>' + escHtml(deviceId()) + '</b></div>' +
+      stuckLine +
       backlogText() +
-      syncInfoText();
+      syncInfoText() +
+      '<div class="form-actions" style="margin-top:10px">' +
+      '<button class="btn btn-sm" id="fb-sync-modal-clear" type="button"' + ((Number(h.queued) || 0) + (Number(h.dead) || 0) ? '' : ' disabled') + '>🧹 막힌 대기 비우기 (' + numText((Number(h.queued) || 0) + (Number(h.dead) || 0)) + ')</button>' +
+      '</div>';
   }
 
   function closeSyncStatus() {
@@ -1114,6 +1225,7 @@
       if (!t) { return; }
       if (t.closest && t.closest('[data-fbclose]')) { closeSyncStatus(); return; }
       if (t.closest && t.closest('#fb-sync-modal-full')) { onFullSync(); return; }
+      if (t.closest && t.closest('#fb-sync-modal-clear')) { onClearStuck(); return; }
       if (t.closest && t.closest('#fb-sync-modal-refresh')) { appRefresh(); }
     };
     renderSyncModal();
@@ -1197,6 +1309,8 @@
       ['fb-save', onSave], ['fb-test', onTest], ['fb-mock', connectMock],
       ['fb-mig-preview', onPreview], ['fb-mig-run', onMigrate],
       ['fb-flush', onFlush], ['fb-retry', onRetry], ['fb-clear-failed', onClearFailed], ['fb-usage-reset', onUsageReset],
+      /* v56 — 🧹 막힌 대기 비우기 (관리자 화면 · 헤더 배지 옆) */
+      ['fb-clear-stuck', onClearStuck], ['hdr-stuck-clear', onClearStuck],
       ['fb-guide', onGuide],
       /* v55 — 데이터 안전 통로 */
       ['fb-bulk-allow', onBulkAllow], ['fb-dead-retry', onDeadRetry],
@@ -1859,6 +1973,9 @@
     flush: function () { return S.engine ? S.engine.flush() : null; },
     clearFailed: onClearFailed,
     failedCount: failedCount,
+    /* v56 — 🧹 막힌 대기 비우기(헤더·관리자·상태 창의 버튼과 같은 함수) */
+    clearStuck: onClearStuck,
+    queueHealth: queueHealth,
     /* v55 — 데이터 안전 통로(화면 버튼과 같은 함수) */
     allowBulkOnce: onBulkAllow,
     deadRetry: onDeadRetry,

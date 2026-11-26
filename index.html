@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=55"></script>
-<script src="firebase-sync-ui.js?v=55"></script>
+<script src="firebase-sync.js?v=56"></script>
+<script src="firebase-sync-ui.js?v=56"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -134,6 +134,9 @@
   .hdr-fb-chip.online{color:#8df3c6; border-color:rgba(141,243,198,.34); background:rgba(12,166,120,.20)}
   .hdr-fb-chip.offline, .hdr-fb-chip.error{color:#ffd79a; border-color:rgba(255,215,154,.34); background:rgba(214,138,0,.18)}
   .hdr-fb-chip.blocked{color:#ffb4b4; border-color:rgba(255,180,180,.38); background:rgba(194,47,47,.22)}
+  /* v56 — 🧹 막힌 대기 비우기: 긴급 복구 버튼이라 눈에 띄게 */
+  .hdr-fb-chip.hdr-stuck{color:#fff3d6; border-color:rgba(255,196,92,.55); background:rgba(214,138,0,.34); font-weight:900}
+  .hdr-fb-chip.hdr-stuck:hover{background:rgba(214,138,0,.48)}
   #app-refresh-btn{
     width:auto; min-width:0; padding:0 12px; gap:6px; display:inline-flex; align-items:center;
     font-size:12.5px; font-weight:800; letter-spacing:-.2px; white-space:nowrap;
@@ -1657,7 +1660,7 @@
 
     <div class="gate-msg" id="gate-msg" style="display:none"></div>
     <div class="gate-note" id="gate-note" style="display:none"></div>
-    <div class="gate-ver">v55 · 2026-11-26 · Spark 무료 요금제</div>
+    <div class="gate-ver">v56 · 2026-11-26 · Spark 무료 요금제</div>
   </div>
 </div>
 
@@ -1692,6 +1695,8 @@ setTimeout(function () {
     <div class="today-pill">오늘 <b id="pill-in">0</b> 등원 · <b id="pill-out">0</b> 하원</div>
 
     <button class="hdr-fb-chip" id="hdr-fb-chip" type="button" title="눌러서 동기화 상태 보기">⚪ 로컬</button>
+    <!-- v56 — 전송 대기가 수백 건에서 맴돌 때만 나타나는 긴급 복구 버튼 -->
+    <button class="hdr-fb-chip hdr-stuck" id="hdr-stuck-clear" type="button" style="display:none" title="막힌 전송 대기를 비웁니다(서버 데이터는 그대로)">🧹 막힌 대기 비우기</button>
 
     <button class="icon-btn" id="app-refresh-btn" type="button"
             title="새로고침 — 대기 중인 기록을 먼저 보내고 앱을 다시 엽니다"
@@ -2164,7 +2169,7 @@ setTimeout(function () {
                     </div>
                     <div class="tiny-note" id="fb-usage-devices" style="margin-top:6px">이 기기: 읽기 0 · 쓰기 0 · 삭제 0 · 합산 기기 1대</div>
                     <div class="help" style="margin-top:8px">
-                      위 막대는 <b>관리자 PC·태블릿·폰이 각자 센 추정치를 더한 값</b>입니다(60초에 한 번, 서로 다른 기기의 오늘 값만 합산).
+                      위 막대는 <b>관리자 PC·태블릿·폰이 각자 센 추정치를 더한 값</b>입니다(5분에 한 번, 서로 다른 기기의 오늘 값만 합산).
                       합산 문서는 <b>meta/usage</b> 하나이며, 관리자로 확인된 기기만 읽고 씁니다.
                       기기 이름에 마우스를 올리면 기기별 내역을 볼 수 있습니다.
                       <b>실제 프로젝트 전체 사용량</b>은 Firebase 콘솔 → Firestore → <b>사용량</b> 탭에서 확인하세요 →
@@ -2180,6 +2185,7 @@ setTimeout(function () {
                       <button class="btn btn-sm btn-primary" id="fb-flush">지금 전송</button>
                       <button class="btn btn-sm" id="fb-retry">실패 재시도</button>
                       <button class="btn btn-sm" id="fb-clear-failed" disabled title="비울 실패 항목이 없습니다">🗑️ 실패 비우기</button>
+                      <button class="btn btn-sm" id="fb-clear-stuck" type="button" disabled title="비울 대기가 없습니다">🧹 막힌 대기 비우기</button>
                       <button class="btn btn-sm" id="fb-queue-toggle">대기 목록 보기</button>
                     </div>
                     <div class="fb-queue" id="fb-queue-list" style="display:none"></div>
@@ -2187,6 +2193,7 @@ setTimeout(function () {
                       출결·수정 기록은 <b>먼저 이 기기(tdk.fbOutbox.v1)에 안전하게 쌓이고</b>, Firestore 서버 저장이 확인된 뒤에만 목록에서 지워집니다.
                       인터넷이 끊겨도 찍은 기록이 사라지지 않고, 연결되면 자동으로 다시 보냅니다.
                       <br><b>🗑️ 실패 비우기</b>는 서버 규칙에서 거부되어 영구 실패한 항목만 지웁니다 — <b>대기 중인 출결은 건드리지 않습니다.</b>
+                      <br><b>🧹 막힌 대기 비우기</b>는 대기 숫자가 수백 건에서 줄지 않을 때 <b>이 기기의 전송 대기만</b> 한 번에 비웁니다 — <b>서버·드라이브 데이터는 그대로</b>입니다.
                     </div>
                   </div>
 
