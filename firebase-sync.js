@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '1.6.0';   /* v51 — 원비 문서 ID 해석 수정 · 대량 툼스톤 방지 · 복원 중 업로드 차단 */
+  var VERSION = '1.7.0';   /* v52 — 시각 없는 수동·CSV 출결 서버 저장 · 과거분 분할 업로드 · v51 안전장치 유지 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -56,6 +56,30 @@
      · 원생 1~2명 정리·중복 정리처럼 작은 삭제는 그대로 지나간다. */
   var BULK_DELETE_RATIO = 0.2;
   var BULK_DELETE_MIN_DOCS = 10;
+  /* v52 — 시각 없는 수동·CSV 출석(출석부 칸 눌러 표시 · 월별 출결 CSV 가져오기)을 서버에 남기기 위한
+     자리표시 시각.
+       · firestore.rules 의 validEvent() 가 time 을 필수(5자 · 00:00~23:59)로 요구하므로
+         "시각 없음"을 규칙 밖 값으로는 표현할 수 없다 → 규칙 안에서만 00:00 을 쓴다.
+         (kind: 'manual' 이나 time: '' 같은 새 값은 라이브 규칙에서 permission-denied 다)
+       · manual === true 이고 time === '00:00' 이면 "출석만 있고 시각은 모름"으로 읽는다.
+         앱에는 등원 시각이 아니라 「수동」으로 나오고, 월간 출석부에는 ● 만 찍힌다.
+       · 진짜 00:00 등원과 헷갈릴 일은 없다(도장은 자정에 열지 않는다). 시각이 있는 기록은
+         언제나 실제 시각을 그대로 쓴다. */
+  var NO_TIME = '00:00';
+  /* v52 — 과거 수동·CSV 출결(약 11,800건)의 최초 업로드 안전장치
+       · 한 번에 EVENT_UPLOAD.chunk 건까지만 큐에 넣고, 보낸 뒤 다음 차례에 이어서 넣는다
+       · 전체 기기 합산 쓰기가 (하루 한도 - reserveWrites) 에 닿으면 오늘은 멈춘다
+         → 정상 출결·원생·원비 쓰기가 무료 한도에 밀리지 않는다(자동 유료 전환 없음)
+       · 오늘 날짜의 수동 출결은 이 큐를 거치지 않고 곧바로 올라간다(capture)
+       · 시작 직후 delayMs 는 다른 기기가 이미 올려 둔 기록을 받아 보고(델타) 중복 업로드를 피하는 시간이다 */
+  var EVENT_UPLOAD = {
+    chunk: 1500,
+    reserveWrites: 4000,
+    delayMs: 45000,
+    intervalMs: 90000,
+    retryMs: 600000,
+    sampleDocs: 6
+  };
   var QUOTA_MESSAGE = '무료 한도를 모두 사용해 동기화를 잠시 멈췄습니다. 지금 찍은 기록은 이 기기에 임시 보관 중이며, 한도가 풀리면(태평양 시간 자정) 자동으로 다시 보냅니다. 그동안 Google Drive 백업을 받아 두시길 권합니다.';
 
   /* =========================================================================
@@ -790,6 +814,13 @@
     if (!m) { return null; }
     return { date: m[1], studentId: m[2], kind: m[3] };
   }
+  /* v52 — 시각 없는 수동·CSV 출석을 나타내는 출결 문서인가
+     (규칙이 time 을 필수로 요구해 자리표시 00:00 을 쓰므로 manual 로 구분한다) */
+  function isDayOnlyEvent(body) {
+    if (!body || typeof body !== 'object') { return false; }
+    if (body.manual !== true) { return false; }
+    return String(body.time || '').slice(0, 5) === NO_TIME;
+  }
 
   /* ---------- v51 — 원비 문서 ID 해석 `YYYY-MM_{원생ID}` ----------
      예전에는 마지막 '_' 로 잘라(`firebase-sync.js` applyRemoteDoc) `2026-11_stu_xxx` 를
@@ -906,6 +937,29 @@
               }
             });
           }
+          /* v52 — 시각 없는 수동·CSV 출석도 문서 하나로 남긴다 (예전에는 문서를 만들지 않아
+             과거 월별 출석부가 서버에 없었다). 규칙이 time 을 필수로 요구하므로
+             자리표시 시각(NO_TIME=00:00) + manual: true 로 "출석만 있고 시각은 모름"을 나타낸다.
+             · ctx.skipDayOnly  → 아예 만들지 않는다(그림자 씨앗: 어차피 올리지 않는 기록)
+             · ctx.skipOldDayOnly → 오늘 이전 기록은 "있음"만 알리는 표시(body:null)로 넣는다
+               (capture 가 11,800건을 매번 해시하지 않게 하면서, 툼스톤 오판은 막는다) */
+          if (manual && !inT && !outT) {
+            if (ctx && ctx.skipDayOnly) { return; }
+            var dayId = eventIdOf(date, sid, 'in');
+            var dayPath = collPath('attendanceEvents') + '/' + dayId;
+            if (ctx && ctx.skipOldDayOnly && date < String(ctx.today || '')) {
+              docs.push({ id: dayId, path: dayPath, body: null });
+              return;
+            }
+            docs.push({
+              id: dayId,
+              path: dayPath,
+              body: {
+                date: date, studentId: sid, kind: 'in', time: NO_TIME,
+                eventId: dayId, source: src, manual: true, deviceId: did
+              }
+            });
+          }
         });
       });
       return docs;
@@ -953,6 +1007,14 @@
       docsForEntry({ name: e.name, kind: 'events' }, v, base, ctx).forEach(function (d) {
         var prev = map[d.path];
         if (!prev) { map[d.path] = d; return; }
+        /* v52 — body:null 은 "있음"만 알리는 표시 — 실제 문서가 있으면 그것이 이긴다 */
+        if (!prev.body || !d.body) {
+          if (!prev.body && d.body) { map[d.path] = d; }
+          return;
+        }
+        /* v52 — 같은 날짜·원생의 "시각 있음" 기록이 "시각 없음(자리표시)" 보다 낫다 */
+        if (isDayOnlyEvent(prev.body) && !isDayOnlyEvent(d.body)) { map[d.path] = d; return; }
+        if (isDayOnlyEvent(d.body) && !isDayOnlyEvent(prev.body)) { return; }
         /* attendance 쪽 정보가 더 자세하다 → 시간이 있으면 그것을 쓴다 */
         if (!prev.body.time && d.body.time) { map[d.path] = d; }
         else if (prev.body.time === d.body.time && d.body.manual) { prev.body.manual = true; }
@@ -2145,7 +2207,10 @@
 
     function liveDocsOf(entry, base) {
       if (entry.kind === 'events') {
-        var map = unionEventDocs(readValue('attendance'), readValue('records'), base, { deviceId: deviceId });
+        /* v52 — 오늘 이전의 시각 없는 수동·CSV 기록은 "있음"만 표시(body:null)로 받아
+           매 체크인마다 11,800건을 해시하지 않는다(툼스톤 오판도 막는다). */
+        var ctx = { deviceId: deviceId, skipOldDayOnly: true, today: dayOf(now()) };
+        var map = unionEventDocs(readValue('attendance'), readValue('records'), base, ctx);
         return Object.keys(map).map(function (p) { return map[p]; });
       }
       return docsForEntry(entry, prevValues[entry.name], base, { deviceId: deviceId });
@@ -2173,11 +2238,20 @@
 
       Object.keys(live).forEach(function (p) {
         var d = live[p].doc;
+        if (!d || !d.body) { return; }        /* v52 — "있음" 표시(과거 수동 기록)는 보내지 않는다 */
         var src = live[p].entry;
         var body = clone(d.body) || {};
         var h = bodyHash(src.kind, body);
         var sh = shadow[p];
         if (sh && !sh.d && sh.h === h) { return; }          /* 내용이 그대로 → 보내지 않음 */
+        /* v52 — 과거(오늘 이전) 날짜의 "시각 없는 수동·CSV 출석"은 처음 올릴 때
+           분할 업로더(pumpEventBacklog)가 맡는다. 여기서 한꺼번에 밀어 넣으면
+           무료 한도(하루 쓰기 2만)를 한 번에 태우고, 그날 정상 출결 쓰기가 막힌다.
+             · 오늘 날짜의 수동 출결은 그대로 곧바로 보낸다
+             · 이미 올린 기록(그림자 v>=1)의 수정·삭제도 그대로 보낸다 */
+        if (src.kind === 'events' && isDayOnlyEvent(body) && !(sh && !sh.d && num(sh.v) > 0)) {
+          if (String(body.date || '') < dayOf(now())) { return; }
+        }
         if (src.kind === 'events') {
           var dup = duplicateEvent(p, body);
           if (dup) { return; }
@@ -2295,6 +2369,208 @@
         if (sh && !sh.d && String(sh.t || '') === String(body.time || '')) { return true; }
       }
       return false;
+    }
+
+    /* =========================================================================
+       v52 — 과거 수동·CSV 출결 분할 업로드
+       -------------------------------------------------------------------------
+       문제: v51 까지 docsForEntry 가 inTime/outTime 이 있을 때만 문서를 만들어
+             과거 수동·CSV 출석(2026-11-26 기준 11,792건)이 서버에 하나도 없었다.
+       이제 문서를 만들지만, 11,800건을 한 번에 올리면 Spark 하루 쓰기 한도(20,000)의
+       59%를 한 번에 태우고 그날 정상 출결·원생·원비 쓰기가 막힌다. 그래서
+         · 그림자에 없거나(아직 안 올림) 내용이 바뀐 "시각 없는" 기록을 최근 날짜부터
+         · 한 번에 chunk(1,500)건씩 큐에 넣고, 보낸 뒤 intervalMs 뒤에 다음 묶음
+         · 하루 남은 쓰기가 reserveWrites 아래로 내려가면 오늘은 멈춘다(다음 초기화 뒤 재개)
+         · 상대 기기가 이미 올려 둔 것이면 표본 몇 건만 읽어 보고 건너뛴다(쓰기 0)
+       ※ 서버 규칙은 그대로 둔다 — 문서 모양은 기존 허용 칸/형식 안에서만 만든다.
+       ========================================================================= */
+    var eventPump = {
+      timer: null, running: false, sampled: false,
+      lastAt: '', result: '', reason: '',
+      uploaded: 0, total: 0, remaining: 0, done: false
+    };
+
+    function eventBacklogState() {
+      var total = num(eventPump.total), remaining = num(eventPump.remaining);
+      return {
+        at: eventPump.lastAt,
+        total: total,
+        remaining: remaining,
+        doneCount: Math.max(0, total - remaining),
+        uploaded: num(eventPump.uploaded),
+        done: !!eventPump.done,
+        result: eventPump.result || '',
+        reason: eventPump.reason || '',
+        chunk: EVENT_UPLOAD.chunk,
+        reserveWrites: EVENT_UPLOAD.reserveWrites,
+        pending: outbox.count(),
+        running: !!eventPump.running
+      };
+    }
+
+    /* 시각 없는 수동·CSV 출석 문서 중 아직 서버에 없는 것 — 최근 날짜부터 */
+    function dayOnlyEventBacklog(base) {
+      var map = unionEventDocs(readValue('attendance'), readValue('records'), base, { deviceId: deviceId });
+      var cands = [];
+      var total = 0;
+      Object.keys(map).forEach(function (p) {
+        var body = map[p].body || {};
+        if (!isDayOnlyEvent(body)) { return; }
+        var date = String(body.date || '');
+        if (!date) { return; }
+        total++;
+        var sh = shadow[p];
+        /* 그림자에 같은 내용이 있으면 이미 올렸거나( v>=1 ) 서버에 있음을 확인한 기록 */
+        if (sh && !sh.d && sh.h === eventHash(body)) { return; }
+        cands.push({ path: p, body: body, date: date, studentId: String(body.studentId || '') });
+      });
+      cands.sort(function (a, b) {
+        if (a.date !== b.date) { return a.date < b.date ? 1 : -1; }
+        return a.studentId < b.studentId ? -1 : (a.studentId > b.studentId ? 1 : 0);
+      });
+      return { cands: cands, total: total };
+    }
+
+    /* 지금 더 써도 되는 문서 수 — 전체 기기 합산 쓰기와 남겨 둘 몫을 뺀다 */
+    function eventUploadRoom() {
+      var snap = usage.snapshot();
+      var limit = num(snap.limits && snap.limits.writes) || SPARK.writes;
+      var used = num(snap.total && snap.total.writes);
+      if (!used) { used = num(snap.writes); }      /* 다른 기기 합산을 아직 못 받았을 때 */
+      var pending = 0;
+      try { outbox.pending().forEach(function (it) { if (it.del !== true) { pending++; } }); } catch (e) { pending = 0; }
+      var room = limit - used - pending - EVENT_UPLOAD.reserveWrites;
+      return room > 0 ? room : 0;
+    }
+
+    /* 상대 기기가 이미 올려 둔 기록인지 표본으로 확인 — 몇 건 읽기로 1만 건 쓰기를 아낀다 */
+    function serverHasBacklog(cands) {
+      if (!adapter || typeof adapter.getDocs !== 'function') { return Promise.resolve(false); }
+      var n = Math.min(EVENT_UPLOAD.sampleDocs, cands.length);
+      if (n < 2) { return Promise.resolve(false); }
+      var pick = [], seen = {};
+      for (var i = 0; i < n; i++) {
+        var idx = Math.round(i * (cands.length - 1) / (n - 1));
+        if (seen[idx]) { continue; }
+        seen[idx] = 1;
+        pick.push(cands[idx]);
+      }
+      var paths2 = pick.map(function (c) { return c.path; });
+      var p;
+      try { p = adapter.getDocs(paths2); } catch (e) { return Promise.resolve(false); }
+      return Promise.resolve(p).then(function (res) {
+        try { usage.record('reads', pick.length); } catch (e) {}
+        var have = 0;
+        (res || []).forEach(function (r) { if (r && r.exists && r.data && r.data._deleted !== true) { have++; } });
+        return have === pick.length;
+      }, function () { return false; });
+    }
+
+    function scheduleEventPump(delayMs) {
+      if (opts.autoflush === false) { return null; }      /* 테스트·수동 모드에서는 직접 부른다 */
+      if (eventPump.timer) { try { clearTimeout(eventPump.timer); } catch (e) {} eventPump.timer = null; }
+      var d = num(delayMs);
+      if (!(d > 0)) { return null; }
+      eventPump.timer = setTimeout(function () {
+        eventPump.timer = null;
+        pumpEventBacklog().then(function () {}, function () {});
+      }, d);
+      return eventPump.timer;
+    }
+
+    function pumpEventBacklog() {
+      if (eventPump.running) { return Promise.resolve({ ok: false, reason: 'busy', state: eventBacklogState() }); }
+      var blocked = !adapter ? 'no-adapter'
+        : (!isEffectiveAdmin() ? 'role-unverified'
+        : (suppressCapture ? 'restoring'
+        : (!online() ? 'offline'
+        : (usage.blocked() ? 'quota' : ''))));
+      if (blocked) {
+        eventPump.reason = blocked;
+        return Promise.resolve({ ok: false, reason: blocked, state: eventBacklogState() });
+      }
+      var base = basePath();
+      var scan;
+      try { scan = dayOnlyEventBacklog(base); }
+      catch (e) {
+        eventPump.reason = 'scan';
+        return Promise.resolve({ ok: false, reason: 'scan', error: errorText(e), state: eventBacklogState() });
+      }
+      eventPump.total = scan.total;
+      eventPump.remaining = scan.cands.length;
+      eventPump.reason = '';
+      if (!scan.cands.length) {
+        eventPump.done = true; eventPump.uploaded = 0;
+        eventPump.result = 'done'; eventPump.lastAt = isoOf(now());
+        emit('event-backlog', eventBacklogState());
+        return Promise.resolve({ ok: true, uploaded: 0, remaining: 0, done: true, total: scan.total, state: eventBacklogState() });
+      }
+      eventPump.running = true;
+      var first = Promise.resolve(false);
+      if (!eventPump.sampled) {
+        eventPump.sampled = true;
+        first = serverHasBacklog(scan.cands).then(function (has) {
+          if (!has) { return false; }
+          /* 이미 서버에 있다 → 그림자에 "아는 상태"로 채워 두 번 올리지 않는다 */
+          var at = isoOf(now());
+          scan.cands.forEach(function (c) {
+            putShadowEntry(c.path, { v: 0, m: {}, u: '', by: '', d: false, h: eventHash(c.body), b: null, t: c.body.time });
+          });
+          saveShadow();
+          eventPump.done = true; eventPump.remaining = 0; eventPump.uploaded = 0;
+          eventPump.result = 'already'; eventPump.reason = 'already'; eventPump.lastAt = at;
+          emit('event-backlog', eventBacklogState());
+          return true;
+        }, function () { return false; });
+      }
+      return first.then(function (already) {
+        if (already) {
+          return { ok: true, already: true, uploaded: 0, remaining: 0, total: scan.total, state: eventBacklogState() };
+        }
+        var room = eventUploadRoom();
+        var take = scan.cands.slice(0, Math.max(0, Math.min(EVENT_UPLOAD.chunk, room)));
+        if (!take.length) {
+          eventPump.uploaded = 0; eventPump.reason = 'reserve';
+          eventPump.result = 'reserve'; eventPump.lastAt = isoOf(now());
+          emit('event-backlog', eventBacklogState());
+          return { ok: true, uploaded: 0, remaining: scan.cands.length, blocked: 'reserve', total: scan.total, state: eventBacklogState() };
+        }
+        var at2 = isoOf(now());
+        take.forEach(function (c) {
+          var sh = shadow[c.path];
+          var prevBody = sh && sh.b ? sh.b : {};
+          var meta = stampFields(prevBody, sh ? sh.m : {}, c.body, { at: at2, by: deviceId });
+          var ver = (sh ? num(sh.v) : 0) + 1;
+          var doc = valueFields(c.body);
+          doc._ver = ver;
+          doc._updatedAt = at2;
+          doc._updatedBy = deviceId;
+          doc._fieldMeta = meta;
+          putShadowEntry(c.path, { v: ver, m: meta, u: at2, by: deviceId, h: eventHash(c.body), d: false, b: null, t: c.body.time });
+          outbox.enqueue({ path: c.path, body: doc });
+        });
+        saveShadow();
+        eventPump.uploaded = take.length;
+        eventPump.remaining = scan.cands.length - take.length;
+        eventPump.done = eventPump.remaining === 0;
+        eventPump.result = 'uploaded';
+        eventPump.lastAt = at2;
+        emit('captured', { key: 'attendance', count: take.length, backlog: true });
+        emit('event-backlog', eventBacklogState());
+        scheduleFlush();
+        return { ok: true, uploaded: take.length, remaining: eventPump.remaining, total: scan.total, state: eventBacklogState() };
+      }).then(function (res) {
+        eventPump.running = false;
+        if (res && res.remaining > 0) {
+          scheduleEventPump(res.blocked ? EVENT_UPLOAD.retryMs : EVENT_UPLOAD.intervalMs);
+        }
+        return res;
+      }, function (err) {
+        eventPump.running = false;
+        eventPump.reason = 'error';
+        eventPump.result = 'error';
+        return { ok: false, reason: 'error', error: errorText(err), state: eventBacklogState() };
+      });
     }
 
     /* ---------- 원격 변경 반영 ---------- */
@@ -2504,10 +2780,18 @@
         if (!isPlain(rec)) { rec = {}; }
         var day = isPlain(att[m.date]) ? att[m.date] : {};
         var e = isPlain(day[m.studentId]) ? day[m.studentId] : {};
-        var time = deleted ? '' : String(body.time || '').slice(0, 5);
+        /* v52 — 자리표시 시각(00:00)+manual 은 "출석만 있고 시각은 모름"이다.
+           그대로 inTime 에 넣으면 화면에 00:00 이 찍히므로 시각은 비우고 manual 만 남긴다. */
+        var dayOnly = !deleted && isDayOnlyEvent(body);
+        var time = (deleted || dayOnly) ? '' : String(body.time || '').slice(0, 5);
         if (m.kind === 'in') { if (time) { e.inTime = time; } else { delete e.inTime; } }
         else { if (time) { e.outTime = time; } else { delete e.outTime; } }
-        if (!deleted && body.manual) { e.manual = true; }
+        if (deleted) {
+          /* v52 — 삭제 수신은 기록 자체를 없얀다. 예전에는 manual 이라 남아
+             "지우고 싶은 기록"이 상대 기기에서 살아 있었다. 남은 시각이 있으면
+             (등원만 지우고 하원은 남기는 경우) 그대로 둔다. */
+          if (!e.inTime && !e.outTime) { delete e.manual; delete e.src; }
+        } else if (body.manual) { e.manual = true; }
         var srcVal = body.source || body.src;          /* source = v3 칸, src = v2 문서 호환 */
         if (srcVal) { e.src = String(srcVal); }
         e.updatedAt = isoOf(now());
@@ -2522,7 +2806,8 @@
         var rd = isPlain(rec[m.date]) ? rec[m.date] : {};
         var r = isPlain(rd[m.studentId]) ? rd[m.studentId] : { in: null, out: null };
         if (m.kind === 'in') { r.in = time || null; } else { r.out = time || null; }
-        if (!deleted && body.manual) { r.manual = true; }
+        if (deleted) { if (!r.in && !r.out) { delete r.manual; } }
+        else if (body.manual) { r.manual = true; }
         if (r.in || r.out || r.manual) {
           rd[m.studentId] = r;
           rec[m.date] = rd;
@@ -2763,9 +3048,10 @@
     /* ---------- 이전(마이그레이션) ---------- */
     function migrationPlan() {
       var base = basePath();
-      var plan = { keys: [], docs: [], total: 0, batches: 0, synced: 0, localOnly: 0, derived: 0, keyCount: 0, derivedKeys: 0 };
+      var plan = { keys: [], docs: [], total: 0, batches: 0, synced: 0, localOnly: 0, derived: 0, keyCount: 0, derivedKeys: 0, deferred: 0 };
       var all = [];
       var seenKeys = {};
+      var today = dayOf(now());
       registry.forEach(function (e) {
         var row = {
           name: e.name, key: e.key, label: e.label, icon: e.icon, kind: e.kind, desc: e.desc,
@@ -2773,7 +3059,12 @@
         };
         if (!seenKeys[e.key]) { seenKeys[e.key] = 1; plan.keyCount++; }
         if (e.kind !== 'local') {
-          var docs = docsForEntry(e, readValue(e.name), base, { deviceId: deviceId });
+          var docs = docsForEntry(e, readValue(e.name), base, { deviceId: deviceId }).filter(function (d) {
+            /* v52 — 과거 수동·CSV 출결은 수동 이전 대신 자동 분할 업로드가 맡는다(한도 보호) */
+            if (!isDayOnlyEvent(d.body) || !(String(d.body.date || '') < today)) { return true; }
+            plan.deferred++;
+            return false;
+          });
           row.count = docs.length;
           docs.forEach(function (d) { all.push({ entry: e, doc: d }); });
         } else {
@@ -2786,6 +3077,8 @@
       all.forEach(function (item) {
         var prev = byPath[item.doc.path];
         if (!prev) { byPath[item.doc.path] = item; return; }
+        if (isDayOnlyEvent(prev.doc.body) && !isDayOnlyEvent(item.doc.body)) { byPath[item.doc.path] = item; return; }
+        if (isDayOnlyEvent(item.doc.body) && !isDayOnlyEvent(prev.doc.body)) { return; }
         if (!prev.doc.body.time && item.doc.body.time) { byPath[item.doc.path] = item; }
       });
       plan.docs = Object.keys(byPath).map(function (p) { return byPath[p]; });
@@ -2804,10 +3097,13 @@
 
     function buildMigrationDocs() {
       var base = basePath();
+      var today = dayOf(now());
       var out = [];
       registry.forEach(function (e) {
         if (e.kind === 'local') { return; }
         docsForEntry(e, readValue(e.name), base, { deviceId: deviceId }).forEach(function (d) {
+          /* v52 — 과거 수동·CSV 출결은 수동 이전에서 건너뛴다(자동 분할 업로드가 올린다) */
+          if (isDayOnlyEvent(d.body) && String(d.body.date || '') < today) { return; }
           var body = clone(d.body) || {};
           var sh = shadow[d.path];
           var prevBody = sh && sh.b ? sh.b : {};
@@ -2820,9 +3116,12 @@
           out.push({ path: d.path, body: doc, entry: e });
         });
       });
-      /* 중복 경로 정리 */
+      /* 중복 경로 정리 — 시각 있는 기록이 시각 없는 자리표시보다 우선 */
       var map = {};
-      out.forEach(function (it) { map[it.path] = it; });
+      out.forEach(function (it) {
+        var prev = map[it.path];
+        if (!prev || (isDayOnlyEvent(prev.body) && !isDayOnlyEvent(it.body))) { map[it.path] = it; }
+      });
       return Object.keys(map).map(function (p) { return map[p]; });
     }
 
@@ -2921,10 +3220,15 @@
       registry.forEach(function (e) {
         if (e.kind === 'local') { return; }
         if (e.kind === 'events') {
-          var map = unionEventDocs(readValue('attendance'), readValue('records'), base);
+          /* v52 — 시각 없는 수동·CSV 출석은 "이미 아는 상태"로 채우지도, 해시하지도 않는다.
+             서버에 아직 없을 수 있으므로(예전 버전은 문서를 만들지 않았다) 분할 업로더가
+             한도에 여유가 있을 때 차례로 올린다. 올린 뒤에는 그림자에 진짜 항목이 생겨
+             (v>=1) 다시 올리지 않는다. */
+          var map = unionEventDocs(readValue('attendance'), readValue('records'), base, { skipDayOnly: true });
           Object.keys(map).forEach(function (p) {
             if (shadow[p]) { return; }
             var b = map[p].body;
+            if (!b || isDayOnlyEvent(b)) { return; }
             putShadowEntry(p, { v: 0, m: {}, u: '', by: '', d: false, h: eventHash(b), b: null, t: b.time });
           });
           return;
@@ -2975,6 +3279,8 @@
         } catch (e) {}
       }
       startRetryLoop();
+      /* v52 — 과거 수동·CSV 출결 분할 업로드 시작 (다른 기기가 이미 올려 둔 기록을 받아 본 뒤) */
+      scheduleEventPump(EVENT_UPLOAD.delayMs);
       attachBatchHooks(adapter);
       if (adapter && typeof adapter.subscribe === 'function') {
         unsub = adapter.subscribe(function (path, data, meta) {
@@ -3008,6 +3314,7 @@
       }
       if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
       if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+      if (eventPump.timer) { try { clearTimeout(eventPump.timer); } catch (e) {} eventPump.timer = null; }
       /* 마지막 그림자 상태를 IndexedDB 에 남기고, 남은 타이머가 나중에 덮어쓰지 않게 정리 */
       if (shadowSaveTimer) { try { clearTimeout(shadowSaveTimer); } catch (e) {} shadowSaveTimer = null; }
       if (shadowDirty) { flushShadowPersist(); }
@@ -3054,6 +3361,11 @@
       subscribe: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
       flush: flush,
       handleWrite: handleWrite,
+      /* v52 — 과거 수동·CSV 출결 분할 업로드 상태·수동 실행(진단·테스트) */
+      eventBacklog: eventBacklogState,
+      pumpEventBacklog: pumpEventBacklog,
+      eventUploadRoom: eventUploadRoom,
+      scheduleEventPump: scheduleEventPump,
       captureKey: function (name) {
         var e = entryByName(name);
         if (!e) { return 0; }
@@ -3716,6 +4028,9 @@
     isTuitionMonthKey: isTuitionMonthKey,
     BULK_DELETE_RATIO: BULK_DELETE_RATIO,
     BULK_DELETE_MIN_DOCS: BULK_DELETE_MIN_DOCS,
+    NO_TIME: NO_TIME,
+    EVENT_UPLOAD: EVENT_UPLOAD,
+    isDayOnlyEvent: isDayOnlyEvent,
     docBody: docBody,
     unionEventDocs: unionEventDocs,
     unionArrays: unionArrays,

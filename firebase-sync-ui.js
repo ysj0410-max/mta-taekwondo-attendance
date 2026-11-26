@@ -165,6 +165,24 @@
             ' 서버의 기록은 그대로 두었습니다 — 원생·원비 목록이 비어 보이면 「🔄 전체 다시 불러오기」로 서버에서 다시 받아 주세요.';
           S.msgKind = 'warn';
         }
+        /* v52 — 과거 수동·CSV 출결을 무료 한도를 지키며 나눠 올리는 중 */
+        if (type === 'event-backlog' && payload && payload.result) {
+          if (payload.result === 'uploaded' && payload.remaining > 0) {
+            S.msg = '🕒 과거 출결을 서버에 나눠 올리는 중입니다 — ' + numText(payload.doneCount) + ' / ' + numText(payload.total) +
+              '건 저장 · 남은 ' + numText(payload.remaining) + '건은 한도 여유를 보며 ' + numText(payload.chunk) + '건씩 이어서 올립니다.';
+            S.msgKind = 'ok';
+          } else if (payload.result === 'uploaded') {
+            S.msg = '✅ 과거 출결 ' + numText(payload.total) + '건을 모두 서버에 올렸습니다 — 이제 다른 기기에서도 과거 월별 출석부가 보입니다.';
+            S.msgKind = 'ok';
+          } else if (payload.result === 'already') {
+            S.msg = '🕒 과거 출결은 이미 서버에 있었습니다 — 다시 올리지 않았습니다(쓰기 0건).';
+            S.msgKind = 'ok';
+          } else if (payload.result === 'reserve') {
+            S.msg = '🕒 오늘 쓸 수 있는 Firebase 쓰기를 다 써서 과거 출결 업로드를 잠시 멈췄습니다 — 한도가 풀리면(한국 오후 4~5시) 남은 ' +
+              numText(payload.remaining) + '건을 이어서 올립니다. 지금 찍는 출결은 이 기기에 저장되고 내일 올라갑니다.';
+            S.msgKind = 'warn';
+          }
+        }
         if (type === 'role') {
           S.msg = roleLockText();
           S.msgKind = (payload && payload.role === 'none') ? 'warn' : 'ok';
@@ -350,7 +368,8 @@
       : '동기화를 켜면 표시됩니다');
     var lastSync = (S.engine && S.engine.errors().lastSyncAt) || S.cfg.lastSyncAt || '';
     setText('fb-sync-note', '마지막 동기화: ' + (lastSync ? nowText(lastSync) : '아직 없음') +
-      (S.engine ? ' · 기기 ID ' + deviceId() : ''));
+      (S.engine ? ' · 기기 ID ' + deviceId() : '') +
+      backlogNote());
     showWarn(st.state === 'blocked');
   }
 
@@ -666,7 +685,8 @@
     S.plan = S.engine.migrationPlan();
     setHtml('fb-mig-result', '이전 대상: ' + S.plan.keys.filter(function (k) { return !k.localOnly && k.count; })
       .map(function (k) { return k.label + ' ' + numText(k.count) + '건'; }).join(' · '));
-    S.msg = '현재 기기의 데이터 ' + numText(S.plan.total) + '건을 확인했습니다. 아래 표를 보고 「이전 실행」을 눌러 주세요.';
+    S.msg = '현재 기기의 데이터 ' + numText(S.plan.total) + '건을 확인했습니다. 아래 표를 보고 「이전 실행」을 눌러 주세요.' +
+      (S.plan.deferred ? ' (과거 수동·CSV 출결 ' + numText(S.plan.deferred) + '건은 무료 한도를 지키려고 「이전」 대신 「자동 분할 업로드」가 차례로 올립니다)' : '');
     S.msgKind = 'ok';
     renderAll();
   }
@@ -842,6 +862,28 @@
       (rows ? '<table class="fb-sync-tbl"><thead><tr><th>컬렉션</th><th>마지막 동기화</th></tr></thead><tbody>' + rows + '</tbody></table>' : '');
   }
 
+  /* v52 — 과거 수동·CSV 출결을 나눠 올리는 진행 상황 (상태 줄·동기화 상태 창) */
+  function backlogState() {
+    try {
+      return (S.engine && typeof S.engine.eventBacklog === 'function') ? S.engine.eventBacklog() : null;
+    } catch (e) { return null; }
+  }
+  function backlogNote() {
+    var bl = backlogState();
+    if (!bl || !bl.total || !(bl.remaining > 0)) { return ''; }
+    return ' · 과거 출결 ' + numText(bl.doneCount) + '/' + numText(bl.total) + '건 올리는 중';
+  }
+  function backlogText() {
+    var bl = backlogState();
+    if (!bl || !bl.total) { return ''; }
+    if (bl.remaining > 0) {
+      return '<div class="tiny-note" style="margin:2px 0 8px">🕒 과거 출결 <b>' + numText(bl.doneCount) + '</b> / ' + numText(bl.total) +
+        '건 서버에 저장됨 · 남은 ' + numText(bl.remaining) + '건은 무료 한도 여유를 보며 ' + numText(bl.chunk) + '건씩 이어서 올립니다' +
+        (bl.result === 'reserve' ? ' — 오늘 쓸 수 있는 쓰기를 다 써서 다음 초기화 뒤에 이어집니다' : '') + '</div>';
+    }
+    return '<div class="tiny-note" style="margin:2px 0 8px">🕒 과거 출결 ' + numText(bl.total) + '건 모두 서버에 저장됨</div>';
+  }
+
   function renderSyncModal() {
     if (!SYNC_MODAL.open || !SYNC_MODAL.root) { return; }
     var st = S.engine ? S.engine.status() : { state: 'local', text: '⚪ 미연결(로컬 모드)', queued: 0, lastSyncAt: '' };
@@ -853,6 +895,7 @@
       '<span class="tiny-note">마지막 동기화: ' + escHtml(st.lastSyncAt ? isoText(st.lastSyncAt) : '아직 없음') + '</span></div>' +
       '<div class="tiny-note" style="margin:8px 0 10px">보낼 것 <b>' + sum.pending + '</b>건 · 확인 중 <b>' + sum.unacked +
       '</b>건 · 실패 <b>' + sum.failed + '</b>건 · 기기 ID <b>' + escHtml(deviceId()) + '</b></div>' +
+      backlogText() +
       syncInfoText();
   }
 
