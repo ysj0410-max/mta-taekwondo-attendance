@@ -3635,6 +3635,18 @@ setTimeout(function () {
       return { name: name, colors: triple ? triple.slice() : [c, c, c], grade: BELT_GRADES[name] || '' };
     });
   }
+  /* v57 — 띠 목록이 앱 기본 10단계와 똑같은가 — 예전 사고로 '기본값'이 저장된 기기를 가려낸다.
+     (그 기본값을 그대로 업로드하면 서버의 진짜 띠 체계가 기본값으로 덮인다) */
+  function sameAsDefaultBelts(list) {
+    try {
+      var mine = (list || []).map(function (b) {
+        return { name: String((b && b.name) || ''), colors: normalizeBeltColors(b), grade: String((b && b.grade) || '') };
+      });
+      return JSON.stringify(mine) === JSON.stringify(defaultBelts());
+    } catch (e) {
+      return false;
+    }
+  }
 
   var DEFAULT_SETTINGS = {
     dojoName: '경희대MTA태권도',
@@ -4274,7 +4286,9 @@ setTimeout(function () {
          (11-26 띠 체계가 사라진 뒤 드라이브 백업으로 되살린 일이 있었다) */
       app.beltsDefaulted = true;
     } else {
-      app.beltsDefaulted = false;
+      /* v57 — 저장된 목록이 기본 10단계와 똑같으면(예전 사고로 기본값이 저장된 기기) 역시 저장하지 않는다.
+         띠 체계 화면에서 직접 저장하면 saveBeltSystem 이 이 표시를 풀어 그대로 올린다. */
+      app.beltsDefaulted = sameAsDefaultBelts(app.settings.belts);
     }
     app.settings.visibility = Object.assign(
       { beltSystem: true, promotion: true, gukgiwon: false },
