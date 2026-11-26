@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=57"></script>
-<script src="firebase-sync-ui.js?v=57"></script>
+<script src="firebase-sync.js?v=58"></script>
+<script src="firebase-sync-ui.js?v=58"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -1162,20 +1162,10 @@
   table.tb.rp-tab th.rp-num{text-align:right}
   table.tb.rp-tab th, table.tb.rp-tab td{white-space:nowrap}
   table.tb.rp-tab td.nm{font-weight:800; color:var(--navy); white-space:normal; min-width:88px}
-  table.tb.rp-tab tr.rp-paused{background:#fbfaff; color:#7b6b9a}
-  table.tb.rp-tab tr.rp-exempt{background:#fbfcfe}
   .rp-barcell{width:36%; min-width:104px}
   .rp-barcell .rp-bar{min-width:60px}
   table.tb.rp-year tr.rp-zero td{color:#9aa3b2}
   table.tb.rp-year tr.rp-sum td{font-weight:900; background:#f6f8fd; border-top:2px solid #dde5f3}
-  .rp-state{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:800; white-space:nowrap}
-  .rp-state.paid{background:#e7f7ee; color:#12855b}
-  .rp-state.unpaid{background:#fdecec; color:#c0392b}
-  .rp-state.exempt{background:#eef1f6; color:#5b6b85}
-  .rp-state.paused{background:#f2ecff; color:#6b46c1}
-  /* v47 — 입관 전 · 휴관 기간 (원비를 매기지 않는 달) */
-  .rp-state.before{background:#eef1f6; color:#66748c}
-  .rp-before td.nm, .rp-pausedMonth td.nm{color:#66748c}
   .rp-ymethods{font-size:12px; font-weight:800; color:#475467; margin-top:8px; display:flex; gap:12px; flex-wrap:wrap}
   .rp-ymethods b{color:var(--navy)}
   .rp-print-head{display:none}
@@ -1660,7 +1650,7 @@
 
     <div class="gate-msg" id="gate-msg" style="display:none"></div>
     <div class="gate-note" id="gate-note" style="display:none"></div>
-    <div class="gate-ver">v57 · 2026-11-27 · Spark 무료 요금제</div>
+    <div class="gate-ver">v58 · 2026-11-27 · Spark 무료 요금제</div>
   </div>
 </div>
 
@@ -2742,25 +2732,18 @@ setTimeout(function () {
             <div class="stat out"><div class="stat-label">📈 수납률</div><div class="stat-val" id="rp-rate">0<small>%</small></div><div class="tu-sub" id="rp-rate-n">휴관 0명 제외</div></div>
           </div>
 
+          <!-- v58 — 수납 리포트에서 부서 소계·띠 소계·관원별 내역 섹션 제거(관원별 내역은 원비 관리에서 본다) -->
           <div class="admin-grid">
             <div class="admin-col">
               <div class="panel">
                 <div class="panel-head"><h3>📊 결제수단별 수납</h3><div class="spacer"></div><span class="tiny-note" id="rp-method-note"></span></div>
                 <div class="panel-body"><div class="rp-mlist" id="rp-methods"></div></div>
               </div>
-              <div class="panel">
-                <div class="panel-head"><h3>↔️ 전월 대비</h3><div class="spacer"></div><span class="tiny-note">수납액 · 증감률 · 인원</span></div>
-                <div class="panel-body"><div id="rp-delta"></div></div>
-              </div>
             </div>
             <div class="admin-col">
               <div class="panel">
-                <div class="panel-head"><h3>🏷️ 부서별 수납 소계</h3></div>
-                <div class="tablewrap"><table class="tb rp-tab"><thead><tr><th>부서</th><th class="rp-num">인원</th><th class="rp-num">수납액</th></tr></thead><tbody id="rp-class"></tbody></table></div>
-              </div>
-              <div class="panel">
-                <div class="panel-head"><h3>🥋 띠별 수납 소계</h3></div>
-                <div class="tablewrap"><table class="tb rp-tab"><thead><tr><th>띠</th><th class="rp-num">인원</th><th class="rp-num">수납액</th></tr></thead><tbody id="rp-belt"></tbody></table></div>
+                <div class="panel-head"><h3>↔️ 전월 대비</h3><div class="spacer"></div><span class="tiny-note">수납액 · 증감률 · 인원</span></div>
+                <div class="panel-body"><div id="rp-delta"></div></div>
               </div>
             </div>
           </div>
@@ -2776,22 +2759,12 @@ setTimeout(function () {
             <div class="panel-body" style="padding-top:10px"><div class="rp-ymethods" id="rp-year-methods"></div></div>
           </div>
 
-          <div class="panel">
-            <div class="panel-head"><h3>🧾 관원별 수납 내역</h3><div class="spacer"></div><span class="tiny-note" id="rp-note">-</span></div>
-            <div class="tablewrap tu-tablewrap">
-              <table class="tb rp-tab">
-                <thead><tr><th>관원</th><th>부서 · 수업</th><th>띠</th><th class="rp-num">기본 원비</th><th class="rp-num">차감</th><th>결제수단</th><th>납부일</th><th>상태</th><th class="rp-num">수납액</th></tr></thead>
-                <tbody id="rp-table"></tbody>
-              </table>
-            </div>
-            <div class="panel-body" style="border-top:1px solid #eef1f6">
-              <div class="help" style="margin-top:0">
-                이 리포트는 <b>원비 관리 탭에 이미 쌓인 납부 기록만으로</b> 자동으로 계산됩니다. 따로 입력할 것은 없어요.<br>
-                <b>휴관생</b>은 수납 집계·수납률에서 빠지고 표에만 <b>휴관</b>으로 표시됩니다. <b>면제</b>도 집계에서 빠집니다.
-                결제수단이 비어 있는 완납 건은 <b>미기록</b>으로 따로 잡히니, 원비 관리 탭에서 수단을 눌러 주면 정확해집니다.<br>
-                <b>CSV</b>는 엑셀에서 바로 열리고(한글 안 끊김), <b>인쇄</b>는 브라우저 인쇄 창에서 PDF로 저장할 수도 있습니다.
-              </div>
-            </div>
+          <div class="help" style="margin:12px 2px 0">
+            이 리포트는 <b>원비 관리 탭에 이미 쌓인 납부 기록만으로</b> 자동으로 계산됩니다. 따로 입력할 것은 없어요.
+            관원별 납부 내역은 <b>💳 원비 관리</b> 탭에서 볼 수 있습니다.
+            <b>휴관생</b>·<b>면제</b>는 수납 집계·수납률에서 빠집니다.
+            결제수단이 비어 있는 완납 건은 <b>미기록</b>으로 따로 잡히니, 원비 관리 탭에서 수단을 눌러 주면 정확해집니다.<br>
+            <b>CSV</b>는 엑셀에서 바로 열리고(한글 안 끊김), <b>인쇄</b>는 브라우저 인쇄 창에서 PDF로 저장할 수도 있습니다.
           </div>
         </div>
 
@@ -11847,6 +11820,9 @@ setTimeout(function () {
      11-F-2. 수납 리포트 (월별 매출 자동 집계 · 관리자 전용)
      기존 원비 데이터(tdk.tuition.v1) + 관원 명단·반/띠·휴관 상태만 읽어 계산한다.
      새로 입력받는 값은 없다(수동 입력 필드 없음).
+     v58 — 화면에서 부서 소계·띠 소계·관원별 내역 세 섹션을 뺐다
+            (관원별 납부 내역은 「원비 관리」 탭에서 본다). 요약 카드·결제수단·전월 대비·
+            연간 추이·CSV·인쇄는 그대로다. 관원별 행(d.rows)은 월 수납 CSV 명세에만 쓴다.
      ========================================================= */
   var REPORT_METHODS = ['카드', '현금', '입금'];
   var REPORT_METHOD_ICON = { '카드': '💳', '현금': '💵', '입금': '🏦' };
@@ -11861,30 +11837,6 @@ setTimeout(function () {
     return app.reportUI;
   }
 
-  /* 부서별·띠별 소계 (수납이 발생한 관원만) */
-  function reportGroup(rows, key) {
-    var map = {}, order = [];
-    (rows || []).forEach(function (r) {
-      if (r.status !== 'paid') { return; }
-      var name = r[key] || (key === 'belt' ? '띠 미지정' : '부서 미지정');
-      if (!map[name]) { map[name] = { name: name, total: 0, count: 0 }; order.push(name); }
-      map[name].total += r.amount;
-      map[name].count++;
-    });
-    var list = order.map(function (k) { return map[k]; });
-    if (key === 'belt') {
-      list.sort(function (a, b) {
-        var ia = BELT_ORDER.indexOf(a.name); if (ia < 0) { ia = 99; }
-        var ib = BELT_ORDER.indexOf(b.name); if (ib < 0) { ib = 99; }
-        if (ia !== ib) { return ia - ib; }
-        return a.name.localeCompare(b.name, 'ko');
-      });
-    } else {
-      list.sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
-    }
-    return list;
-  }
-
   /* 그 달의 수납 집계 — 화면·CSV·연간 요약이 모두 이 함수를 쓴다 */
   function reportMonth(mk) {
     mk = String(mk || '');
@@ -11895,7 +11847,7 @@ setTimeout(function () {
       beforeCount: 0, pausedMonthCount: 0,
       noMethod: 0, noMethodCount: 0, orphanCount: 0, rate: 0,
       byMethod: emptyMethodMap(), byMethodCount: emptyMethodMap(),
-      byDivision: [], byBelt: [], rows: []
+      rows: []
     };
     var seen = {};
     var list = (app.students || []).slice().sort(tuitionSort);
@@ -11998,8 +11950,6 @@ setTimeout(function () {
     });
 
     out.rate = out.expected ? Math.round(out.paidRoster / out.expected * 100) : 0;
-    out.byDivision = reportGroup(out.rows, 'division');
-    out.byBelt = reportGroup(out.rows, 'belt');
     return out;
   }
 
@@ -12158,40 +12108,6 @@ setTimeout(function () {
       '<div class="rp-dhead">' + (del.prevTotal ? '전월 ' + fmtWon(del.prevTotal) + '원' : '전월 수납 없음') + '</div></div>';
   }
 
-  function reportSubtotalRows(list, emptyText) {
-    if (!list.length) { return '<tr class="empty-row"><td colspan="3">' + emptyText + '</td></tr>'; }
-    return list.map(function (g) {
-      return '<tr><td class="nm">' + esc(g.name) + '</td>' +
-        '<td class="rp-num">' + g.count + '명</td>' +
-        '<td class="rp-num">' + fmtWon(g.total) + '원</td></tr>';
-    }).join('');
-  }
-
-  function reportMonthRows(d) {
-    if (!d.rows.length) {
-      return '<tr class="empty-row"><td colspan="9">등록된 관원이 없어요. 「출석 · 명단」에서 관원을 먼저 등록해 주세요.</td></tr>';
-    }
-    return d.rows.map(function (r) {
-      var stateCls = r.status === 'paid' ? 'paid' : (r.status === 'unpaid' ? 'unpaid'
-        : (r.status === 'paused' ? 'paused' : (tuitionIsFree(r.status) ? 'before' : 'exempt')));
-      var feeTxt = (r.status === 'paused' || r.status === 'exempt' || tuitionIsFree(r.status)) ? '-' : (fmtWon(r.fee) + '원');
-      var amtTxt = (r.status === 'paid') ? (fmtWon(r.amount) + '원') : (r.status === 'unpaid' ? '0원' : '-');
-      var dedTxt = r.deduction
-        ? ('−' + fmtWon(r.deduction) + '원' + (r.deductionReason ? '<div class="sub">' + esc(r.deductionReason) + '</div>' : ''))
-        : '-';
-      return '<tr class="rp-' + r.status + '">' +
-        '<td class="nm">' + esc(r.name) + '</td>' +
-        '<td>' + esc(r.division || '부서 미지정') + (r.course ? ' · ' + esc(r.course) : '') + '</td>' +
-        '<td>' + esc(r.belt || '-') + '</td>' +
-        '<td class="rp-num">' + feeTxt + '</td>' +
-        '<td class="rp-num">' + dedTxt + '</td>' +
-        '<td>' + (r.status === 'paid' ? esc(r.method) : '-') + '</td>' +
-        '<td>' + (r.status === 'paid' ? esc(r.paidDate || '-') : '-') + '</td>' +
-        '<td><span class="rp-state ' + stateCls + '">' + esc(r.statusLabel) + '</span></td>' +
-        '<td class="rp-num">' + amtTxt + '</td></tr>';
-    }).join('');
-  }
-
   function reportYearRows(yd) {
     var rows = yd.months.map(function (m) {
       var w = yd.max ? Math.round(m.total / yd.max * 100) : 0;
@@ -12207,8 +12123,7 @@ setTimeout(function () {
   }
 
   function renderReport(force) {
-    var body = el('rp-table');
-    if (!body) { return; }
+    if (!el('admin-report')) { return; }
     var ui = ensureReport();
     var mk = ui.month;
     var d = reportMonth(mk);
@@ -12253,9 +12168,6 @@ setTimeout(function () {
     }
     if (el('rp-delta')) { el('rp-delta').innerHTML = reportDeltaHTML(del); }
 
-    if (el('rp-class')) { el('rp-class').innerHTML = reportSubtotalRows(d.byDivision, '이 달 수납한 부서가 없어요.'); }
-    if (el('rp-belt')) { el('rp-belt').innerHTML = reportSubtotalRows(d.byBelt, '이 달 수납한 띠가 없어요.'); }
-
     var yd = reportYear(ui.year);
     if (el('rp-months')) { el('rp-months').innerHTML = reportYearRows(yd); }
     if (el('rp-year-note')) {
@@ -12267,14 +12179,6 @@ setTimeout(function () {
       }).join('') + '<span>📅 월 평균 <b>' + fmtWon(yd.average) + '원</b></span>';
     }
 
-    if (el('rp-table')) { el('rp-table').innerHTML = reportMonthRows(d); }
-    if (el('rp-note')) {
-      el('rp-note').textContent = tuitionMonthLabel(mk) + ' · ' + d.rows.length + '명' +
-        (d.deduction ? ' · 차감 ' + fmtWon(d.deduction) + '원 반영' : '') +
-        (d.beforeCount ? ' · 입관 전 ' + d.beforeCount + '명' : '') +
-        (d.pausedMonthCount ? ' · 휴관 기간 ' + d.pausedMonthCount + '명' : '') +
-        (d.orphanCount ? ' · 명단 외 납부 ' + d.orphanCount + '건 포함' : '');
-    }
     if (el('rp-print-head')) {
       el('rp-print-head').textContent = (app.settings && app.settings.dojoName ? app.settings.dojoName : '경희대MTA태권도') +
         ' · ' + tuitionMonthLabel(mk) + ' 수납 리포트 · 총 ' + fmtWon(d.total) + '원';

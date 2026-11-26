@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '2.1.0';   /* v57 — 과거 출결 자동 업로드 기본 끔(수동만) · 쓰기 롱폴링 자동 감지 · 🧹 뒤 재적재·오류 초기화 · 띠체계(belts) 보호 */
+  var VERSION = '2.2.0';   /* v58 — Firestore 를 메모리 캐시로(막힌 IndexedDB 쓰기 큐 우회) · v57 과거 출결 자동 업로드 기본 끔·쓰기 롱폴링 자동 감지·띠체계(belts) 보호 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -4970,12 +4970,16 @@
           apiKey: cfg.apiKey, authDomain: cfg.authDomain, projectId: cfg.projectId,
           storageBucket: cfg.storageBucket, messagingSenderId: cfg.messagingSenderId, appId: cfg.appId
         }, appName);
-        /* 오프라인 임시 저장 + 여러 탭 동시 사용.
+        /* v58 — 메모리 캐시. 예전에는 디스크(IndexedDB) 캐시를 썼는데,
+           브라우저 IndexedDB 에 예전 세션의 미완료 쓰기 큐가 막혀 있으면
+           batch.commit() 이 서버 응답 전 단계에서 12초 넘게 멈췄다(「쓰기 0」).
+           이 앱은 이미 자체 localStorage + tdk.fbOutbox.v1 오프라인 큐를 쓰므로
+           Firestore 쪽 디스크 캐시는 필요 없다 — 막힌 IndexedDB 큐를 아예 거치지 않는다.
            이미 이 앱의 Firestore 가 초기화돼 있으면 initializeFirestore 가
            "already been called with different options" 로 실패하므로 기존 인스턴스를 쓴다. */
         try {
           db = fs.initializeFirestore(app, {
-            localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }),
+            localCache: fs.memoryLocalCache ? fs.memoryLocalCache() : undefined,
             /* v57 — KT 모바일·일부 PC 네트워크에서 읽기(getDoc·onSnapshot)는 되는데
                쓰기 스트림(batch.commit)만 12초 넘게 응답 없이 멈추는 문제(「쓰기 0」)를 고친다.
                WebChannel 이 막힌 환경에서는 SDK 가 자동으로 롱폴링으로 내려간다. */
