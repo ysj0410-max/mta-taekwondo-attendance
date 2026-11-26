@@ -11,7 +11,7 @@
    배포할 때마다 아래 VERSION 값을 올리면 옛 캐시가 정리됩니다.
    ============================================================= */
 
-var VERSION = 'v53-2026-11-26';
+var VERSION = 'v54-2026-11-26';
 var CACHE_NAME = 'mta-taekwondo-' + VERSION;
 var HTML_TIMEOUT_MS = 2000;   /* v46 — 느린 네트워크에서도 2초면 캐시로 넘어간다 */
 
@@ -21,7 +21,7 @@ var APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
   './pwa-install.js',
-  /* Firebase 실시간 동기화 (v53 — 문자 로그 묶음 저장·5분 사용량 합산·지연 구독) — 스크립트·스타일·보안 규칙을 함께 캐시해 오프라인에서도 열린다 */
+  /* Firebase 실시간 동기화 (v54 — 묶음 저장·12줄 우선 그리기·출석 뒤 프레임 양보) — 스크립트·스타일·보안 규칙을 함께 캐시해 오프라인에서도 열린다 */
   './firebase-sync.js',
   './firebase-sync-ui.js',
   './firebase-sync.css',
