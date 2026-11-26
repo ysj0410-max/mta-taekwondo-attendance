@@ -16,8 +16,8 @@
 <script defer src="pwa-install.js"></script>
 <!-- 🔥 Firebase 실시간 동기화 — 앱보다 먼저 실행되어 localStorage 저장을 감시합니다 -->
 <link rel="stylesheet" href="firebase-sync.css">
-<script src="firebase-sync.js?v=58"></script>
-<script src="firebase-sync-ui.js?v=58"></script>
+<script src="firebase-sync.js?v=59"></script>
+<script src="firebase-sync-ui.js?v=59"></script>
 <title>경희대MTA태권도 · 출석 알림</title>
 <script>
   window.__xlsxLoadFailed = false;
@@ -569,6 +569,12 @@
   .admin-tabs{display:flex; gap:4px; margin-bottom:14px; background:#e8edf7; padding:5px; border-radius:14px; width:fit-content; max-width:100%; overflow-x:auto; flex-wrap:wrap}
   .admin-tab{border:0; background:transparent; color:#5b6b85; font-weight:800; font-size:12.5px; padding:9px 11px; border-radius:10px; cursor:pointer; white-space:nowrap}
   .admin-tab.active{background:#fff; color:var(--navy); box-shadow:0 2px 8px rgba(13,27,62,.10)}
+  /* v59 — 3개월 이전 과거 기록(드라이브 백업)을 화면에만 표시 중일 때의 띠 */
+  .past-note{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:-4px 0 12px; padding:9px 12px; border-radius:12px; background:#fff8e6; border:1px solid #f2d48a; color:#7a5200; font-size:12.5px; font-weight:700}
+  .past-note .past-sub{font-weight:600; color:#9a7a2a}
+  .past-on{margin:10px 0 0; padding:9px 12px; border-radius:12px; background:#eef8f1; border:1px solid #bfe4cb; color:#0b6b3f; font-size:12.5px; font-weight:800}
+  .past-actions{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px}
+  .past-warn{display:block; margin-top:6px; color:#a35b00}
   #view-admin.promo-mode .ov, #view-admin.guk-mode .ov, #view-admin.monthly-mode .ov, #view-admin.tuition-mode .ov, #view-admin.sms-mode .ov, #view-admin.paused-mode .ov, #view-admin.report-mode .ov, #view-admin.cs-mode .ov, #view-admin.cp-mode .ov{display:none}
   .belt-badge{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:800; background:#f6f8fc; border:1px solid #e6ebf4; padding:4px 9px 4px 6px; border-radius:999px; white-space:nowrap}
   .belt-swatch{display:inline-flex; width:20px; height:12px; border-radius:3px; overflow:hidden; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(0,0,0,.14); vertical-align:-1px; background:#eef1f6}
@@ -1650,7 +1656,7 @@
 
     <div class="gate-msg" id="gate-msg" style="display:none"></div>
     <div class="gate-note" id="gate-note" style="display:none"></div>
-    <div class="gate-ver">v58 · 2026-11-27 · Spark 무료 요금제</div>
+    <div class="gate-ver">v59 · 2026-11-27 · Spark 무료 요금제</div>
   </div>
 </div>
 
@@ -1876,6 +1882,13 @@ setTimeout(function () {
           <button class="admin-tab" id="atab-report" data-atab="report">📈 수납 리포트</button>
           <button class="admin-tab" id="atab-settings" data-atab="settings">🔐 관리자 계정</button>
         </div>
+        <!-- v59 — 3개월 이전 과거 기록(구글 드라이브 백업)을 화면에만 표시하는 중임을 알린다 -->
+        <div class="past-note" id="past-note" style="display:none" role="status">
+          <span id="past-note-text"></span>
+          <span class="spacer"></span>
+          <button class="btn btn-sm" id="past-note-close" title="과거 기록 표시를 끄고 서버(최근 3개월) 값만 봅니다">닫기</button>
+        </div>
+        <input type="file" id="past-file-input" accept=".json,application/json" style="display:none" aria-label="과거 기록을 볼 백업 JSON 파일 선택">
 
         <div id="admin-students" class="ov" style="display:none">
           <div class="stats">
@@ -2523,6 +2536,7 @@ setTimeout(function () {
             <button class="btn btn-primary" id="btn-mon-csv">📥 월간 출석부 CSV 다운로드</button>
             <button class="btn" id="btn-att-import">📥 출결 엑셀 동기화</button>
             <button class="btn btn-ghost" id="btn-att-template">📄 출결 양식 CSV</button>
+            <button class="btn" id="btn-past-month" title="3개월 이전 출결·원비를 구글 드라이브 백업에서 화면으로만 열어 봅니다">📂 과거 기록</button>
             <input type="file" id="att-import-file" accept=".csv,.xlsx,.xls,text/csv" style="display:none" aria-label="출결기록 파일 선택">
           </div>
 
@@ -2580,6 +2594,7 @@ setTimeout(function () {
             <button class="btn" id="btn-tu-settings">⚙️ 원비 설정</button>
             <button class="btn" id="btn-tu-fee-settings">💵 수업별 원비</button>
             <button class="btn" id="btn-tu-year">📅 원생별 1년 조회</button>
+            <button class="btn" id="btn-past-tu" title="3개월 이전 원비를 구글 드라이브 백업에서 화면으로만 열어 봅니다">📂 과거 원비</button>
             <button class="btn btn-primary" id="btn-tu-csv">📥 원비 내역 CSV 다운로드</button>
             <button class="btn btn-mint" id="btn-tu-import">📤 원비 엑셀/CSV 동기화</button>
             <input type="file" id="tu-import-file" accept=".csv,.xlsx,.xls,text/csv" style="display:none" aria-label="원비 명단 파일 선택">
@@ -2723,6 +2738,7 @@ setTimeout(function () {
             <button class="btn btn-primary" id="btn-rp-csv">📥 월 수납 CSV</button>
             <button class="btn" id="btn-rp-csv-year">📥 연간 CSV</button>
             <button class="btn" id="btn-rp-print">🖨️ 인쇄</button>
+            <button class="btn" id="btn-past-report" title="3개월 이전 수납을 구글 드라이브 백업에서 화면으로만 열어 봅니다">📂 과거 수납</button>
           </div>
 
           <div class="stats tu-stats">
@@ -4296,7 +4312,7 @@ setTimeout(function () {
       lastBackupAt: /^\d{4}-\d{2}-\d{2}T/.test(String(rawDrive.lastBackupAt || '')) ? String(rawDrive.lastBackupAt) : ''
     };
 
-    app.tuition = loadTuition();
+    loadTuition();
 
     var records = readJSON(LS.records, {});
     app.records = (records && typeof records === 'object') ? records : {};
@@ -4398,7 +4414,11 @@ setTimeout(function () {
     return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
   }
   function loadAttendance() {
-    var raw = readJSON(LS.attendance, {});
+    app.attendance = attendanceMapFrom(readJSON(LS.attendance, {}));
+  }
+  /* 저장된 출결 값(또는 백업 JSON 의 attendance)을 앱이 쓰는 모양으로 다듬는다.
+     v59 — 드라이브 백업 조회(화면 전용)도 같은 규칙으로 읽는다. */
+  function attendanceMapFrom(raw) {
     var out = {};
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
       Object.keys(raw).forEach(function (d) {
@@ -4422,11 +4442,14 @@ setTimeout(function () {
         if (Object.keys(clean).length) { out[d] = clean; }
       });
     }
-    app.attendance = out;
+    return out;
   }
   function attendanceEntry(sid, dateKey) {
     var day = app.attendance[dateKey];
-    return (day && day[sid]) || null;
+    var e = (day && day[sid]) || null;
+    if (e) { return e; }
+    /* v59 — 3개월 이전 기록은 드라이브 백업에서 화면 조회용으로 보여 준다(저장하지 않음) */
+    return pastAttendanceOf(sid, dateKey);
   }
   function isPresentOn(sid, dateKey) {
     var e = attendanceEntry(sid, dateKey);
@@ -9407,6 +9430,11 @@ setTimeout(function () {
     var s = byId(sid);
     if (!s || !isDateKey(dateKey)) { return; }
     if (dateKey > todayKey()) { toast('아직 오지 않은 날은 표시할 수 없어요.'); return; }
+    /* v59 — 드라이브 백업에서 보여 주는 3개월 이전 기록은 조회 전용이다(이 기기에 저장하지 않는다) */
+    if (pastLookup && pastDateOutside(dateKey) && !((app.attendance[dateKey] || {})[sid])) {
+      toast('3개월 이전 출결은 드라이브 백업에서 보여 주는 조회용 기록이에요 — 이 화면에서는 고칠 수 없습니다.');
+      return;
+    }
     var e = attendanceEntry(sid, dateKey);
     var present = !!(e && (e.inTime || e.outTime || e.manual));
 
@@ -10234,7 +10262,11 @@ setTimeout(function () {
     return out;
   }
   function loadTuition() {
-    var raw = readJSON(LS.tuition, {});
+    app.tuition = tuitionMapFrom(readJSON(LS.tuition, {}));
+  }
+  /* 저장된 원비 값(또는 백업 JSON 의 tuition)을 앱이 쓰는 모양으로 다듬는다.
+     v59 — 드라이브 백업 조회(화면 전용)도 같은 규칙으로 읽는다. */
+  function tuitionMapFrom(raw) {
     var out = {};
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { return out; }
     /* v51 — 예전 버그가 남긴 월 키(`2026-11_stu` + 원생 `mwp7…`)를 제자리로 돌린다.
@@ -10275,7 +10307,21 @@ setTimeout(function () {
   }
   function tuitionOf(mk, sid) {
     var m = app.tuition && app.tuition[mk];
-    return (m && m[sid]) || null;
+    var r = (m && m[sid]) || null;
+    if (r) { return r; }
+    /* v59 — 3개월 이전 원비는 드라이브 백업에서 화면 조회용으로 보여 준다(저장하지 않음) */
+    return pastTuitionOf(mk, sid);
+  }
+  /* 그 달 원비 기록 전체(화면·집계용) — 이 기기 값이 먼저, 3개월 이전은 백업 값으로 채운다.
+     v59 — 수납 리포트의 「명단 외(퇴원생) 납부」도 과거 달이면 백업 값까지 센다. */
+  function tuitionMonthRecs(mk) {
+    var local = (app.tuition && app.tuition[mk]) || null;
+    var past = pastMonthRecs(mk);
+    if (!past) { return local || {}; }
+    var out = {};
+    Object.keys(past).forEach(function (sid) { out[sid] = past[sid]; });
+    Object.keys(local || {}).forEach(function (sid) { out[sid] = local[sid]; });
+    return out;
   }
   function tuitionStatusOf(mk, sid) {
     var r = tuitionOf(mk, sid);
@@ -10330,6 +10376,12 @@ setTimeout(function () {
   function tuitionAmountOf(mk, sid) { return tuitionCharge(mk, sid); }
   function setTuition(mk, sid, patch) {
     if (!mk || !sid) { return null; }
+    /* v59 — 드라이브 백업에서 보여 주는 3개월 이전 기록은 조회 전용이다.
+       (백업을 연 상태에서 그 달을 고치면 이 기기에만 기록이 생겨 서버·다른 기기와 달라진다) */
+    if (pastLookup && pastMonthOutside(mk) && !(app.tuition[mk] && app.tuition[mk][sid])) {
+      toast('3개월 이전 원비는 드라이브 백업에서 보여 주는 조회용 기록이에요 — 이 화면에서는 고칠 수 없습니다.');
+      return null;
+    }
     if (!app.tuition[mk]) { app.tuition[mk] = {}; }
     var cur = app.tuition[mk][sid] || { status: 'unpaid' };
     if (!TUITION_STATUS[cur.status]) { cur.status = 'unpaid'; }
@@ -11922,8 +11974,9 @@ setTimeout(function () {
       out.rows.push(row);
     });
 
-    /* 지금 명단에 없는 관원(퇴원 등)의 그 달 납부 기록도 매출에는 포함한다 */
-    var monthRecs = (app.tuition && app.tuition[mk]) || {};
+    /* 지금 명단에 없는 관원(퇴원 등)의 그 달 납부 기록도 매출에는 포함한다
+       v59 — 과거 달은 드라이브 백업 조회값까지 함께 센다 */
+    var monthRecs = tuitionMonthRecs(mk);
     Object.keys(monthRecs).sort().forEach(function (sid) {
       if (seen[sid]) { return; }
       var rec = monthRecs[sid];
@@ -17005,11 +17058,26 @@ setTimeout(function () {
       '      }',
       '      return json_({ ok: true, files: out });',
       '    }',
+      '    if (action === \'get\') {',
+      '      /* v59 — 날짜별 백업 고르기: ?action=get&name=mta-taekwondo-backup-2026-11-27-0410.json */',
+      '      var want = (e && e.parameter && e.parameter.name) || \'\';',
+      '      var picked = want ? findFile_(folder, want) : findFile_(folder, LATEST_NAME);',
+      '      if (!picked) { return json_({ ok: false, error: \'그 이름의 백업이 폴더에 없습니다: \' + want }); }',
+      '      var pickedData = JSON.parse(picked.getBlob().getDataAsString(\'utf-8\'));',
+      '      return json_({',
+      '        ok: true,',
+      '        name: picked.getName(),',
+      '        fileId: picked.getId(),',
+      '        modifiedTime: picked.getLastUpdated().toISOString(),',
+      '        data: pickedData',
+      '      });',
+      '    }',
       '    var latest = findFile_(folder, LATEST_NAME);',
       '    if (!latest) { return json_({ ok: false, error: \'아직 백업이 없습니다. 먼저 「지금 드라이브에 백업」을 눌러 주세요.\' }); }',
       '    var data = JSON.parse(latest.getBlob().getDataAsString(\'utf-8\'));',
       '    return json_({',
       '      ok: true,',
+      '      name: latest.getName(),',
       '      fileId: latest.getId(),',
       '      modifiedTime: latest.getLastUpdated().toISOString(),',
       '      data: data',
@@ -17055,6 +17123,307 @@ setTimeout(function () {
         }
       }
     });
+  }
+
+  /* =========================================================
+     v59 — 3개월 이전 과거 기록 조회 (구글 드라이브 백업 · 화면 조회 전용)
+     ---------------------------------------------------------
+     서버(Firebase)에는 출결·원비를 「이번 달 포함 최근 3개월」만 둔다.
+     그보다 오래된 기간을 볼 때는 구글 드라이브 백업 JSON(또는 백업 파일)을 읽어
+     화면에만 합쳐 보여 준다.
+       · 로컬 저장(tdk.attendance.v1 · tdk.tuition.v1)을 덮어쓰지 않는다
+         → capture()/Firebase 로 다시 올라가지 않는다
+       · 과거 기록은 고칠 수 없다(조회 전용) — 고쳐도 서버로 보낼 수 없어 기기마다 값이 달라진다
+     ========================================================= */
+  var PAST_WINDOW_MONTHS = 3;
+  var pastLookup = null;   /* { at, label, source, attendance, tuition, counts } */
+
+  /* 서버에 두는 범위의 첫 날 — firebase-sync.js 의 serverWindowFrom 과 같은 규칙(이번 달 포함 3개월) */
+  function pastWindowFrom(now) {
+    var d = now ? new Date(now) : new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (PAST_WINDOW_MONTHS - 1));
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-01';
+  }
+  function pastWindowMonth(now) { return pastWindowFrom(now).slice(0, 7); }
+  /* 이 날짜/달이 서버 범위(3개월) 밖인가 */
+  function pastDateOutside(dateKey) {
+    var d = String(dateKey || '');
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) && d < pastWindowFrom();
+  }
+  function pastMonthOutside(mk) {
+    var m = String(mk || '').slice(0, 7);
+    return /^\d{4}-\d{2}$/.test(m) && m < pastWindowMonth();
+  }
+  function pastLookupActive() { return !!pastLookup; }
+  /* 화면 조회용 과거 출결 — 이 기기 로컬에 없고 3개월 밖일 때만 */
+  function pastAttendanceOf(sid, dateKey) {
+    if (!pastLookup || !pastDateOutside(dateKey) || !sid) { return null; }
+    var day = pastLookup.attendance[dateKey];
+    return (day && day[sid]) || null;
+  }
+  /* 화면 조회용 과거 원비 — 이 기기 로컬에 없고 3개월 밖일 때만 */
+  function pastTuitionOf(mk, sid) {
+    if (!pastLookup || !pastMonthOutside(mk) || !sid) { return null; }
+    var m = pastLookup.tuition[mk];
+    return (m && m[sid]) || null;
+  }
+  function pastMonthRecs(mk) {
+    if (!pastLookup || !pastMonthOutside(mk)) { return null; }
+    return pastLookup.tuition[mk] || null;
+  }
+
+  /* 백업에 담긴 것 중 "이 화면에서 실제로 보이는" 과거(3개월 밖) 기록만 센다 */
+  function pastLookupCounts(p) {
+    var attDays = 0, attEvents = 0, tuiMonths = 0, tuiRecords = 0;
+    Object.keys(p.attendance || {}).forEach(function (d) {
+      if (!pastDateOutside(d)) { return; }
+      var day = p.attendance[d] || {};
+      var n = 0;
+      Object.keys(day).forEach(function (sid) {
+        var e = day[sid] || {};
+        if (e.inTime || e.outTime || e.manual) { n++; }
+      });
+      if (n) { attDays++; attEvents += n; }
+    });
+    Object.keys(p.tuition || {}).forEach(function (mk) {
+      if (!pastMonthOutside(mk)) { return; }
+      var month = p.tuition[mk] || {};
+      if (Object.keys(month).length) { tuiMonths++; tuiRecords += Object.keys(month).length; }
+    });
+    return { attDays: attDays, attEvents: attEvents, tuiMonths: tuiMonths, tuiRecords: tuiRecords };
+  }
+
+  /* 백업 JSON → 화면 조회용 메모리(저장하지 않는다) */
+  function pastLookupFromData(raw, info) {
+    info = info || {};
+    var src = raw;
+    /* 드라이브 웹 앱 응답({ ok, data })이면 data 만 쓴다 */
+    if (src && typeof src === 'object' && !src.attendance && !src.tuition && src.data && typeof src.data === 'object') {
+      src = src.data;
+    }
+    if (!src || typeof src !== 'object' || Array.isArray(src)) {
+      throw new Error('백업 데이터를 읽을 수 없어요.');
+    }
+    var att = attendanceMapFrom(src.attendance);
+    /* 예전 백업은 출결을 records 모양({in,out})으로만 담고 있을 수 있다 */
+    var recs = (src.records && typeof src.records === 'object' && !Array.isArray(src.records)) ? src.records : {};
+    Object.keys(recs).forEach(function (d) {
+      if (!isDateKey(d)) { return; }
+      if (!att[d]) { att[d] = {}; }
+      var day = recs[d] || {};
+      Object.keys(day).forEach(function (sid) {
+        if (att[d][sid]) { return; }
+        var r = day[sid] || {};
+        if (!r.in && !r.out && !r.manual) { return; }
+        att[d][sid] = {
+          inTime: String(r.in || '').slice(0, 5),
+          outTime: String(r.out || '').slice(0, 5),
+          manual: !!r.manual,
+          src: 'backup'
+        };
+      });
+    });
+    var tui = tuitionMapFrom(src.tuition);
+    var atText = String(info.at || src.exportedAt || '');
+    pastLookup = {
+      at: atText,
+      label: String(info.label || '백업 파일'),
+      source: String(info.source || 'file'),
+      attendance: att,
+      tuition: tui,
+      counts: null
+    };
+    pastLookup.counts = pastLookupCounts(pastLookup);
+    renderPastLookupNote();
+    try { renderVisible(); } catch (e) {}
+    return pastLookup;
+  }
+
+  function pastLookupClose() {
+    if (!pastLookup) { return false; }
+    pastLookup = null;
+    renderPastLookupNote();
+    try { renderVisible(); } catch (e) {}
+    toast('과거 기록 표시를 껐어요 — 이제 서버(최근 3개월) 값만 보입니다.');
+    return true;
+  }
+
+  function pastLookupAtText() {
+    if (!pastLookup || !pastLookup.at) { return ''; }
+    var d = new Date(pastLookup.at);
+    if (isNaN(d.getTime())) { return String(pastLookup.at).slice(0, 16); }
+    return fmtDateKorean(d) + ' ' + fmtKoreanTime(d);
+  }
+
+  function renderPastLookupNote() {
+    var box = el('past-note');
+    var txt = el('past-note-text');
+    if (!box) { return; }
+    if (!pastLookup) {
+      box.style.display = 'none';
+      if (txt) { txt.textContent = ''; }
+      return;
+    }
+    box.style.display = '';
+    if (txt) {
+      var c = pastLookup.counts || { attDays: 0, attEvents: 0, tuiMonths: 0, tuiRecords: 0 };
+      txt.innerHTML = '📂 <b>과거 기록 조회 중</b> · ' + esc(pastLookup.label) +
+        (pastLookupAtText() ? ' (' + esc(pastLookupAtText()) + ')' : '') +
+        ' · 출결 ' + c.attDays + '일/' + c.attEvents + '건 · 원비 ' + c.tuiMonths + '개월/' + c.tuiRecords + '건' +
+        ' <span class="past-sub">— 화면에만 보이며 저장·동기화되지 않습니다</span>';
+    }
+  }
+
+  /* 과거 기록 조회 창 — 드라이브 최신본 · 다른 날짜 · 백업 파일 */
+  function openPastLookup() {
+    var configured = driveConfigured();
+    var c = pastLookup && pastLookup.counts ? pastLookup.counts : null;
+    var body = '<div id="past-body">' +
+      '<div class="help" style="margin-top:0">' +
+        '서버에는 출결·원비를 <b>이번 달 포함 최근 3개월</b>(' + esc(pastWindowMonth()) + '부터)만 둡니다. ' +
+        '그 이전 기록은 <b>구글 드라이브 백업</b>에서 읽어 <b>이 화면에서만</b> 보여 줍니다.<br>' +
+        '불러온 과거 기록은 이 기기에 저장되지 않고 서버로 다시 올라가지도 않습니다. 대신 <b>고칠 수는 없습니다</b>(조회 전용).' +
+      '</div>' +
+      (c ? '<div class="past-on">✅ 표시 중 · ' + esc(pastLookup.label) +
+        (pastLookupAtText() ? ' (' + esc(pastLookupAtText()) + ')' : '') +
+        ' · 출결 ' + c.attDays + '일 · 원비 ' + c.tuiMonths + '개월</div>' : '') +
+      '<div class="past-actions">' +
+        (configured
+          ? '<button type="button" class="btn btn-primary" data-past="drive">☁️ 드라이브 최신 백업 열기</button>' +
+            '<button type="button" class="btn" data-past="other">🗓 다른 날짜 백업 고르기</button>'
+          : '<div class="tiny-note" style="width:100%">구글 드라이브가 아직 연결되지 않았어요 — ' +
+            '<b>「🔐 관리자 계정」의 백업 설정</b>에서 연결하시거나, 아래에서 <b>백업 JSON 파일</b>을 골라 주세요.' +
+            (driveConf().webhookUrl ? ' (주소는 있지만 형식이 https 가 아니에요)' : '') + '</div>') +
+        '<button type="button" class="btn" data-past="file">📁 백업 JSON 파일 선택</button>' +
+        (configured ? '' : '<button type="button" class="btn btn-ghost" data-past="settings">⚙️ 드라이브 연결 화면으로</button>') +
+        (pastLookup ? '<button type="button" class="btn btn-ghost" data-past="clear">🧹 과거 기록 표시 끄기</button>' : '') +
+      '</div>' +
+      '<div class="tiny-note" id="past-msg" style="margin-top:8px"></div>' +
+      '</div>';
+    openModal({
+      title: '📂 3개월 이전 과거 기록 조회',
+      sub: '드라이브 백업을 화면에만 불러옵니다 — 저장·동기화하지 않아요',
+      body: body,
+      actions: [{ label: '닫기', value: null, kind: 'btn-ghost' }]
+    });
+    var host = el('past-body');
+    if (host && !host.__pastBound) {
+      host.__pastBound = true;
+      host.addEventListener('click', function (ev) {
+        var t = ev && ev.target;
+        if (!t || !t.closest) { return; }
+        var b = t.closest('[data-past]');
+        if (!b) { return; }
+        var act = String(b.getAttribute('data-past') || '');
+        if (act === 'drive') { pastLookupFromDrive(); return; }
+        if (act === 'other') { pastLookupDriveList(); return; }
+        if (act === 'file') { var f = el('past-file-input'); if (f && typeof f.click === 'function') { f.click(); } return; }
+        if (act === 'settings') { closeActiveModal(null); setAdminTab('settings'); return; }
+        if (act === 'clear') { pastLookupClose(); closeActiveModal(null); return; }
+        if (act === 'open') { pastLookupFromDrive(String(b.getAttribute('data-name') || '')); return; }
+      });
+    }
+  }
+
+  function pastSetMsg(html) {
+    var box = el('past-msg');
+    if (box) { box.innerHTML = html || ''; }
+  }
+
+  /* 드라이브 최신 백업에서 과거 기록 읽기 */
+  function pastLookupFromDrive(name) {
+    if (!driveConfigured()) {
+      pastSetMsg('구글 드라이브가 연결되어 있지 않아요 — 백업 JSON 파일을 골라 주세요.');
+      return Promise.resolve({ ok: false, reason: 'not-configured' });
+    }
+    pastSetMsg('☁️ 드라이브에서 백업을 불러오는 중…');
+    var call = name ? driveFetchNamed(name) : driveFetchLatest();
+    return call.then(function (j) {
+      if (!j || j.ok === false) { throw new Error((j && j.error) || '드라이브에 저장된 백업이 없어요'); }
+      var data = j.data || j.backup;
+      if (!data) { throw new Error('응답에 백업 데이터가 없어요'); }
+      /* 예전에 배포한 Apps Script 는 파일 이름 고르기를 지원하지 않는다(항상 최신본) */
+      var wanted = String(name || '');
+      var gotName = String(j.name || '');
+      if (wanted && gotName && gotName !== wanted) {
+        throw new Error('요청한 백업(' + wanted + ') 대신 ' + gotName + ' 이 돌아왔어요 — 다시 골라 주세요');
+      }
+      var label = gotName ? gotName.replace(/^mta-taekwondo-backup-/, '').replace(/\.json$/, '') : '드라이브 최신 백업';
+      var at = String(j.modifiedTime || data.exportedAt || '');
+      pastLookupFromData(data, { label: '드라이브 · ' + label, at: at, source: 'drive' });
+      var c = pastLookup.counts;
+      pastSetMsg('✅ 불러왔어요 · 출결 ' + c.attDays + '일/' + c.attEvents + '건 · 원비 ' + c.tuiMonths + '개월/' + c.tuiRecords + '건' +
+        (wanted && !gotName ? '<br><span class="past-warn">지금 배포된 드라이브 스크립트는 최신본만 돌려줘요 — 「🔐 관리자 계정」의 Apps Script 코드를 다시 붙여넣고 재배포하면 날짜를 골라 열 수 있어요.</span>' : ''));
+      toast('☁️ 과거 기록을 불러왔어요 · 출결 ' + c.attDays + '일 · 원비 ' + c.tuiMonths + '개월 (화면 조회 전용)');
+      return { ok: true, counts: c };
+    }, function (err) {
+      pastSetMsg('⚠️ 드라이브에서 불러오지 못했어요: ' + esc(errText(err)));
+      return { ok: false, reason: errText(err) };
+    });
+  }
+
+  /* 드라이브 백업 파일 목록 — 다른 날짜 고르기 */
+  function pastLookupDriveList() {
+    if (!driveConfigured()) { pastSetMsg('구글 드라이브가 연결되어 있지 않아요.'); return Promise.resolve({ ok: false }); }
+    pastSetMsg('🗓 드라이브 백업 목록을 불러오는 중…');
+    var url = driveEndpoint('list');
+    var sep = url.indexOf('?') === -1 ? '?' : '&';
+    return fetchTimeout(url + sep + 't=' + Date.now(), { method: 'GET', mode: 'cors', cache: 'no-store' }, 25000)
+      .then(function (res) { return driveReadJson(res); })
+      .then(function (j) {
+        var files = (j && Array.isArray(j.files)) ? j.files : [];
+        if (!files.length) { pastSetMsg('드라이브에 날짜별 백업이 아직 없어요 — 「최신 백업 열기」를 눌러 주세요.'); return { ok: true, files: 0 }; }
+        pastSetMsg('<b>백업을 고르세요</b> (최근 12개)<br>' + files.slice(0, 12).map(function (f) {
+          var nm = String(f && f.name || '');
+          return '<button type="button" class="btn btn-sm" data-past="open" data-name="' + esc(nm) + '" style="margin:3px 4px 0 0">' + esc(nm) + '</button>';
+        }).join(''));
+        return { ok: true, files: files.length };
+      }, function (err) {
+        pastSetMsg('⚠️ 백업 목록을 불러오지 못했어요: ' + esc(errText(err)));
+        return { ok: false, reason: errText(err) };
+      });
+  }
+
+  /* 앱에 넣어 둔 Apps Script 코드(doGet)에 이름으로 받기(get)를 더한다 */
+  function driveFetchNamed(name) {
+    var url = driveEndpoint('get');
+    if (!url) { return Promise.reject(new Error('먼저 Apps Script 웹 앱 URL을 저장해 주세요.')); }
+    var sep = url.indexOf('?') === -1 ? '?' : '&';
+    return fetchTimeout(url + sep + 'name=' + encodeURIComponent(String(name || '')) + '&t=' + Date.now(),
+      { method: 'GET', mode: 'cors', cache: 'no-store' }, 25000).then(function (res) {
+      return driveReadJson(res);
+    });
+  }
+
+  /* 백업 JSON 파일에서 과거 기록 읽기 */
+  function pastLookupFromFile(file) {
+    if (!file) { return; }
+    pastSetMsg('📁 파일을 읽는 중…');
+    try {
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var txt = String((e && e.target && e.target.result) || '');
+        var data = null;
+        try { data = JSON.parse(txt.replace(/^\uFEFF/, '')); } catch (err) {
+          pastSetMsg('⚠️ JSON 파일이 아니에요 — 「도장 데이터 전체 백업」으로 받은 .json 파일을 골라 주세요.');
+          return;
+        }
+        try {
+          pastLookupFromData(data, { label: '파일 · ' + String(file.name || '백업'), at: (data && data.exportedAt) || '', source: 'file' });
+        } catch (err2) {
+          pastSetMsg('⚠️ ' + esc(errText(err2)));
+          return;
+        }
+        var c = pastLookup.counts;
+        pastSetMsg('✅ 불러왔어요 · 출결 ' + c.attDays + '일/' + c.attEvents + '건 · 원비 ' + c.tuiMonths + '개월/' + c.tuiRecords + '건');
+        toast('📁 과거 기록을 불러왔어요 · 출결 ' + c.attDays + '일 · 원비 ' + c.tuiMonths + '개월 (화면 조회 전용)');
+      };
+      reader.onerror = function () { pastSetMsg('⚠️ 파일을 읽지 못했어요.'); };
+      reader.readAsText(file, 'utf-8');
+    } catch (err) {
+      pastSetMsg('⚠️ 파일을 읽지 못했어요: ' + esc(errText(err)));
+    }
   }
 
   /* =========================================================
@@ -17872,6 +18241,23 @@ setTimeout(function () {
     el('btn-tu-settings').addEventListener('click', function () { toggleTuitionSettings(); });
     el('btn-tu-fee-settings').addEventListener('click', openFeeSettings);
     el('btn-tu-year').addEventListener('click', function () { openStudentYearLookup(); });
+    /* v59 — 3개월 이전 과거 기록(드라이브 백업) 조회 */
+    ['btn-past-month', 'btn-past-tu', 'btn-past-report'].forEach(function (id) {
+      var b = el(id);
+      if (b) { b.addEventListener('click', function () { openPastLookup(); }); }
+    });
+    (function () {
+      var off = el('past-note-close');
+      if (off) { off.addEventListener('click', function () { pastLookupClose(); }); }
+      var fin = el('past-file-input');
+      if (fin) {
+        fin.addEventListener('change', function () {
+          var f = (fin.files && fin.files[0]) || null;
+          if (f) { pastLookupFromFile(f); }
+          try { fin.value = ''; } catch (e) {}
+        });
+      }
+    })();
     el('btn-tu-save-settings').addEventListener('click', saveTuitionSettings);
     el('btn-ft-save').addEventListener('click', saveFeeTable);
     el('btn-ft-reset').addEventListener('click', resetFeeTable);
@@ -18670,9 +19056,36 @@ setTimeout(function () {
       openGuide: openDriveGuide,
       copy: copyPlainText,
       confirm: confirmRestoreBackup,
-      readJson: driveReadJson
+      readJson: driveReadJson,
+      fetchNamed: driveFetchNamed
+    },
+    /* v59 — 3개월 이전 과거 기록 조회(드라이브 백업 · 화면 전용) 점검용 */
+    past: {
+      windowFrom: pastWindowFrom,
+      windowMonth: pastWindowMonth,
+      months: PAST_WINDOW_MONTHS,
+      active: pastLookupActive,
+      state: function () { return pastLookup; },
+      counts: function () { return pastLookup ? pastLookup.counts : null; },
+      fromData: pastLookupFromData,
+      fromDrive: pastLookupFromDrive,
+      driveList: pastLookupDriveList,
+      fromFile: pastLookupFromFile,
+      close: pastLookupClose,
+      open: openPastLookup,
+      closeModal: closeActiveModal,
+      note: renderPastLookupNote,
+      dateOutside: pastDateOutside,
+      monthOutside: pastMonthOutside,
+      attendanceOf: pastAttendanceOf,
+      tuitionOf: pastTuitionOf,
+      monthRecs: pastMonthRecs,
+      monthRecords: tuitionMonthRecs
     },
     attendance: {
+      entry: attendanceEntry,
+      presentOn: isPresentOn,
+      toggleCell: toggleMonthCell,
       parse: parseAttendanceRows,
       apply: applyAttendanceImport,
       recount: recountAttendance,

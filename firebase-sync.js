@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this), function (root) {
   'use strict';
 
-  var VERSION = '2.2.0';   /* v58 — Firestore 를 메모리 캐시로(막힌 IndexedDB 쓰기 큐 우회) · v57 과거 출결 자동 업로드 기본 끔·쓰기 롱폴링 자동 감지·띠체계(belts) 보호 */
+  var VERSION = '2.3.0';   /* v59 — 서버에는 출결·원비 최근 3개월만(읽기·쓰기·삭제 모두) · 그 이전은 드라이브 백업 조회 · v58 메모리 캐시 유지 */
 
   /* ---------- 무료(Spark) 한도 ---------- */
   var SPARK = {
@@ -232,7 +232,44 @@
     d.setMonth(d.getMonth() - 1);
     return d.getFullYear() + '-' + p2(d.getMonth() + 1);
   }
-  /* v53 — 지연 묶음(상담·차량·쿠폰·전체 원비)을 열고 첫 스냅샷을 기다리는 한도 */
+  /* =========================================================================
+     v59 — 서버에 두는 범위: 이번 달 포함 최근 3개월
+     -------------------------------------------------------------------------
+     출결(attendanceEvents)·원비(tuition)는 서버에서 "이번 달 + 지난 두 달"만 읽고 쓴다.
+     그보다 오래된 기록은 서버에 새로 올리지도, 지우지도 않는다(있는 문서는 그대로 둔다).
+     과거(3개월 이전) 기록은 구글 드라이브 백업 JSON 을 화면에서만 읽어 보여 준다(index.html).
+       · windowFrom  : 'YYYY-MM-01' (이번 달 포함 3개월의 첫 날)
+       · windowMonth : 'YYYY-MM'   (원비 문서 ID `YYYY-MM_원생ID` 의 접두사와 비교)
+     ========================================================================= */
+  var SERVER_WINDOW_MONTHS = 3;
+  function serverWindowFrom(nowMs) {
+    var d = new Date(nowMs == null ? Date.now() : nowMs);
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (SERVER_WINDOW_MONTHS - 1));
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-01';
+  }
+  function serverWindowMonth(nowMs) {
+    return serverWindowFrom(nowMs).slice(0, 7);
+  }
+  /* 이 문서 경로가 서버에 두는 범위(3개월) 안인가 —
+     events·tuition 이 아니면(원생·설정·상담·차량·쿠폰) 언제나 true */
+  function pathInServerWindow(p, nowMs) {
+    var seg = String(p == null ? '' : p).split('/');
+    var coll = seg.length >= 4 ? seg[2] : '';
+    var id = String(seg[3] || '');
+    if (coll === 'attendanceEvents') {
+      var d = /^\d{4}-\d{2}-\d{2}/.test(id) ? id.slice(0, 10) : '';
+      if (!d) { return true; }
+      return d >= serverWindowFrom(nowMs);
+    }
+    if (coll === 'tuition') {
+      var mk = id.slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(mk)) { return true; }
+      return mk >= serverWindowMonth(nowMs);
+    }
+    return true;
+  }
+  /* v53 — 지연 묶음(상담·차량·쿠폰)을 열고 첫 스냅샷을 기다리는 한도 */
   var LAZY_READY_TIMEOUT_MS = 9000;
   /* Spark 무료 한도는 "미국 태평양 시간 자정"에 초기화된다 — 서머타임이 없을 때 한국 17:00,
      서머타임 기간(3~11월)에는 한국 16:00 이다.
@@ -2643,14 +2680,21 @@
     }
 
     function liveDocsOf(entry, base) {
+      var nowMs = now();
       if (entry.kind === 'events') {
         /* v52 — 오늘 이전의 시각 없는 수동·CSV 기록은 "있음"만 표시(body:null)로 받아
-           매 체크인마다 11,800건을 해시하지 않는다(툼스톤 오판도 막는다). */
+           매 체크인마다 11,800건을 해시하지 않는다(툼스톤 오판도 막는다).
+           v59 — 서버에 두는 범위(이번 달 포함 3개월) 밖의 출결은 올리지 않는다(걸러 낸다). */
         var ctx = { deviceId: deviceId, skipOldDayOnly: true, today: dayOf(now()) };
         var map = unionEventDocs(readValue('attendance'), readValue('records'), base, ctx);
-        return Object.keys(map).map(function (p) { return map[p]; });
+        return Object.keys(map).map(function (p) { return map[p]; }).filter(function (d) {
+          return pathInServerWindow(d.path, nowMs);
+        });
       }
-      return docsForEntry(entry, prevValues[entry.name], base, { deviceId: deviceId });
+      /* v59 — 원비도 3개월 이전 달 문서는 올리지 않는다 */
+      return docsForEntry(entry, prevValues[entry.name], base, { deviceId: deviceId }).filter(function (d) {
+        return pathInServerWindow(d.path, nowMs);
+      });
     }
 
     /* ---------- v53 — 문자 로그 묶음 저장 ----------
@@ -2734,7 +2778,7 @@
       var out = [];
       if (!cov || !cov.lazy) { return out; }
       ['counsel', 'shuttle', 'coupons'].forEach(function (n) { if (!cov[n]) { out.push(n); } });
-      if (cov.tuition !== 'full') { out.push('tuition'); }
+      /* v59 — 원비는 부팅 구독(최근 3개월 범위 또는 델타)이 이미 덮으므로 기다릴 묶음이 아니다 */
       return out;
     }
     function lazyState() {
@@ -2748,14 +2792,12 @@
     }
     /* 이 문서의 삭제 표시(툼스톤)를 보내도 되는가 — 받아 둔 범위인지 */
     function deletablePath(p, cov) {
-      if (!cov || !cov.lazy) { return true; }
       var seg = String(p || '').split('/');
       var coll = seg.length >= 4 ? seg[2] : '';
-      if (coll === 'tuition') {
-        if (cov.tuition === 'full') { return true; }
-        var mk = String(seg[3] || '').slice(0, 7);
-        return mk >= tuitionRecentFrom(now());
-      }
+      /* v59 — 출결·원비는 서버 범위(이번 달 포함 3개월) 안만 삭제 표시할 수 있다.
+         3개월 이전 문서는 애초에 받지도·쓰지도 않으므로 지울 수도 없다(서버 기록 보존). */
+      if (coll === 'attendanceEvents' || coll === 'tuition') { return pathInServerWindow(p, now()); }
+      if (!cov || !cov.lazy) { return true; }
       if (coll === 'counsel' || coll === 'shuttle' || coll === 'coupons') { return !!cov[coll]; }
       return true;
     }
@@ -2978,10 +3020,15 @@
       Object.keys(shadow).forEach(function (p) {
         if (!underAny(p)) { return; }
         if (live[p]) { return; }
+        /* v59 — 서버에 두는 범위(이번 달 포함 3개월) 밖 기록은 삭제 표시를 만들지 않는다.
+           서버의 과거 기록은 그대로 두고, 이 기기 로컬에만 남긴다. */
+        if (!pathInServerWindow(p, now())) { return; }
         tombPaths.push(p);
       });
       Object.keys(pendingDeletes).forEach(function (p) {
         if (!underAny(p)) { return; }
+        /* v59 — 범위 밖 과거 기록의 보류 삭제는 버린다(다시 시도하지 않는다) */
+        if (!pathInServerWindow(p, now())) { delete pendingDeletes[p]; return; }
         var pd = shadow[p];
         if (!pd || pd.d) { delete pendingDeletes[p]; return; }
         if (tombPaths.indexOf(p) === -1) { tombPaths.push(p); }
@@ -3145,17 +3192,21 @@
       };
     }
 
-    /* 시각 없는 수동·CSV 출석 문서 중 아직 서버에 없는 것 — 최근 날짜부터 */
+    /* 시각 없는 수동·CSV 출석 문서 중 아직 서버에 없는 것 — 최근 날짜부터
+       v59 — 서버에 두는 범위(이번 달 포함 3개월) 안의 출결만 올린다 */
     function dayOnlyEventBacklog(base) {
       var map = unionEventDocs(readValue('attendance'), readValue('records'), base, { deviceId: deviceId });
       var cands = [];
       var total = 0;
+      var windowFrom = serverWindowFrom(now());
       Object.keys(map).forEach(function (p) {
         var body = map[p].body || {};
         if (!isDayOnlyEvent(body)) { return; }
         var date = String(body.date || '');
         if (!date) { return; }
         total++;
+        /* v59 — 3개월 이전 출결은 서버에 올리지 않는다(드라이브 백업에 있음) */
+        if (date < windowFrom) { return; }
         var sh = shadow[p];
         /* 그림자에 같은 내용이 있으면 이미 올렸거나( v>=1 ) 서버에 있음을 확인한 기록 */
         if (sh && !sh.d && sh.h === eventHash(body)) { return; }
@@ -4304,8 +4355,10 @@
       registry.forEach(function (e) {
         if (e.kind === 'local') { return; }
         docsForEntry(e, readValue(e.name), base, { deviceId: deviceId }).forEach(function (d) {
-          /* v52 — 과거 수동·CSV 출결은 수동 이전에서 건너뛴다(자동 분할 업로드가 올린다) */
+          /* v52 — 과거 수동·CSV 출결은 수동 이전에서 건너뛴다(자동 분할 업로드가 올린다)
+             v59 — 서버에 두는 범위(이번 달 포함 3개월) 밖 출결·원비도 건너뛴다 */
           if (isDayOnlyEvent(d.body) && String(d.body.date || '') < today) { return; }
+          if (!pathInServerWindow(d.path, now())) { return; }
           var body = clone(d.body) || {};
           var sh = shadow[d.path];
           var prevBody = sh && sh.b ? sh.b : {};
@@ -5189,19 +5242,27 @@
           shuttle: !!(groups.shuttle && groups.shuttle.done),
           coupons: !!(groups.coupons && groups.coupons.done),
           tuitionFull: coverageState.tuition === 'full',
+          /* v59 — 서버에 두는 범위(이번 달 포함 3개월) */
+          windowFrom: serverWindowFrom(Date.now()),
+          windowMonth: serverWindowMonth(Date.now()),
+          windowMonths: SERVER_WINDOW_MONTHS,
+          tuitionWindow: true,
           groups: groups
         };
       },
       subscribe: function (fn) {
         var fs = mods.firestore;
         var basePath = opts.basePath || ('dojangs/' + (cfg.dojangId || 'mta-tkd'));
-        var since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
-        var sinceIso = since.toISOString().slice(0, 10);
+        /* v59 — 출결·원비는 서버에서 "이번 달 포함 최근 3개월"만 다룬다.
+           3개월 이전 기록은 서버에 올리지도 지우지도 않고, 필요하면 구글 드라이브 백업에서
+           화면 조회용으로 읽는다(index.html 「과거 기록 조회」). */
+        var windowFromIso = serverWindowFrom(Date.now());
+        var windowMonth = serverWindowMonth(Date.now());
         /* roles/{uid} 가 admin 으로 확인되기 전에는 아무 컬렉션도 구독하지 않는다
            → 로그인 전·비관리자 계정으로는 읽기 자체를 쓰지 않는다 */
         if (role !== 'admin') { return function () {}; }
-        /* 출결은 첫 전체 구독에서 최근 7일만 — 오래된 기록까지 매번 읽지 않아 무료 한도를 아낀다 */
-        var eventSpec = { path: basePath + '/attendanceEvents', coll: 'attendanceEvents', group: 'core', where: { field: 'date', op: '>=', value: sinceIso } };
+        /* 새 기기·전체 다시 불러오기는 최근 3개월 출결만 — 그 이전은 매번 읽지 않는다 */
+        var eventSpec = { path: basePath + '/attendanceEvents', coll: 'attendanceEvents', group: 'core', where: { field: 'date', op: '>=', value: windowFromIso } };
         var store = lastSyncStore(opts.lastSyncStorage);
         var lastMap = opts.fullSync === true ? {} : readLastSync(store);
         var nowMs = Date.now();
@@ -5359,25 +5420,32 @@
           if (g.started) { return; }
           g.started = true;
           if (name === 'tuition') {
-            /* 최근 몇 달만 보던 구독을 닫고 전체 원비로 바꾼다 */
-            if (coverageState.tuition !== 'full') { closeSpecsOf('core', 'tuition'); }
-            coverageState.tuition = 'full';
-            openSpec({ path: base + '/tuition', coll: 'tuition', group: 'tuition', mode: 'full' });
-          } else {
-            (LAZY_SPECS[name] || []).forEach(openSpec);
+            /* v59 — 원비는 core 구독이 이미 덮고 있다(범위 또는 델타) — 더 열지 않는다 */
+            finishGroup(name, { loaded: true });
+            return;
           }
+          (LAZY_SPECS[name] || []).forEach(openSpec);
           if (!Object.keys(g.specs).length) { finishGroup(name, { loaded: true }); }
         }
         /* ---------- 열 묶음 정의 (core 는 지금, 나머지는 필요할 때) ---------- */
-        var tuitionHasLocal = deltaAllowed('tuition') || !!deltaSinceIso(lastMap.tuition, nowMs);
-        coverageState.tuition = (lazyEnabled && !tuitionHasLocal) ? 'recent' : 'full';
+        /* v59 — 원비 구독도 서버 범위(최근 3개월)를 넘지 않는다.
+             · 새 기기·전체 다시 불러오기 : documentId 범위(최근 3개월)만 읽는다
+             · 이미 자료가 있는 기기   : 지난번 이후 바뀐 문서(델타)만 받는다 — 3개월 밖 수정도
+               이때는 들어오지만, capture 가 3개월 이전 문서는 다시 올리지 않는다
+             · 「원비 관리」·「수납 리포트」·「1년 조회」를 열어도 더 읽지 않는다(아래 openGroupApi)
+           (coverage 표기는 그대로 둔다 — 'recent' = 범위 구독, 'full' = 델타/전체 구독) */
+        /* 델타 기준(_updatedAt)이 있어야 델타 구독을 쓴다. 기준이 없으면(새 기기·전체 다시 불러오기)
+           3개월 범위로 읽는다 — 예전에는 이때 컬렉션 전체를 읽었다. */
+        var tuitionDelta = deltaAllowed('tuition') && !!deltaSinceIso(lastMap.tuition, nowMs)
+          && opts.fullSync !== true;
+        coverageState.tuition = (lazyEnabled && tuitionDelta) ? 'full' : 'recent';
         var coreSpecs = [
           { path: base + '/students', coll: 'students', group: 'core', mode: 'all' },
           /* meta 는 문서가 몇 개 안 되니 전체 구독 그대로(델타 대상 아님) */
           { path: base + '/meta', coll: 'meta', group: 'core', delta: false, mode: 'all' },
           { path: base + '/tuition', coll: 'tuition', group: 'core',
             mode: coverageState.tuition,
-            range: coverageState.tuition === 'recent' ? { from: tuitionRecentFrom(Date.now()) } : null },
+            range: coverageState.tuition === 'recent' ? { from: windowMonth } : null },
           eventSpec
         ];
         var LAZY_SPECS = {
@@ -5404,8 +5472,16 @@
             return Promise.resolve({ ok: false, group: name, reason: 'unknown-group' });
           }
           openedGroups[name] = true;
-          if (name === 'tuition' && coverageState.tuition === 'full' && !groupState.tuition) {
-            return Promise.resolve({ ok: true, group: 'tuition', loaded: true, already: true });
+          /* v59 — 원비는 어느 경우든 이미 구독으로 덮여 있다.
+               · 새 기기   : 최근 3개월 범위 구독(core)
+               · 기존 기기 : 델타 구독(core)
+             예전처럼 「전체 원비」를 따로 열지 않으므로 탭을 열어도 더 읽지 않는다.
+             3개월 이전 원비는 서버에서 더 받지 않고 드라이브 백업 조회로 보여 준다. */
+          if (name === 'tuition') {
+            var gt = groupOf('tuition');
+            gt.started = true;
+            gt.done = true;
+            return Promise.resolve({ ok: true, group: 'tuition', loaded: true, already: true, window: true });
           }
           var waited = waitGroup(name);
           startGroup(name);
@@ -5573,6 +5649,11 @@
     /* v53 — 문서 시각(isoOf 형식) → ms · 최근 원비 시작 월 · 지연 묶음 준비 한도 */
     docTimeMs: docTimeMs,
     tuitionRecentFrom: tuitionRecentFrom,
+    /* v59 — 서버에 두는 범위(이번 달 포함 3개월) */
+    SERVER_WINDOW_MONTHS: SERVER_WINDOW_MONTHS,
+    serverWindowFrom: serverWindowFrom,
+    serverWindowMonth: serverWindowMonth,
+    pathInServerWindow: pathInServerWindow,
     LAZY_READY_TIMEOUT_MS: LAZY_READY_TIMEOUT_MS,
     sparkDayOf: sparkDayOf,
     errorText: errorText,
