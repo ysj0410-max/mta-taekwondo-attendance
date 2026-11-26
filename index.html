@@ -9970,7 +9970,8 @@ setTimeout(function () {
     /* 3) 기록 넣기 (합치기는 빠진 날짜만, 있으면 빈 시간만 채움) */
     plan.forEach(function (item) {
       var s = item.s, rec = item.rec;
-      var cur = attendanceEntry(s.id, rec.date);
+      /* v59 — 이 기기에 실제로 저장된 기록만 본다(드라이브 백업 조회값은 저장 대상이 아니다) */
+      var cur = (app.attendance[rec.date] || {})[s.id] || null;
       if (cur && (cur.inTime || cur.outTime || cur.manual)) {
         var patch = null;
         if (!cur.inTime && rec.inTime) { patch = patch || {}; patch.inTime = rec.inTime; }
